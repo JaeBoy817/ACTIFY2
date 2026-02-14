@@ -101,6 +101,16 @@ npm run prisma:seed
 npm run dev
 ```
 
+## Netlify Deploy
+
+If you deploy with a Postgres database (Supabase/Railway/etc), set Netlify build command to:
+
+```bash
+npm run build:netlify
+```
+
+This runs `prisma db push` before `next build` and avoids Prisma migration provider mismatch errors (`P3019`) when switching from older sqlite migrations.
+
 ## Clerk Notes
 
 - Add valid Clerk keys to `.env`.
