@@ -1,0 +1,468 @@
+import Link from "next/link";
+import { endOfDay, endOfWeek, format, startOfDay, startOfMonth, startOfWeek, subDays, subMonths } from "date-fns";
+import { CalendarDays, ClipboardCheck, Package, Users } from "lucide-react";
+
+import { GlassButton } from "@/components/glass/GlassButton";
+import { GlassCard } from "@/components/glass/GlassCard";
+import { GlassPanel } from "@/components/glass/GlassPanel";
+import { CountUpValue } from "@/components/motion/CountUpValue";
+import { Reveal } from "@/components/motion/Reveal";
+import { Badge } from "@/components/ui/badge";
+import { requireFacilityContext } from "@/lib/auth";
+import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
+import { prisma } from "@/lib/prisma";
+import { asAttendanceRules } from "@/lib/settings/defaults";
+
+const attendanceStatusMeta = [
+  { status: "PRESENT_ACTIVE", label: "Present/Active", tone: "bg-actifyBlue/20 text-actifyBlue" },
+  { status: "LEADING", label: "Leading", tone: "bg-actifyCoral/20 text-foreground" },
+  { status: "REFUSED", label: "Refused", tone: "bg-amber-100 text-amber-700" },
+  { status: "NO_SHOW", label: "No Show", tone: "bg-rose-100 text-rose-700" }
+];
+
+export default async function DashboardPage() {
+  const { facilityId } = await requireFacilityContext();
+
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const dayStart = startOfDay(now);
+  const dayEnd = endOfDay(now);
+  const last7 = subDays(now, 7);
+  const last30 = subDays(now, 30);
+  const presenceWindowStart = startOfMonth(subMonths(now, 1));
+  const presenceWindowEnd = endOfDay(now);
+
+  const [
+    activeResidentRows,
+    scheduledThisWeek,
+    attendanceRows30,
+    presenceRows,
+    inventoryLevels,
+    prizeLevels,
+    todaysActivities,
+    settings
+  ] = await Promise.all([
+    prisma.resident.findMany({
+      where: {
+        facilityId,
+        OR: [
+          { isActive: true },
+          { status: { in: ["ACTIVE", "BED_BOUND"] } }
+        ],
+        NOT: {
+          status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
+        }
+      },
+      select: { id: true }
+    }),
+    prisma.activityInstance.count({
+      where: {
+        facilityId,
+        startAt: {
+          gte: weekStart,
+          lte: weekEnd
+        }
+      }
+    }),
+    prisma.attendance.findMany({
+      where: {
+        resident: {
+          facilityId,
+          OR: [
+            { isActive: true },
+            { status: { in: ["ACTIVE", "BED_BOUND"] } }
+          ],
+          NOT: {
+            status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
+          }
+        },
+        activityInstance: {
+          facilityId,
+          startAt: {
+            gte: last30,
+            lte: now
+          }
+        }
+      },
+      select: {
+        residentId: true,
+        status: true,
+        activityInstance: {
+          select: {
+            startAt: true
+          }
+        }
+      }
+    }),
+    prisma.attendance.findMany({
+      where: {
+        resident: {
+          facilityId,
+          OR: [
+            { isActive: true },
+            { status: { in: ["ACTIVE", "BED_BOUND"] } }
+          ],
+          NOT: {
+            status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
+          }
+        },
+        activityInstance: {
+          facilityId,
+          startAt: {
+            gte: presenceWindowStart,
+            lte: presenceWindowEnd
+          }
+        }
+      },
+      select: {
+        residentId: true,
+        status: true,
+        activityInstance: {
+          select: {
+            startAt: true
+          }
+        }
+      }
+    }),
+    prisma.inventoryItem.findMany({
+      where: { facilityId },
+      select: {
+        onHand: true,
+        reorderAt: true
+      }
+    }),
+    prisma.prizeItem.findMany({
+      where: { facilityId },
+      select: {
+        onHand: true,
+        reorderAt: true
+      }
+    }),
+    prisma.activityInstance.findMany({
+      where: {
+        facilityId,
+        startAt: {
+          gte: dayStart,
+          lte: dayEnd
+        }
+      },
+      orderBy: { startAt: "asc" },
+      take: 4,
+      select: {
+        id: true,
+        title: true,
+        startAt: true,
+        location: true
+      }
+    }),
+    prisma.facilitySettings.findUnique({
+      where: { facilityId },
+      select: {
+        attendanceRulesJson: true
+      }
+    })
+  ]);
+
+  const weights = asAttendanceRules(settings?.attendanceRulesJson).engagementWeights;
+  const scoreMap: Record<string, number> = {
+    PRESENT: weights.present,
+    ACTIVE: weights.active,
+    LEADING: weights.leading,
+    REFUSED: 0,
+    NO_SHOW: 0
+  };
+  const engagementScaleMax = Math.max(weights.leading, weights.active, weights.present);
+
+  const activeResidents = activeResidentRows.length;
+  const activeResidentIds = activeResidentRows.map((resident) => resident.id);
+  const facilityPresence = computeFacilityPresenceMetrics({
+    rows: presenceRows.map((row) => ({
+      residentId: row.residentId,
+      status: row.status,
+      occurredAt: row.activityInstance.startAt
+    })),
+    activeResidentIds,
+    activeResidentCount: activeResidents,
+    now
+  });
+  const attendanceRows7 = attendanceRows30.filter((row) => row.activityInstance.startAt >= last7);
+  const engagementAverage7 = attendanceRows7.length === 0
+    ? 0
+    : Number((attendanceRows7.reduce((sum, row) => sum + (scoreMap[row.status] ?? 0), 0) / attendanceRows7.length).toFixed(1));
+
+  const inventoryAlerts = inventoryLevels.filter((item) => item.onHand < item.reorderAt).length;
+  const prizeAlerts = prizeLevels.filter((item) => item.onHand < item.reorderAt).length;
+  const lowStockAlerts = inventoryAlerts + prizeAlerts;
+
+  const statusCounts: Record<string, number> = {
+    PRESENT_ACTIVE: 0,
+    LEADING: 0,
+    REFUSED: 0,
+    NO_SHOW: 0
+  };
+
+  for (const row of attendanceRows30) {
+    if (row.status === "PRESENT" || row.status === "ACTIVE") {
+      statusCounts.PRESENT_ACTIVE = (statusCounts.PRESENT_ACTIVE ?? 0) + 1;
+      continue;
+    }
+    statusCounts[row.status] = (statusCounts[row.status] ?? 0) + 1;
+  }
+
+  const totalAttendance30 = attendanceRows30.length;
+  const attendingResidentIds = new Set(
+    attendanceRows30
+      .filter((row) => row.status === "PRESENT" || row.status === "ACTIVE" || row.status === "LEADING")
+      .map((row) => row.residentId)
+  );
+  const totalResidentsAttending30 = attendingResidentIds.size;
+  const residentParticipationRate30 = activeResidents === 0
+    ? 0
+    : Number(((totalResidentsAttending30 / activeResidents) * 100).toFixed(1));
+  const statusBreakdown = attendanceStatusMeta.map((item) => {
+    const count = statusCounts[item.status] ?? 0;
+    const percent = totalAttendance30 === 0 ? 0 : Number(((count / totalAttendance30) * 100).toFixed(1));
+    return {
+      ...item,
+      count,
+      percent
+    };
+  });
+  const monthDeltaLabel = facilityPresence.monthOverMonthDelta === null
+    ? "No prior month attendance data yet."
+    : facilityPresence.monthOverMonthDelta > 0
+      ? `Up ${facilityPresence.monthOverMonthDelta.toFixed(1)} pts from last month.`
+      : facilityPresence.monthOverMonthDelta < 0
+        ? `Down ${Math.abs(facilityPresence.monthOverMonthDelta).toFixed(1)} pts from last month.`
+        : "No change from last month.";
+
+  const overviewStats = [
+    {
+      label: "Active Residents",
+      value: activeResidents,
+      detail: "Residents tab",
+      icon: Users,
+      iconTone: "bg-actifyBlue/20 text-actifyBlue"
+    },
+    {
+      label: "Activities This Week",
+      value: scheduledThisWeek,
+      detail: "Calendar tab",
+      icon: CalendarDays,
+      iconTone: "bg-actifyMint/20 text-foreground"
+    },
+    {
+      label: "Attendance Entries",
+      value: totalAttendance30,
+      detail: "Last 30 days",
+      icon: ClipboardCheck,
+      iconTone: "bg-actifyCoral/20 text-foreground"
+    },
+    {
+      label: "Low Stock Alerts",
+      value: lowStockAlerts,
+      detail: `Inventory ${inventoryAlerts} · Prize ${prizeAlerts}`,
+      icon: Package,
+      iconTone: "bg-amber-100 text-amber-700"
+    }
+  ];
+
+  const schedulePreview = todaysActivities.map((item) => ({
+    id: item.id,
+    time: format(item.startAt, "h:mm a"),
+    name: item.title,
+    location: item.location
+  }));
+
+  return (
+    <div className="space-y-6">
+      <Reveal>
+        <GlassPanel variant="warm" className="relative overflow-hidden px-5 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <h1 className="font-[var(--font-display)] text-3xl text-foreground">Dashboard</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{format(now, "EEEE, MMMM d")}</Badge>
+                <Badge variant="outline">Engagement (7d): {engagementAverage7.toFixed(1)} / {engagementScaleMax}</Badge>
+              </div>
+              <p className="text-sm text-foreground/70">
+                Live snapshot from Residents, Calendar, Attendance, Inventory, and Prize Cart.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <GlassButton asChild size="sm" magnetic>
+                <Link href="/app/notes/new">New note</Link>
+              </GlassButton>
+              <GlassButton asChild size="sm" variant="dense">
+                <Link href="/app/calendar">Calendar</Link>
+              </GlassButton>
+              <GlassButton asChild size="sm" variant="dense">
+                <Link href="/app/reports">Reports</Link>
+              </GlassButton>
+            </div>
+          </div>
+        </GlassPanel>
+      </Reveal>
+
+      <section className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-4">
+        {overviewStats.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <Reveal key={item.label} delayMs={index * 90} className="h-full">
+              <GlassCard hover variant="dense" className="h-full min-h-[152px]">
+                <div className="flex h-full flex-col justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`rounded-xl p-2 ${item.iconTone}`}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <p className="text-right text-xs uppercase tracking-wide text-foreground/60">{item.label}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold text-foreground">
+                      <CountUpValue
+                        value={item.value}
+                        durationMs={760}
+                      />
+                    </p>
+                    <p className="mt-1 text-xs text-foreground/70">{item.detail}</p>
+                  </div>
+                </div>
+              </GlassCard>
+            </Reveal>
+          );
+        })}
+      </section>
+
+      <section className="grid gap-4 xl:auto-rows-fr xl:grid-cols-2">
+        <Reveal delayMs={110} className="h-full">
+          <GlassCard variant="dense" className="h-full">
+            <div className="flex h-full flex-col">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold">Attendance Overview</h2>
+                  <p className="text-xs text-foreground/70">
+                    Clear resident-based attendance totals so the numbers are easy to compare.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">Resident-based</Badge>
+                  <Badge variant="secondary">{activeResidents} active residents</Badge>
+                </div>
+              </div>
+
+              <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Residents attending (30d)</p>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyBlue/15 text-actifyBlue">
+                      <Users className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    <CountUpValue value={totalResidentsAttending30} />
+                  </p>
+                  <p className="text-[11px] text-foreground/70">Unique residents with attendance in last 30 days.</p>
+                </div>
+                <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Participation rate (30d)</p>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyMint/20 text-foreground">
+                      <ClipboardCheck className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    <CountUpValue value={residentParticipationRate30} decimals={1} suffix="%" />
+                  </p>
+                  <p className="text-[11px] text-foreground/70">
+                    {totalResidentsAttending30} of {activeResidents} active residents.
+                  </p>
+                </div>
+                <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Present today</p>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyCoral/20 text-foreground">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    <CountUpValue value={facilityPresence.todayPresentResidents} />
+                  </p>
+                  <p className="text-[11px] text-foreground/70">
+                    {facilityPresence.todayPresentPercent.toFixed(1)}% of active residents.
+                  </p>
+                </div>
+                <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Present this month</p>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyBlue/15 text-actifyBlue">
+                      <Users className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">
+                    <CountUpValue value={facilityPresence.currentMonthPresentResidents} />
+                  </p>
+                  <p className="text-[11px] text-foreground/70">
+                    {facilityPresence.currentMonthPresentPercent.toFixed(1)}% of active residents.
+                  </p>
+                  <p className="text-[11px] text-foreground/70">{monthDeltaLabel}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/70 bg-white/60 p-3.5">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-foreground/65">Entry status mix (30d)</p>
+                  <p className="text-xs text-foreground/70">{totalAttendance30} total entries</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {statusBreakdown.map((item) => (
+                    <div key={item.status} className="rounded-lg border border-white/70 bg-white/70 p-2.5">
+                      <div className="mb-1.5 flex items-center justify-between text-xs">
+                        <span className={`rounded-full px-2 py-0.5 ${item.tone}`}>{item.label}</span>
+                        <span className="text-foreground/70">{item.count} ({item.percent.toFixed(1)}%)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-white/60">
+                        <div className="h-2 rounded-full bg-actify-brand" style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        </Reveal>
+
+        <Reveal delayMs={180} className="h-full">
+          <GlassCard variant="dense" className="h-full">
+            <div className="flex h-full flex-col">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Today&apos;s schedule</h2>
+                <Badge variant="secondary">{format(now, "EEE, MMM d")}</Badge>
+              </div>
+              <div className="flex-1 space-y-2">
+                {schedulePreview.length === 0 && (
+                  <div className="rounded-lg border border-white/70 bg-white/65 px-3 py-3 text-sm text-foreground/70">
+                    No activities scheduled today.
+                  </div>
+                )}
+                {schedulePreview.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-white/70 bg-white/65 px-3 py-3">
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">{item.time}</p>
+                    <p className="text-sm font-medium text-foreground">{item.name}</p>
+                    <p className="text-xs text-foreground/70">{item.location}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <GlassButton asChild size="sm" variant="dense">
+                  <Link href="/app/calendar">View full calendar</Link>
+                </GlassButton>
+              </div>
+            </div>
+          </GlassCard>
+        </Reveal>
+      </section>
+
+    </div>
+  );
+}

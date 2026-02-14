@@ -1,0 +1,882 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  AD
+  ASSISTANT
+  READ_ONLY
+}
+
+enum RoomFormatRule {
+  A_B
+  NUM
+  CUSTOM
+}
+
+enum DefaultLanding {
+  DASHBOARD
+  CALENDAR
+  NOTES
+  RESIDENTS
+}
+
+enum FontScale {
+  SM
+  MD
+  LG
+}
+
+enum ResidentStatus {
+  ACTIVE
+  BED_BOUND
+  DISCHARGED
+  HOSPITALIZED
+  ON_LEAVE
+  TRANSFERRED
+  DECEASED
+  OTHER
+}
+
+enum InvitationMethod {
+  PRINT
+  VERBAL
+  PHONE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ACTIVE
+  LEADING
+  REFUSED
+  NO_SHOW
+}
+
+enum BarrierReason {
+  ASLEEP
+  BED_BOUND
+  THERAPY
+  AT_APPOINTMENT
+  REFUSED
+  NOT_INFORMED
+  PAIN
+  ISOLATION_PRECAUTIONS
+  OTHER
+}
+
+enum CarePlanGoalType {
+  SOCIALIZATION
+  COGNITION
+  MOBILITY_ENGAGEMENT
+  LEISURE_SKILLS
+}
+
+enum ProgressNoteType {
+  GROUP
+  ONE_TO_ONE
+}
+
+enum ParticipationLevel {
+  MINIMAL
+  MODERATE
+  HIGH
+}
+
+enum MoodAffect {
+  BRIGHT
+  CALM
+  FLAT
+  ANXIOUS
+  AGITATED
+}
+
+enum CuesRequired {
+  NONE
+  VERBAL
+  VISUAL
+  HAND_OVER_HAND
+}
+
+enum ResponseType {
+  POSITIVE
+  NEUTRAL
+  RESISTANT
+}
+
+enum InventoryTxnType {
+  IN
+  OUT
+  ADJUST
+}
+
+enum PrizeTxnType {
+  SALE
+  RESTOCK
+  ADJUST
+}
+
+enum CouncilItemStatus {
+  RESOLVED
+  UNRESOLVED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  UNPAID
+  NONE
+}
+
+// =========================
+// Activities Care Plan (Extension)
+// =========================
+
+enum CarePlanItemStatus {
+  ACTIVE
+  RESOLVED
+  CANCELLED
+}
+
+enum ActivitiesFocusCategory {
+  SOCIALIZATION
+  COGNITION
+  MOBILITY_ENGAGEMENT
+  LEISURE_SKILLS
+  ADAPTIVE_PROGRAMMING
+  ADJUSTMENT
+}
+
+enum ActivitiesGoalType {
+  SOCIALIZATION
+  COGNITION
+  MOBILITY_ENGAGEMENT
+  LEISURE_SKILLS
+}
+
+enum GoalMeasurementMethod {
+  ATTENDANCE_COUNT
+  MINUTES_ENGAGED
+  ENGAGEMENT_SCORE_AVG
+  RESIDENT_REPORTED_SATISFACTION
+  REFUSAL_REDUCTION
+}
+
+enum GoalTargetUnit {
+  PER_WEEK
+  PER_MONTH
+  MINUTES
+  SCORE
+  POINTS
+  COUNT
+}
+
+enum InterventionFrequencyType {
+  DAILY
+  WEEKLY
+  PRN
+}
+
+enum ResponsibleRole {
+  AD
+  ASSISTANT
+  VOLUNTEER
+  NURSING_ASSIST
+  OTHER
+}
+
+enum NotificationMethod {
+  POSTED
+  VERBAL
+  PRINT_INVITE
+  FAMILY
+  OTHER
+}
+
+enum TaskScheduleType {
+  ONE_TIME
+  DAILY
+  WEEKLY
+  PER_ACTIVITY_INSTANCE
+}
+
+enum EvidenceType {
+  ATTENDANCE
+  PROGRESS_NOTE
+}
+
+enum ReviewStatus {
+  OPEN
+  COMPLETED
+}
+
+enum AdPlacement {
+  TOP_BANNER
+  SIDEBAR
+}
+
+model User {
+  id            String          @id @default(cuid())
+  clerkUserId   String          @unique
+  email         String
+  name          String
+  role          Role            @default(AD)
+  facilityId    String
+  createdAt     DateTime        @default(now())
+  facility      Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  invited       Invitation[]    @relation("InvitedByUser")
+  progressNotes ProgressNote[]  @relation("ProgressNoteCreator")
+  signedIn      VolunteerVisit[] @relation("SignedInBy")
+  signedOut     VolunteerVisit[] @relation("SignedOutBy")
+  inventoryTxns InventoryTxn[]
+  prizeTxns     PrizeTxn[]
+  auditEntries  AuditLog[]      @relation("AuditActor")
+  advertisements Advertisement[] @relation("AdCreatedBy")
+  settings      UserSettings?
+
+  @@index([facilityId])
+  @@index([role])
+}
+
+model Facility {
+  id                     String                  @id @default(cuid())
+  name                   String
+  timezone               String                  @default("America/New_York")
+  moduleFlags            Json
+  createdAt              DateTime                @default(now())
+  users                  User[]
+  units                  Unit[]
+  residents              Resident[]
+  activityTemplates      ActivityTemplate[]
+  activityInstances      ActivityInstance[]
+  progressNoteTemplates  ProgressNoteTemplate[]
+  volunteers             Volunteer[]
+  inventoryItems         InventoryItem[]
+  prizeItems             PrizeItem[]
+  residentCouncilMeetings ResidentCouncilMeeting[]
+  subscription           Subscription?
+  auditLogs              AuditLog[]
+  advertisements         Advertisement[]
+  settings               FacilitySettings?
+}
+
+model Unit {
+  id         String    @id @default(cuid())
+  facilityId String
+  name       String
+  facility   Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  residents  Resident[]
+
+  @@index([facilityId])
+  @@unique([facilityId, name])
+}
+
+model Resident {
+  id                    String                  @id @default(cuid())
+  facilityId            String
+  unitId                String?
+  status                ResidentStatus          @default(ACTIVE)
+  firstName             String
+  lastName              String
+  room                  String
+  bestTimesOfDay        String?
+  notes                 String?
+  isActive              Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  facility              Facility                @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unit                  Unit?                   @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  assessments           InterestAssessment[]
+  invitations           Invitation[]
+  attendance            Attendance[]
+  carePlanGoals         CarePlanGoal[]
+  progressNotes         ProgressNote[]
+  familyEngagementNotes FamilyEngagementNote[]
+  activitiesCarePlan    ActivitiesCarePlan?
+  activitiesCarePlanFocuses ActivitiesCarePlanFocus[]
+  activitiesCarePlanGoals ActivitiesCarePlanGoal[]
+  activitiesCarePlanInterventions ActivitiesCarePlanIntervention[]
+  activitiesCarePlanEvidenceLinks ActivitiesCarePlanEvidenceLink[]
+  activitiesCarePlanReviews ActivitiesCarePlanReview[]
+
+  @@index([facilityId])
+  @@index([unitId])
+  @@index([status])
+  @@index([lastName, firstName])
+}
+
+model InterestAssessment {
+  id                String   @id @default(cuid())
+  residentId        String
+  answers           Json
+  dislikesTriggers  String?
+  suggestedPrograms Json
+  createdAt         DateTime @default(now())
+  resident          Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@index([residentId])
+}
+
+model ActivityTemplate {
+  id               String             @id @default(cuid())
+  facilityId       String
+  title            String
+  category         String
+  supplies         String
+  setupSteps       String
+  adaptations      Json
+  difficulty       String
+  defaultChecklist Json
+  createdAt        DateTime           @default(now())
+  facility         Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  activityInstances ActivityInstance[]
+
+  @@index([facilityId])
+  @@index([category])
+}
+
+model ActivityInstance {
+  id                 String        @id @default(cuid())
+  facilityId         String
+  templateId         String?
+  title              String
+  startAt            DateTime
+  endAt              DateTime
+  location           String
+  adaptationsEnabled Json
+  checklist          Json
+  createdAt          DateTime      @default(now())
+  facility           Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  template           ActivityTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  invitations        Invitation[]
+  attendance         Attendance[]
+  progressNotes      ProgressNote[]
+
+  @@index([facilityId])
+  @@index([templateId])
+  @@index([startAt])
+}
+
+model Invitation {
+  id                String          @id @default(cuid())
+  activityInstanceId String
+  residentId        String
+  invitedByUserId   String
+  notifiedAt        DateTime?
+  method            InvitationMethod @default(PRINT)
+  note              String?
+  createdAt         DateTime        @default(now())
+  activityInstance  ActivityInstance @relation(fields: [activityInstanceId], references: [id], onDelete: Cascade)
+  resident          Resident        @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  invitedByUser     User            @relation("InvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([activityInstanceId])
+  @@index([residentId])
+  @@unique([activityInstanceId, residentId])
+}
+
+model Attendance {
+  id                String           @id @default(cuid())
+  activityInstanceId String
+  residentId        String
+  status            AttendanceStatus
+  barrierReason     BarrierReason?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  activityInstance  ActivityInstance @relation(fields: [activityInstanceId], references: [id], onDelete: Cascade)
+  resident          Resident         @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  goalLinks         GoalLink[]
+
+  @@index([activityInstanceId])
+  @@index([residentId])
+  @@index([barrierReason])
+  @@unique([activityInstanceId, residentId])
+}
+
+model CarePlanGoal {
+  id           String           @id @default(cuid())
+  residentId   String
+  type         CarePlanGoalType
+  description  String
+  targetMetric String?
+  createdAt    DateTime         @default(now())
+  isActive     Boolean          @default(true)
+  resident     Resident         @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  goalLinks    GoalLink[]
+
+  @@index([residentId])
+  @@index([type])
+}
+
+model GoalLink {
+  id           String      @id @default(cuid())
+  goalId       String
+  attendanceId String?
+  noteId       String?
+  createdAt    DateTime    @default(now())
+  goal         CarePlanGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  note         ProgressNote? @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([attendanceId])
+  @@index([noteId])
+}
+
+model ProgressNoteTemplate {
+  id           String   @id @default(cuid())
+  facilityId   String
+  title        String
+  quickPhrases Json
+  bodyTemplate String
+  createdAt    DateTime @default(now())
+  facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId])
+}
+
+model ProgressNote {
+  id                 String            @id @default(cuid())
+  residentId         String
+  activityInstanceId String?
+  type               ProgressNoteType
+  participationLevel ParticipationLevel
+  moodAffect         MoodAffect
+  cuesRequired       CuesRequired
+  response           ResponseType
+  followUp           String?
+  narrative          String
+  createdAt          DateTime          @default(now())
+  createdByUserId    String
+  resident           Resident          @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  activityInstance   ActivityInstance? @relation(fields: [activityInstanceId], references: [id], onDelete: SetNull)
+  createdByUser      User              @relation("ProgressNoteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  goalLinks          GoalLink[]
+
+  @@index([residentId])
+  @@index([activityInstanceId])
+  @@index([createdByUserId])
+}
+
+model Volunteer {
+  id          String          @id @default(cuid())
+  facilityId  String
+  name        String
+  phone       String?
+  requirements Json
+  facility    Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  visits      VolunteerVisit[]
+
+  @@index([facilityId])
+}
+
+model VolunteerVisit {
+  id              String    @id @default(cuid())
+  volunteerId     String
+  startAt         DateTime
+  endAt           DateTime?
+  assignedLocation String
+  signedInByUserId String
+  signedOutByUserId String?
+  notes           String?
+  volunteer       Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+  signedInByUser  User      @relation("SignedInBy", fields: [signedInByUserId], references: [id], onDelete: Cascade)
+  signedOutByUser User?     @relation("SignedOutBy", fields: [signedOutByUserId], references: [id], onDelete: SetNull)
+
+  @@index([volunteerId])
+  @@index([startAt])
+}
+
+model InventoryItem {
+  id         String         @id @default(cuid())
+  facilityId String
+  name       String
+  category   String
+  imageUrl   String?
+  onHand     Int
+  reorderAt  Int
+  unitLabel  String
+  updatedAt  DateTime       @updatedAt
+  facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  txns       InventoryTxn[]
+
+  @@index([facilityId])
+  @@index([category])
+}
+
+model InventoryTxn {
+  id        String          @id @default(cuid())
+  itemId     String
+  type      InventoryTxnType
+  qty       Int
+  note      String?
+  createdAt DateTime        @default(now())
+  userId    String
+  item      InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([createdAt])
+}
+
+model PrizeItem {
+  id         String      @id @default(cuid())
+  facilityId String
+  name       String
+  priceCents Int
+  onHand     Int
+  reorderAt  Int
+  updatedAt  DateTime    @updatedAt
+  facility   Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  txns       PrizeTxn[]
+
+  @@index([facilityId])
+}
+
+model PrizeTxn {
+  id         String      @id @default(cuid())
+  prizeItemId String
+  type       PrizeTxnType
+  qty        Int
+  totalCents Int
+  createdAt  DateTime    @default(now())
+  userId     String
+  prizeItem  PrizeItem   @relation(fields: [prizeItemId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([prizeItemId])
+  @@index([createdAt])
+}
+
+model ResidentCouncilMeeting {
+  id              String                @id @default(cuid())
+  facilityId      String
+  heldAt          DateTime
+  attendanceCount Int
+  notes           String?
+  facility        Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  items           ResidentCouncilItem[]
+
+  @@index([facilityId])
+  @@index([heldAt])
+}
+
+model ResidentCouncilItem {
+  id        String            @id @default(cuid())
+  meetingId String
+  category  String
+  concern   String
+  followUp  String?
+  status    CouncilItemStatus @default(UNRESOLVED)
+  owner     String?
+  updatedAt DateTime          @updatedAt
+  meeting   ResidentCouncilMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([status])
+}
+
+model FamilyEngagementNote {
+  id               String   @id @default(cuid())
+  residentId       String
+  bestContactTimes String?
+  preferences      String?
+  calmingThings    String?
+  createdAt        DateTime @default(now())
+  resident         Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@index([residentId])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  facilityId           String             @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  status               SubscriptionStatus @default(NONE)
+  currentPeriodEnd     DateTime?
+  updatedAt            DateTime           @updatedAt
+  facility             Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  facilityId String
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  actorUser  User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId])
+  @@index([createdAt])
+  @@index([entityType])
+}
+
+model ActivitiesCarePlan {
+  id            String   @id @default(cuid())
+  residentId    String   @unique
+  initiatedAt   DateTime @default(now())
+  nextReviewAt  DateTime?
+  status        CarePlanItemStatus @default(ACTIVE)
+  statusReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  resident      Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  focuses       ActivitiesCarePlanFocus[]
+  reviews       ActivitiesCarePlanReview[]
+
+  @@index([residentId])
+}
+
+model ActivitiesCarePlanFocus {
+  id                String   @id @default(cuid())
+  carePlanId        String
+  residentId        String
+  title             String
+  category          ActivitiesFocusCategory
+  etiologyFactors   Json?
+  baselineNarrative String
+  strengths         String?
+  preferences       String?
+  barriersNotes     String?
+  initiatedAt       DateTime @default(now())
+  nextReviewAt      DateTime?
+  status            CarePlanItemStatus @default(ACTIVE)
+  statusReason      String?
+  createdByUserId   String?
+  updatedByUserId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  carePlan          ActivitiesCarePlan @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+  resident          Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  goals             ActivitiesCarePlanGoal[]
+  interventions     ActivitiesCarePlanIntervention[]
+  evidenceLinks     ActivitiesCarePlanEvidenceLink[] @relation("FocusEvidence")
+
+  @@index([carePlanId])
+  @@index([residentId])
+  @@index([status, category])
+}
+
+model ActivitiesCarePlanGoal {
+  id                   String   @id @default(cuid())
+  focusId              String
+  residentId           String
+  type                 ActivitiesGoalType
+  statement            String
+  measurementMethod    GoalMeasurementMethod
+  targetValue          Int?
+  targetUnit           GoalTargetUnit?
+  startAt              DateTime
+  targetAt             DateTime
+  reviewFrequencyDays  Int?
+  residentParticipated Boolean @default(false)
+  notes                String?
+  status               CarePlanItemStatus @default(ACTIVE)
+  statusReason         String?
+  createdByUserId      String?
+  updatedByUserId      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  focus                ActivitiesCarePlanFocus @relation(fields: [focusId], references: [id], onDelete: Cascade)
+  resident             Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  evidenceLinks        ActivitiesCarePlanEvidenceLink[] @relation("GoalEvidence")
+  interventions        ActivitiesCarePlanIntervention[]
+
+  @@index([focusId])
+  @@index([residentId])
+  @@index([status, type])
+}
+
+model ActivitiesCarePlanIntervention {
+  id                      String   @id @default(cuid())
+  focusId                 String
+  residentId              String
+  goalId                  String?
+  title                   String
+  personalizedApproach    String
+  frequencyType           InterventionFrequencyType
+  frequencyValue          Int?
+  responsibleRole         ResponsibleRole
+  notificationMethod      NotificationMethod
+  transportRequired       Boolean @default(false)
+  transportDetails        String?
+  bedBoundEnabled         Boolean @default(false)
+  bedBoundText            String?
+  dementiaFriendlyEnabled Boolean @default(false)
+  dementiaFriendlyText    String?
+  lowVisionHearingEnabled Boolean @default(false)
+  lowVisionHearingText    String?
+  oneToOneMiniEnabled     Boolean @default(false)
+  oneToOneMiniText        String?
+  suppliesNeeded          String?
+  isActive                Boolean @default(true)
+  status                  CarePlanItemStatus @default(ACTIVE)
+  statusReason            String?
+  createdByUserId         String?
+  updatedByUserId         String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  focus                   ActivitiesCarePlanFocus @relation(fields: [focusId], references: [id], onDelete: Cascade)
+  resident                Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  goal                    ActivitiesCarePlanGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  tasks                   ActivitiesCarePlanTask[]
+
+  @@index([focusId])
+  @@index([goalId])
+  @@index([residentId])
+  @@index([status, isActive])
+}
+
+model ActivitiesCarePlanTask {
+  id                     String   @id @default(cuid())
+  interventionId         String
+  name                   String
+  assignedRole           ResponsibleRole
+  scheduleType           TaskScheduleType
+  dueDate                DateTime?
+  dueTime                String?
+  daysOfWeek             Json?
+  active                 Boolean @default(true)
+  completionRequiresNote Boolean @default(false)
+  createdByUserId        String?
+  updatedByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  intervention           ActivitiesCarePlanIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  completions            ActivitiesCarePlanTaskCompletion[]
+
+  @@index([interventionId])
+  @@index([active, scheduleType])
+}
+
+model ActivitiesCarePlanTaskCompletion {
+  id                String   @id @default(cuid())
+  taskId            String
+  completedAt       DateTime @default(now())
+  note              String?
+  completedByUserId String?
+  task              ActivitiesCarePlanTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, completedAt])
+}
+
+model ActivitiesCarePlanEvidenceLink {
+  id             String   @id @default(cuid())
+  residentId     String
+  evidenceType   EvidenceType
+  attendanceId   String?
+  progressNoteId String?
+  focusId        String?
+  goalId         String?
+  linkNote       String?
+  linkedByUserId String?
+  createdAt      DateTime @default(now())
+  resident       Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  focus          ActivitiesCarePlanFocus? @relation("FocusEvidence", fields: [focusId], references: [id], onDelete: Cascade)
+  goal           ActivitiesCarePlanGoal?  @relation("GoalEvidence", fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([residentId, evidenceType])
+  @@index([focusId])
+  @@index([goalId])
+}
+
+model ActivitiesCarePlanReview {
+  id                String   @id @default(cuid())
+  carePlanId        String
+  residentId        String
+  startedAt         DateTime @default(now())
+  targetCompletionAt DateTime?
+  completionAt      DateTime?
+  status            ReviewStatus @default(OPEN)
+  summary           String
+  createdByUserId   String?
+  completedByUserId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  carePlan          ActivitiesCarePlan @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+  resident          Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@index([carePlanId])
+  @@index([residentId, status])
+}
+
+model Advertisement {
+  id              String      @id @default(cuid())
+  facilityId      String
+  createdByUserId String
+  title           String
+  body            String
+  placement       AdPlacement
+  imageUrl        String?
+  linkUrl         String?
+  isActive        Boolean     @default(true)
+  startsAt        DateTime    @default(now())
+  endsAt          DateTime?
+  createdAt       DateTime    @default(now())
+  facility        Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  createdByUser   User        @relation("AdCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId])
+  @@index([placement])
+  @@index([isActive])
+  @@index([startsAt])
+}
+
+model FacilitySettings {
+  id                      String         @id @default(cuid())
+  facilityId              String         @unique
+  timezone                String
+  businessHoursJson       Json
+  roomFormatRule          RoomFormatRule @default(A_B)
+  roomFormatHint          String?
+  printDefaultsJson       Json
+  policyFlagsJson         Json
+  moduleFlagsJson         Json
+  attendanceRulesJson     Json
+  documentationRulesJson  Json
+  carePlanRulesJson       Json
+  reportSettingsJson      Json
+  inventoryDefaultsJson   Json
+  prizeCartDefaultsJson   Json
+  notificationDefaultsJson Json
+  complianceJson          Json
+  permissionsJson         Json
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  facility                Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId])
+}
+
+model UserSettings {
+  id                String         @id @default(cuid())
+  userId            String         @unique
+  defaultLanding    DefaultLanding @default(DASHBOARD)
+  reduceMotion      Boolean        @default(false)
+  highContrast      Boolean        @default(false)
+  fontScale         FontScale      @default(MD)
+  myQuickPhrasesJson Json
+  printPrefsJson    Json
+  shortcutsEnabled  Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

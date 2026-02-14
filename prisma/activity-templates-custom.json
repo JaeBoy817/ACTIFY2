@@ -1,0 +1,850 @@
+[
+  {
+    "title": "Classic Bingo",
+    "category": "Games",
+    "difficulty": "Easy",
+    "supplies": [
+      "Bingo cards",
+      "Dauber/markers",
+      "Bingo cage or number caller app",
+      "Prize bin/cart",
+      "Large print call sheet (optional)"
+    ],
+    "setupSteps": [
+      "Set tables/chairs with clear pathways for walkers/wheelchairs.",
+      "Place bingo cards and daubers at each seat.",
+      "Set up caller area with cage/app and visible call sheet.",
+      "Display prize options (if used) and explain rules."
+    ],
+    "checklistItems": [
+      "Announce start time and invite residents",
+      "Distribute cards/daubers",
+      "Explain pattern and winning rules",
+      "Call numbers clearly and repeat once",
+      "Assist residents who need help marking",
+      "Confirm winners and reset for next round",
+      "Distribute prizes (if applicable)",
+      "Document attendance and notes"
+    ],
+    "bedBoundAdaptation": "Bring a small stack of cards and a dauber to bedside; call numbers 1:1 and assist with marking; shorten to 10–15 minutes.",
+    "dementiaAdaptation": "Use fewer cards (1 per person), simpler patterns (straight line), slower pacing, frequent reminders, visual cue card for “BINGO.”",
+    "lowVisionAdaptation": "Use large-print/tactile cards, high-contrast markers, call numbers louder and slower, let resident sit closer to caller.",
+    "oneToOneMiniAdaptation": "Play “Mini Bingo” with a 3x3 grid and 15 numbers; quick win within 5–10 minutes."
+  },
+  {
+    "title": "Wheel of Fortune (Phrase Guess)",
+    "category": "Cognitive",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Dry erase board or large poster board",
+      "Markers",
+      "Pre-made phrase list",
+      "Category cards (optional)",
+      "Small prizes (optional)"
+    ],
+    "setupSteps": [
+      "Write category and blank letter spaces on the board.",
+      "Set a visible area for guessed letters.",
+      "Choose phrases matched to group ability level.",
+      "Explain turn-taking and how to guess letters/solve."
+    ],
+    "checklistItems": [
+      "Introduce category and rules",
+      "Start with easy phrase to build confidence",
+      "Track guessed letters",
+      "Encourage group participation and cues",
+      "Offer hints if group stalls",
+      "Celebrate correct solves",
+      "Rotate turns fairly",
+      "Document attendance and response"
+    ],
+    "bedBoundAdaptation": "Use a lapboard/clipboard with a printed phrase puzzle; resident guesses letters while you reveal them.",
+    "dementiaAdaptation": "Use familiar phrases/sayings, fewer blanks, offer multiple-choice letter options, allow cooperative play instead of strict turns.",
+    "lowVisionAdaptation": "Use large block letters, high contrast, read the puzzle aloud after each letter fill-in, seat resident closer.",
+    "oneToOneMiniAdaptation": "Do “Finish the Phrase” with 3–5 familiar sayings; resident fills missing word(s)."
+  },
+  {
+    "title": "Trivia Time (Theme Day)",
+    "category": "Cognitive",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Trivia questions (printed or tablet)",
+      "Whiteboard (optional)",
+      "Bell/buzzer (optional)",
+      "Small prizes (optional)"
+    ],
+    "setupSteps": [
+      "Pick a theme (music, TV, sports, decades).",
+      "Prepare 15–25 questions in mixed difficulty.",
+      "Set up seating so everyone can hear.",
+      "Explain how answers work (shout out, raise hand, teams)."
+    ],
+    "checklistItems": [
+      "Announce theme and format",
+      "Ask questions clearly and repeat if needed",
+      "Allow extra response time",
+      "Provide cues/hints for engagement",
+      "Keep score (optional)",
+      "Encourage quieter residents",
+      "Wrap with a “fun fact” recap",
+      "Document attendance and participation"
+    ],
+    "bedBoundAdaptation": "Bring 8–10 questions bedside; use yes/no or multiple-choice options to reduce fatigue.",
+    "dementiaAdaptation": "Use reminiscence-friendly topics (old TV, big band, hometown traditions); offer 2–3 answer choices; praise effort over accuracy.",
+    "lowVisionAdaptation": "Read questions and answers aloud; avoid printed handouts as primary; keep background noise low.",
+    "oneToOneMiniAdaptation": "Do “Quick 10” trivia with 10 questions and gentle hints; adapt to resident’s interests."
+  },
+  {
+    "title": "Deal or No Deal (Group Edition)",
+    "category": "Games",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Numbered envelopes/boxes (10–20)",
+      "Prize list or dollar amounts",
+      "Banker offer cards",
+      "Whiteboard or printed tracking sheet",
+      "Small prizes (optional)"
+    ],
+    "setupSteps": [
+      "Prepare envelopes with amounts/prizes inside.",
+      "Assign numbers and display them clearly.",
+      "Set up tracking board for amounts still in play.",
+      "Explain opening cases and banker offers."
+    ],
+    "checklistItems": [
+      "Select a main player (rotate each round)",
+      "Open cases on schedule (e.g., 3 then 2 then 1)",
+      "Remove opened amounts from the board",
+      "Make banker offer and vote as a group (optional)",
+      "Reveal final case and celebrate",
+      "Rotate to next player/round",
+      "Distribute prizes (if used)",
+      "Document attendance and engagement"
+    ],
+    "bedBoundAdaptation": "Do a mini version with 6–8 envelopes at bedside; resident chooses numbers and you reveal amounts aloud.",
+    "dementiaAdaptation": "Use fewer cases, simpler values (prizes instead of money), cooperative group voting, frequent reminders of the goal.",
+    "lowVisionAdaptation": "Use large number labels and read all values aloud; have resident point/tap rather than read.",
+    "oneToOneMiniAdaptation": "Use 5 envelopes: 1 small, 3 medium, 1 big prize; quick suspense in 5–10 minutes."
+  },
+  {
+    "title": "Word Search Club",
+    "category": "Independent",
+    "difficulty": "Easy",
+    "supplies": [
+      "Word search sheets (large print if possible)",
+      "Pens/highlighters",
+      "Clipboards (optional)",
+      "Magnifier sheets (optional)"
+    ],
+    "setupSteps": [
+      "Choose puzzles appropriate to ability level.",
+      "Provide writing tools and clipboards.",
+      "Explain goal and offer strategy tips."
+    ],
+    "checklistItems": [
+      "Offer puzzle choices by theme",
+      "Ensure resident has pen/highlighter",
+      "Provide a quiet, well-lit space",
+      "Check in after 5–10 minutes",
+      "Offer hints or circle first letter as cue",
+      "Encourage breaks as needed",
+      "Collect completed puzzles (optional display)",
+      "Document independent participation"
+    ],
+    "bedBoundAdaptation": "Bring large-print puzzle on clipboard; assist with holding paper steady; allow short sessions.",
+    "dementiaAdaptation": "Use smaller grids, fewer words, highlight the word list, do “find 5 words” instead of all.",
+    "lowVisionAdaptation": "Use large-print puzzles, bold highlighters, magnifier; increase lighting and reduce glare.",
+    "oneToOneMiniAdaptation": "Do a “guided word find”: choose 5 target words and search together with cues."
+  },
+  {
+    "title": "Adult Coloring & Calm Corner",
+    "category": "Creative Arts",
+    "difficulty": "Easy",
+    "supplies": [
+      "Coloring pages (large shapes available)",
+      "Colored pencils/markers",
+      "Crayons (optional)",
+      "Table coverings (optional)"
+    ],
+    "setupSteps": [
+      "Set up a clean table with art supplies.",
+      "Offer page options (simple to detailed).",
+      "Play low-volume background music (optional)."
+    ],
+    "checklistItems": [
+      "Offer 2–3 page choices",
+      "Provide preferred coloring tools",
+      "Check grip and comfort",
+      "Encourage hydration/breaks",
+      "Give positive feedback on effort",
+      "Label and save artwork if resident wants",
+      "Clean up supplies",
+      "Document participation/mood"
+    ],
+    "bedBoundAdaptation": "Use a lap desk; offer thicker crayons/markers for easier grip; keep to 10–20 minutes.",
+    "dementiaAdaptation": "Use simple pictures, fewer choices, demonstrate first strokes, encourage sensory enjoyment over “staying in lines.”",
+    "lowVisionAdaptation": "Use bold-line pages and high-contrast markers; offer larger shapes and strong lighting.",
+    "oneToOneMiniAdaptation": "Do “Color & Chat”: color one small section together while talking about a favorite memory."
+  },
+  {
+    "title": "Dominoes (Classic or Mexican Train)",
+    "category": "Games",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Domino set (large-print if available)",
+      "Domino tray/holder (optional)",
+      "Score sheet (optional)"
+    ],
+    "setupSteps": [
+      "Choose game style based on group ability.",
+      "Set up table with clear space for tiles.",
+      "Explain rules briefly and do a practice turn."
+    ],
+    "checklistItems": [
+      "Seat players with enough elbow room",
+      "Explain matching rules and turn order",
+      "Offer tile holders if needed",
+      "Assist with tile reading when requested",
+      "Encourage social talk and teamwork",
+      "End game respectfully and rotate partners",
+      "Sanitize pieces",
+      "Document attendance and engagement"
+    ],
+    "bedBoundAdaptation": "Do a simplified matching game at bedside (match ends only) with 10–12 tiles.",
+    "dementiaAdaptation": "Use matching-only rules, open-hand play (tiles face up), minimize scoring, lots of cueing.",
+    "lowVisionAdaptation": "Use large-print/high-contrast dominoes; allow tactile identification; read tiles aloud as needed.",
+    "oneToOneMiniAdaptation": "Play “Domino Match”: lay 5 tiles, ask resident to find the matching end; build a short chain."
+  },
+  {
+    "title": "Card Games Social (War, Uno, Kings in the Corner)",
+    "category": "Games",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Playing cards",
+      "Uno deck (optional)",
+      "Card holders (optional)",
+      "Rule cards (optional)"
+    ],
+    "setupSteps": [
+      "Choose a game that fits the group.",
+      "Set up table and deal practice hand.",
+      "Explain rules and keep them consistent."
+    ],
+    "checklistItems": [
+      "Confirm game choice with residents",
+      "Provide card holders if needed",
+      "Explain turn order clearly",
+      "Cue residents when it’s their turn",
+      "Encourage fair play and patience",
+      "Assist with shuffling/dealing if needed",
+      "Sanitize cards after use",
+      "Document attendance and participation"
+    ],
+    "bedBoundAdaptation": "Use card holders and play a simple 1:1 game (War or High-Low).",
+    "dementiaAdaptation": "Use simple games with fewer rules (War, matching pairs); provide step-by-step prompts.",
+    "lowVisionAdaptation": "Use large-print cards; read options aloud; reduce speed and clutter on table.",
+    "oneToOneMiniAdaptation": "Play “High-Low”: resident guesses if next card is higher/lower; quick and engaging."
+  },
+  {
+    "title": "Movie Night (Popcorn & Picks)",
+    "category": "Social",
+    "difficulty": "Easy",
+    "supplies": [
+      "TV/projector",
+      "Movie selection list",
+      "Popcorn/snacks (if allowed)",
+      "Blankets (optional)",
+      "Closed captions (if available)"
+    ],
+    "setupSteps": [
+      "Pick movie and confirm licensing/policy as needed.",
+      "Arrange seating and check volume/CC.",
+      "Set snack station if permitted."
+    ],
+    "checklistItems": [
+      "Announce movie choice and start time",
+      "Set up seating and accessibility",
+      "Test volume and captions",
+      "Offer snacks/water (if permitted)",
+      "Check comfort mid-movie",
+      "Facilitate quick discussion after",
+      "Clean area",
+      "Document attendance and mood"
+    ],
+    "bedBoundAdaptation": "Offer in-room viewing with a short movie or TV episode; bring a snack option if allowed.",
+    "dementiaAdaptation": "Use familiar classics, shorter runtimes, keep lights dim but safe, minimize loud action scenes.",
+    "lowVisionAdaptation": "Use audio-forward films, increase volume, reduce background noise, offer verbal scene cues if appropriate.",
+    "oneToOneMiniAdaptation": "Do a 10–15 minute “favorite scenes” watch with reminiscence conversation."
+  },
+  {
+    "title": "Bible Study (Discussion + Prayer)",
+    "category": "Spiritual",
+    "difficulty": "Easy",
+    "supplies": [
+      "Bibles/large-print Bibles",
+      "Printed verses (optional)",
+      "Devotional book (optional)",
+      "Prayer list (optional)"
+    ],
+    "setupSteps": [
+      "Choose a short passage and 2–3 discussion questions.",
+      "Set seating in a quiet area.",
+      "Prepare large-print materials if needed."
+    ],
+    "checklistItems": [
+      "Welcome participants",
+      "Read passage aloud",
+      "Ask discussion questions",
+      "Encourage sharing (no pressure)",
+      "Offer brief reflection",
+      "Close with prayer (optional)",
+      "Provide 1:1 follow-up option",
+      "Document attendance and response"
+    ],
+    "bedBoundAdaptation": "Read a short passage at bedside and offer a brief prayer and conversation.",
+    "dementiaAdaptation": "Use simple familiar verses, short readings, repetitive comforting themes, music hymn option.",
+    "lowVisionAdaptation": "Read everything aloud; offer large-print Bibles; avoid relying on handouts.",
+    "oneToOneMiniAdaptation": "Do “Verse of the Day”: 1 verse + 1 question + 1 prayer request."
+  },
+  {
+    "title": "Chair Exercise Circle",
+    "category": "Fitness/Movement",
+    "difficulty": "Easy",
+    "supplies": [
+      "Sturdy chairs",
+      "Light resistance bands (optional)",
+      "Music playlist (optional)",
+      "Water (optional)"
+    ],
+    "setupSteps": [
+      "Clear space for safe movement.",
+      "Demonstrate each move seated first.",
+      "Remind residents to move at their own pace."
+    ],
+    "checklistItems": [
+      "Check for safe footwear and posture",
+      "Warm up (neck/shoulders/arms)",
+      "Do 6–10 seated exercises",
+      "Offer rest breaks and hydration",
+      "Cool down and breathing",
+      "Encourage positive reinforcement",
+      "Sanitize equipment",
+      "Document participation and tolerance"
+    ],
+    "bedBoundAdaptation": "Do bed-level range of motion (arms, ankles) with gentle cueing and short duration.",
+    "dementiaAdaptation": "Use mirroring, simple repeated movements, upbeat familiar music, minimal instructions.",
+    "lowVisionAdaptation": "Use verbal step-by-step cues and consistent pacing; position resident close to leader.",
+    "oneToOneMiniAdaptation": "5-minute “movement snack”: 3 exercises + breathing to boost mood and circulation."
+  },
+  {
+    "title": "Balloon Volleyball",
+    "category": "Fitness/Movement",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Balloons",
+      "Pool noodle or rope for net (optional)",
+      "Open space",
+      "Chair line for seated play"
+    ],
+    "setupSteps": [
+      "Create a seated circle or two-team sides.",
+      "Explain safety rules (no standing suddenly).",
+      "Start slow, increase pace as tolerated."
+    ],
+    "checklistItems": [
+      "Confirm seated play for safety",
+      "Explain boundaries and gentle hits only",
+      "Start round and encourage teamwork",
+      "Rotate balloon direction to include everyone",
+      "Offer breaks and monitor fatigue",
+      "Celebrate effort and laughs",
+      "Clean up balloons",
+      "Document participation and tolerance"
+    ],
+    "bedBoundAdaptation": "At bedside, tap balloon back and forth 1:1 for 3–5 minutes for ROM.",
+    "dementiaAdaptation": "Keep it cooperative (count hits together), use one balloon, simple cues like “tap it to me.”",
+    "lowVisionAdaptation": "Use bright balloon, verbal cues (“coming to your right”), slower pace and closer distance.",
+    "oneToOneMiniAdaptation": "Do “Balloon Tap Challenge”: count how many taps in 60 seconds with rest breaks."
+  },
+  {
+    "title": "Name That Tune (Decade Edition)",
+    "category": "Music",
+    "difficulty": "Easy",
+    "supplies": [
+      "Speaker or TV",
+      "Playlist by decade/genre",
+      "Answer sheets (optional)",
+      "Small prizes (optional)"
+    ],
+    "setupSteps": [
+      "Build a 10–15 song clip playlist.",
+      "Test volume and clarity.",
+      "Explain guessing rules (title/artist or sing along)."
+    ],
+    "checklistItems": [
+      "Introduce theme/decade",
+      "Play short clips",
+      "Encourage humming/singing",
+      "Give hints if needed",
+      "Keep score or play just for fun",
+      "Invite residents to request songs",
+      "Wrap with group sing-along",
+      "Document engagement and mood"
+    ],
+    "bedBoundAdaptation": "Play 5–8 clips in-room and prompt memories (weddings, dances, concerts).",
+    "dementiaAdaptation": "Use familiar songs, allow singing as the “answer,” keep it fun and low-pressure.",
+    "lowVisionAdaptation": "Audio-forward activity works well; keep background noise low and speak clearly.",
+    "oneToOneMiniAdaptation": "Do “3-song memory”: play 3 favorites and ask 1 gentle question per song."
+  },
+  {
+    "title": "Karaoke / Sing-Along",
+    "category": "Music",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Karaoke machine or YouTube karaoke",
+      "Microphone (optional)",
+      "Lyric sheets (large print optional)",
+      "Speaker/TV"
+    ],
+    "setupSteps": [
+      "Queue 8–12 songs residents enjoy.",
+      "Check mic volume and minimize feedback.",
+      "Offer solo or group chorus options."
+    ],
+    "checklistItems": [
+      "Collect song requests",
+      "Set comfortable volume",
+      "Encourage group participation",
+      "Offer seated singing only",
+      "Support shy residents with duets",
+      "Praise effort and fun",
+      "Hydration break",
+      "Document participation and affect"
+    ],
+    "bedBoundAdaptation": "Do bedside sing-along with 2–3 songs; resident can hum or tap rhythm.",
+    "dementiaAdaptation": "Use well-known choruses, repeat favorites, keep structure predictable, avoid overstimulation.",
+    "lowVisionAdaptation": "Read lyrics aloud or rely on familiar songs; large-print lyric sheets if used.",
+    "oneToOneMiniAdaptation": "Do “Duet Minute”: one verse together, then a short chat about the song."
+  },
+  {
+    "title": "Coffee & Current Events Chat",
+    "category": "Social",
+    "difficulty": "Easy",
+    "supplies": [
+      "Newspaper or printed headlines",
+      "Coffee/tea (if permitted)",
+      "Topic prompts",
+      "Whiteboard (optional)"
+    ],
+    "setupSteps": [
+      "Select 3–5 light, positive headlines.",
+      "Arrange seating in a circle.",
+      "Prepare 2 open-ended questions per topic."
+    ],
+    "checklistItems": [
+      "Welcome group and set respectful tone",
+      "Read headlines aloud",
+      "Invite opinions and memories",
+      "Redirect heated topics gently",
+      "Include quieter residents with prompts",
+      "Summarize key moments",
+      "Encourage hydration",
+      "Document participation and mood"
+    ],
+    "bedBoundAdaptation": "Bring 2–3 headlines bedside and ask simple opinion questions.",
+    "dementiaAdaptation": "Use simpler topics (weather, local events, seasonal themes); keep discussions short with frequent recap.",
+    "lowVisionAdaptation": "Read everything aloud; avoid small print reliance; minimize background noise.",
+    "oneToOneMiniAdaptation": "Do “Headline & Memory”: one headline + one related personal story prompt."
+  },
+  {
+    "title": "Reminiscence: Life Story Lane",
+    "category": "Reminiscence",
+    "difficulty": "Easy",
+    "supplies": [
+      "Theme cards (childhood, jobs, holidays)",
+      "Old photos (facility-safe or printed stock images)",
+      "Music from past decades (optional)"
+    ],
+    "setupSteps": [
+      "Pick a theme and 6–10 prompts.",
+      "Set chairs in a circle.",
+      "Explain there’s no pressure to share."
+    ],
+    "checklistItems": [
+      "Introduce theme and warm-up question",
+      "Use 1 prompt at a time",
+      "Validate and reflect responses",
+      "Encourage peer-to-peer conversation",
+      "Offer gentle redirection if distress arises",
+      "Wrap with a positive summary",
+      "Offer follow-up 1:1 for emotional topics",
+      "Document engagement and notable preferences"
+    ],
+    "bedBoundAdaptation": "Use 3 prompts bedside with supportive listening and brief note of key facts/preferences.",
+    "dementiaAdaptation": "Use sensory prompts (music, textures, simple photos), ask yes/no or either/or questions.",
+    "lowVisionAdaptation": "Use tactile or audio prompts; describe any photos clearly.",
+    "oneToOneMiniAdaptation": "Do “3 memories”: favorite food, favorite job, favorite song, with short supportive chat."
+  },
+  {
+    "title": "Puzzle Table (Community Build)",
+    "category": "Independent",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Large-piece puzzle",
+      "Puzzle mat (optional)",
+      "Good lighting",
+      "Sorting trays (optional)"
+    ],
+    "setupSteps": [
+      "Choose puzzle with large pieces and clear image.",
+      "Set it on a dedicated table area.",
+      "Sort edge pieces to start."
+    ],
+    "checklistItems": [
+      "Invite residents to add pieces anytime",
+      "Keep lighting bright and glare-free",
+      "Offer sorting roles (edges, colors)",
+      "Encourage short participation bursts",
+      "Celebrate milestones (border done)",
+      "Prevent pieces from going missing",
+      "Store puzzle safely when not in use",
+      "Document independent engagement"
+    ],
+    "bedBoundAdaptation": "Bring a 24–60 piece large puzzle bedside on a tray; do 5–10 pieces together.",
+    "dementiaAdaptation": "Use simpler puzzles, larger pieces, do cooperative sorting, provide frequent encouragement.",
+    "lowVisionAdaptation": "High-contrast puzzles, large pieces, strong lighting, allow tactile exploration.",
+    "oneToOneMiniAdaptation": "Do “5-piece win”: pick a small section and complete it together quickly."
+  },
+  {
+    "title": "Arts & Crafts: Seasonal Greeting Cards",
+    "category": "Creative Arts",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Cardstock",
+      "Stickers/stamps",
+      "Markers/glue",
+      "Pre-cut shapes (optional)",
+      "Envelopes (optional)"
+    ],
+    "setupSteps": [
+      "Pre-cut shapes to reduce frustration.",
+      "Set up stations (decorate, write, assemble).",
+      "Show 1–2 finished examples."
+    ],
+    "checklistItems": [
+      "Explain card theme and steps",
+      "Offer design choices (limited)",
+      "Assist with cutting/glue as needed",
+      "Encourage writing short message",
+      "Let resident sign name (or assist)",
+      "Allow drying time",
+      "Label and deliver/mail if requested",
+      "Document participation and mood"
+    ],
+    "bedBoundAdaptation": "Bring a pre-folded card and stickers bedside; resident decorates while you assist with glue/placement.",
+    "dementiaAdaptation": "Use sticker-based crafting, step-by-step one task at a time, praise effort and keep it simple.",
+    "lowVisionAdaptation": "Use bold markers, large stickers, high-contrast paper, bright lighting.",
+    "oneToOneMiniAdaptation": "Make a “mini card” with 3 stickers + one short message dictated by resident."
+  },
+  {
+    "title": "No-Bake Snack Demo (Trail Mix Bar)",
+    "category": "Life Skills",
+    "difficulty": "Easy",
+    "supplies": [
+      "Bowls and spoons",
+      "Pre-portioned ingredients (policy-approved)",
+      "Napkins/gloves (as required)",
+      "Trash bin"
+    ],
+    "setupSteps": [
+      "Confirm dietary restrictions and facility policy.",
+      "Pre-portion ingredients and label allergens.",
+      "Set up assembly line style."
+    ],
+    "checklistItems": [
+      "Review safety and allergies",
+      "Offer ingredient choices",
+      "Assist with scooping/portioning",
+      "Encourage social interaction",
+      "Provide water/hydration",
+      "Clean and sanitize area",
+      "Dispose of waste properly",
+      "Document participation and tolerance"
+    ],
+    "bedBoundAdaptation": "Bring a small tray with 2–3 options bedside; resident chooses additions and you assemble.",
+    "dementiaAdaptation": "Limit choices, use visual bowls, simple prompts (“pick one crunchy, one sweet”).",
+    "lowVisionAdaptation": "Describe ingredient options; use tactile bowls; provide strong lighting and contrast bowls.",
+    "oneToOneMiniAdaptation": "Do “taste test”: 3 small samples and pick a favorite with simple preference questions."
+  },
+  {
+    "title": "Men’s Club (Sports Talk & Highlights)",
+    "category": "Social",
+    "difficulty": "Easy",
+    "supplies": [
+      "Sports highlights video (optional)",
+      "Topic prompt cards",
+      "Snacks (optional)",
+      "Whiteboard (optional)"
+    ],
+    "setupSteps": [
+      "Pick 2–3 sports topics or local team updates.",
+      "Queue short highlight clips if using video.",
+      "Arrange seating for conversation."
+    ],
+    "checklistItems": [
+      "Welcome and introduce topic",
+      "Show clips or read prompts",
+      "Encourage turn-taking",
+      "Include quieter residents with direct prompts",
+      "Keep tone respectful",
+      "Wrap with next meeting tease",
+      "Offer 1:1 follow-ups for non-group residents",
+      "Document attendance and engagement"
+    ],
+    "bedBoundAdaptation": "Bring a short highlights clip on tablet or do verbal recap and ask favorite team/player questions.",
+    "dementiaAdaptation": "Use familiar teams/players, simple questions, allow storytelling without correcting details.",
+    "lowVisionAdaptation": "Focus on audio discussion, describe highlights aloud, avoid relying on visuals.",
+    "oneToOneMiniAdaptation": "Do “Top 3 sports memories” and record preferences for future programming."
+  },
+  {
+    "title": "Women’s Circle (Tea & Conversation)",
+    "category": "Social",
+    "difficulty": "Easy",
+    "supplies": [
+      "Tea/coffee (if permitted)",
+      "Conversation prompts",
+      "Soft music (optional)"
+    ],
+    "setupSteps": [
+      "Set a calm seating arrangement.",
+      "Choose 6–8 uplifting prompts.",
+      "Offer beverage service if allowed."
+    ],
+    "checklistItems": [
+      "Welcome participants",
+      "Introduce prompt of the day",
+      "Encourage sharing without pressure",
+      "Validate feelings and stories",
+      "Redirect gently if sensitive topic arises",
+      "Summarize positives and gratitude",
+      "Clean up area",
+      "Document attendance and affect"
+    ],
+    "bedBoundAdaptation": "Offer a short bedside chat with 2–3 prompts and beverage option if approved.",
+    "dementiaAdaptation": "Use sensory prompts (favorite scent, favorite color), simple either/or choices, gentle pacing.",
+    "lowVisionAdaptation": "Verbal prompts only; reduce background noise and speak clearly.",
+    "oneToOneMiniAdaptation": "Do “tea talk”: one drink + one prompt + one compliment/affirmation."
+  },
+  {
+    "title": "Guided Relaxation (Breathing & Imagery)",
+    "category": "Wellness",
+    "difficulty": "Easy",
+    "supplies": [
+      "Calm music (optional)",
+      "Printed breathing guide (optional)",
+      "Comfortable chairs",
+      "Dim lighting (safe)"
+    ],
+    "setupSteps": [
+      "Create a quiet space and reduce distractions.",
+      "Explain it’s optional to close eyes.",
+      "Lead a short 10–15 minute routine."
+    ],
+    "checklistItems": [
+      "Invite residents and explain benefits",
+      "Guide slow breathing (counting)",
+      "Do a brief body scan",
+      "Offer calming imagery prompt",
+      "Close with gentle stretch",
+      "Check in for comfort",
+      "Offer water",
+      "Document mood/response"
+    ],
+    "bedBoundAdaptation": "Do bedside breathing with hand-on-belly cue (if appropriate) and a 2–3 minute calming script.",
+    "dementiaAdaptation": "Keep it short (5–8 minutes), use simple repeated phrases, avoid complex imagery.",
+    "lowVisionAdaptation": "Works well; rely on voice guidance and calm pacing.",
+    "oneToOneMiniAdaptation": "Do “3-3-3”: three breaths, three shoulder rolls, three positive thoughts."
+  },
+  {
+    "title": "Sensory Spa Hour (Lotion & Music)",
+    "category": "Sensory",
+    "difficulty": "Easy",
+    "supplies": [
+      "Facility-approved lotion",
+      "Warm towels (optional)",
+      "Soft music playlist",
+      "Nail files (optional, policy-dependent)"
+    ],
+    "setupSteps": [
+      "Confirm resident preferences and allergies.",
+      "Prepare a calm station with towels and lotion.",
+      "Play gentle music and keep lighting comfortable."
+    ],
+    "checklistItems": [
+      "Confirm consent and preferences",
+      "Check skin integrity and allergies",
+      "Apply lotion to hands/arms (as permitted)",
+      "Offer warm towel wrap (optional)",
+      "Encourage relaxation conversation",
+      "Sanitize supplies",
+      "Offer hydration",
+      "Document response and mood"
+    ],
+    "bedBoundAdaptation": "Do bedside hand lotion and calming music for 10 minutes with gentle conversation.",
+    "dementiaAdaptation": "Use familiar music, simple reassuring narration, avoid strong scents, keep routine predictable.",
+    "lowVisionAdaptation": "Great fit; focus on tactile comfort and audio environment.",
+    "oneToOneMiniAdaptation": "Do “hand spa + favorite song”: one song while applying lotion and chatting."
+  },
+  {
+    "title": "Read Aloud Book Club (Short Stories)",
+    "category": "Cognitive",
+    "difficulty": "Easy",
+    "supplies": [
+      "Short story book or articles",
+      "Large-print materials (optional)",
+      "Bookmarks",
+      "Discussion questions"
+    ],
+    "setupSteps": [
+      "Choose a 5–10 minute read.",
+      "Prepare 2–3 discussion questions.",
+      "Seat group to maximize hearing."
+    ],
+    "checklistItems": [
+      "Introduce story and author (brief)",
+      "Read clearly and slowly",
+      "Pause for reactions",
+      "Ask discussion questions",
+      "Invite residents to share related memories",
+      "Summarize key points",
+      "Offer next session teaser",
+      "Document attendance and engagement"
+    ],
+    "bedBoundAdaptation": "Read a short passage bedside and ask 1–2 gentle questions.",
+    "dementiaAdaptation": "Use simple, familiar topics; shorter readings; repeat main idea; allow residents to just listen.",
+    "lowVisionAdaptation": "Audio-first; ensure clear speaking and reduced background noise.",
+    "oneToOneMiniAdaptation": "Do “story snack”: one page + one question + one memory prompt."
+  },
+  {
+    "title": "Craft: Painting with Watercolors (Simple Wash)",
+    "category": "Creative Arts",
+    "difficulty": "Moderate",
+    "supplies": [
+      "Watercolor paints",
+      "Brushes",
+      "Water cups",
+      "Paper towels",
+      "Thick watercolor paper (optional)"
+    ],
+    "setupSteps": [
+      "Cover tables and set paint stations.",
+      "Demonstrate simple technique (wash, dabbing).",
+      "Provide sample image ideas (sunset, flowers)."
+    ],
+    "checklistItems": [
+      "Explain goal: enjoy process, not perfection",
+      "Set up each resident’s space",
+      "Demonstrate one technique",
+      "Offer help with brush grip",
+      "Encourage color choice and creativity",
+      "Allow drying time",
+      "Clean brushes and tables",
+      "Document participation and mood"
+    ],
+    "bedBoundAdaptation": "Use a lap desk and a small watercolor pad; do short sessions with minimal water to avoid spills.",
+    "dementiaAdaptation": "Use paint-by-area prompts (“paint the sky”), limit colors, offer hand-over-hand cueing if appropriate.",
+    "lowVisionAdaptation": "Use bold outlines on paper, high-contrast subjects, strong lighting, thicker brushes.",
+    "oneToOneMiniAdaptation": "Do a 10-minute “postcard painting”: one simple shape (sun + horizon) together."
+  },
+  {
+    "title": "Gentle Competition: The Price Is Right (Seated Edition)",
+    "category": "Games",
+    "difficulty": "Moderate",
+    "supplies": [
+      "3–6 common items with prices (or pictures)",
+      "Whiteboard",
+      "Dry erase markers",
+      "Prizes (optional)"
+    ],
+    "setupSteps": [
+      "Choose familiar items (snacks, toiletries).",
+      "Write price ranges on board.",
+      "Explain closest-without-going-over (optional) or closest-wins."
+    ],
+    "checklistItems": [
+      "Show item and explain guessing rules",
+      "Collect guesses verbally or on board",
+      "Reveal price and celebrate winners",
+      "Rotate turns so everyone guesses",
+      "Keep pacing upbeat",
+      "Offer prizes fairly (optional)",
+      "Wrap with final showcase round",
+      "Document attendance and engagement"
+    ],
+    "bedBoundAdaptation": "Show item pictures bedside and do 5 quick guesses with supportive cues.",
+    "dementiaAdaptation": "Use either/or price choices, cooperative group guesses, focus on fun reactions not accuracy.",
+    "lowVisionAdaptation": "Describe items clearly; avoid small printed labels; read options aloud.",
+    "oneToOneMiniAdaptation": "Do “3 items challenge” at bedside with simple ranges and celebration."
+  },
+  {
+    "title": "Independent Activity: Magazine Collage Board",
+    "category": "Independent",
+    "difficulty": "Easy",
+    "supplies": [
+      "Magazines",
+      "Safety scissors",
+      "Glue sticks",
+      "Poster board or paper",
+      "Pre-cut images (optional)"
+    ],
+    "setupSteps": [
+      "Set out magazines by interest (sports, travel, food).",
+      "Provide boards and glue.",
+      "Offer theme options (favorites, dream vacation)."
+    ],
+    "checklistItems": [
+      "Offer theme choice",
+      "Provide pre-cut images if needed",
+      "Assist with cutting as requested",
+      "Encourage grouping images by topic",
+      "Help label collage (optional)",
+      "Allow drying time",
+      "Display if resident approves",
+      "Document independent engagement"
+    ],
+    "bedBoundAdaptation": "Bring pre-cut images bedside and let resident choose placement while you glue.",
+    "dementiaAdaptation": "Limit choices, use simple categories, provide step-by-step prompts, focus on sensory selection.",
+    "lowVisionAdaptation": "Use large images, high contrast, tactile labels; describe images aloud.",
+    "oneToOneMiniAdaptation": "Make a “favorites page” with 6 images and brief conversation about each."
+  },
+  {
+    "title": "Tabletop Bowling (Seated)",
+    "category": "Games",
+    "difficulty": "Easy",
+    "supplies": [
+      "Plastic bowling set or cups as pins",
+      "Soft ball",
+      "Tape to mark lanes",
+      "Score sheet (optional)"
+    ],
+    "setupSteps": [
+      "Set pins on a table at end of lane.",
+      "Mark a rolling line with tape.",
+      "Explain gentle roll and turn-taking."
+    ],
+    "checklistItems": [
+      "Set lane and pins securely",
+      "Explain rules and safety",
+      "Assist with ball grip if needed",
+      "Track score if desired",
+      "Encourage cheering and social support",
+      "Rotate turns",
+      "Reset pins quickly",
+      "Document participation and response"
+    ],
+    "bedBoundAdaptation": "Use a bedside tray lane and 6 pins; resident rolls ball from lap/bed tray edge with assistance.",
+    "dementiaAdaptation": "Keep scoring optional, focus on knocking pins down, repeat simple cues, offer hand-over-hand help if appropriate.",
+    "lowVisionAdaptation": "Use bright pins/ball, high contrast lane, verbal guidance on aim and distance.",
+    "oneToOneMiniAdaptation": "Do 5 rolls and celebrate personal best; simple and quick."
+  }
+]
