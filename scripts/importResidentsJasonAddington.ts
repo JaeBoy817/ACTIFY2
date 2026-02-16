@@ -1,4 +1,4 @@
-import { PrismaClient, ResidentStatus } from "@prisma/client";
+import { PrismaClient, type ResidentStatus } from "@prisma/client";
 import { z } from "zod";
 
 const prisma = new PrismaClient({
@@ -18,6 +18,13 @@ const residentSchema = z.object({
 });
 
 const residentsSchema = z.array(residentSchema).min(1);
+
+const RESIDENT_STATUS = {
+  ACTIVE: "ACTIVE",
+  BED_BOUND: "BED_BOUND",
+  DISCHARGED: "DISCHARGED",
+  HOSPITALIZED: "HOSPITALIZED"
+} as const;
 
 const residentsInput = residentsSchema.parse([
   { "room": "1B", "lastName": "Miller", "firstName": "Shirley", "status": "Bed Bound", "notes": "1:1 Activities in Room (Therapy)" },
@@ -86,30 +93,55 @@ const residentsInput = residentsSchema.parse([
   { "room": "43B", "lastName": "Zimmons", "firstName": "Dietrich", "status": "Active", "notes": "Bingo, Trivia, Parties" }
 ]);
 
-function isActiveResident(status: ResidentStatus) {
-  return status === ResidentStatus.ACTIVE || status === ResidentStatus.BED_BOUND;
+function toDbResidentStatus(value: string): ResidentStatus {
+  return value as ResidentStatus;
 }
 
-function mapStatusAndNotes(inputStatus: z.infer<typeof residentSchema>["status"], inputNotes: string) {
+function isActiveResident(status: ResidentStatus) {
+  return status === RESIDENT_STATUS.ACTIVE || status === RESIDENT_STATUS.BED_BOUND;
+}
+
+async function supportsHospitalizedStatus() {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ enumlabel: string }>>`
+      SELECT e.enumlabel
+      FROM pg_type t
+      JOIN pg_enum e ON t.oid = e.enumtypid
+      WHERE t.typname = 'ResidentStatus'
+    `;
+    if (Array.isArray(rows) && rows.length > 0) {
+      return rows.some((row) => row.enumlabel === RESIDENT_STATUS.HOSPITALIZED);
+    }
+  } catch {
+    // Non-Postgres providers or missing enum metadata fall back to safe mapping below.
+  }
+  return false;
+}
+
+function mapStatusAndNotes(
+  inputStatus: z.infer<typeof residentSchema>["status"],
+  inputNotes: string,
+  canStoreHospitalized: boolean
+) {
   const notes = inputNotes.trim();
 
   if (inputStatus === "Active") {
     return {
-      status: ResidentStatus.ACTIVE,
+      status: toDbResidentStatus(RESIDENT_STATUS.ACTIVE),
       notes: notes || null
     };
   }
 
   if (inputStatus === "Bed Bound") {
     return {
-      status: ResidentStatus.BED_BOUND,
+      status: toDbResidentStatus(RESIDENT_STATUS.BED_BOUND),
       notes: notes || null
     };
   }
 
   if (inputStatus === "Discharged") {
     return {
-      status: ResidentStatus.DISCHARGED,
+      status: toDbResidentStatus(RESIDENT_STATUS.DISCHARGED),
       notes: notes || null
     };
   }
@@ -117,15 +149,15 @@ function mapStatusAndNotes(inputStatus: z.infer<typeof residentSchema>["status"]
   // Hospital mapping rule:
   // - If enum supports hospitalized, store it directly.
   // - Otherwise map to Active with "Hospital: " note prefix.
-  if ("HOSPITALIZED" in ResidentStatus) {
+  if (canStoreHospitalized) {
     return {
-      status: ResidentStatus.HOSPITALIZED,
+      status: toDbResidentStatus(RESIDENT_STATUS.HOSPITALIZED),
       notes: notes || null
     };
   }
 
   return {
-    status: ResidentStatus.ACTIVE,
+    status: toDbResidentStatus(RESIDENT_STATUS.ACTIVE),
     notes: notes ? `Hospital: ${notes}` : "Hospital: "
   };
 }
@@ -159,8 +191,12 @@ async function findJasonScope() {
   return user;
 }
 
-async function upsertForRoom(facilityId: string, resident: z.infer<typeof residentSchema>) {
-  const mapped = mapStatusAndNotes(resident.status, resident.notes);
+async function upsertForRoom(
+  facilityId: string,
+  resident: z.infer<typeof residentSchema>,
+  canStoreHospitalized: boolean
+) {
+  const mapped = mapStatusAndNotes(resident.status, resident.notes, canStoreHospitalized);
   const data = {
     firstName: resident.firstName,
     lastName: resident.lastName,
@@ -221,13 +257,14 @@ async function upsertForRoom(facilityId: string, resident: z.infer<typeof reside
 
 async function main() {
   const jason = await findJasonScope();
+  const canStoreHospitalized = await supportsHospitalizedStatus();
 
   let createdCount = 0;
   let updatedCount = 0;
   let unchangedCount = 0;
 
   for (const resident of residentsInput) {
-    const result = await upsertForRoom(jason.facilityId, resident);
+    const result = await upsertForRoom(jason.facilityId, resident, canStoreHospitalized);
     if (result === "created") createdCount += 1;
     else if (result === "updated") updatedCount += 1;
     else unchangedCount += 1;
