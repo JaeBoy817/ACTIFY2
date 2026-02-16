@@ -168,9 +168,10 @@ export default async function AttendancePage({
           isActive: true,
           id: { in: residentIds }
         },
-        select: { id: true }
+        select: { id: true, status: true }
       });
       const validSet = new Set(validResidents.map((resident) => resident.id));
+      const residentStatusById = new Map(validResidents.map((resident) => [resident.id, resident.status]));
 
       const existingRows = await prisma.attendance.findMany({
         where: {
@@ -186,6 +187,7 @@ export default async function AttendancePage({
 
       for (const residentId of residentIds) {
         if (!validSet.has(residentId)) continue;
+        const isBedBoundResident = residentStatusById.get(residentId) === "BED_BOUND";
 
         const selectedStatusValues = formData
           .getAll(`status_${residentId}`)
@@ -207,10 +209,12 @@ export default async function AttendancePage({
         const rawBarrier = String(formData.get(`barrier_${residentId}`) || "").trim();
         const barrierParsed = rawBarrier ? barrierReasonSchema.safeParse(rawBarrier) : null;
         const barrier = ["PRESENT", "ACTIVE", "LEADING"].includes(status)
-          ? null
-          : barrierParsed?.success
-            ? barrierParsed.data
-            : null;
+            ? null
+            : barrierParsed?.success
+              ? barrierParsed.data
+              : isBedBoundResident
+                ? "BED_BOUND"
+              : null;
 
         const rawNotes = String(formData.get(`notes_${residentId}`) || "").trim();
         const notes = rawNotes.length > 0 ? rawNotes : null;
@@ -341,7 +345,14 @@ export default async function AttendancePage({
               ) : null}
               {orderedResidents.map((resident) => {
                 const existing = attendanceMap.get(resident.id);
-                const defaultStatusSelections = new Set(getDefaultStatusSelections(existing?.status));
+                const isBedBoundResident = resident.status === "BED_BOUND";
+                const defaultStatusSelections = new Set(
+                  existing?.status
+                    ? getDefaultStatusSelections(existing.status)
+                    : isBedBoundResident
+                      ? (["NO_SHOW"] as UiAttendanceStatus[])
+                      : []
+                );
                 return (
                   <div key={`check-${resident.id}`} className="rounded-md border p-3">
                     <input type="hidden" name="residentIds" value={resident.id} />
@@ -368,13 +379,19 @@ export default async function AttendancePage({
                             {option.label}
                           </label>
                         ))}
-                        <p className="w-full text-[11px] text-muted-foreground">
-                          You can check multiple. Save uses highest selected: No show &gt; Refused &gt; Leading &gt; Present/Active. If left unchecked, it saves as No show.
-                        </p>
+                        {isBedBoundResident ? (
+                          <p className="w-full text-[11px] text-muted-foreground">
+                            Bed Bound residents default to No show with Bed bound barrier when left unchecked, but you can select other options.
+                          </p>
+                        ) : (
+                          <p className="w-full text-[11px] text-muted-foreground">
+                            You can check multiple. Save uses highest selected: No show &gt; Refused &gt; Leading &gt; Present/Active. If left unchecked, it saves as No show.
+                          </p>
+                        )}
                       </fieldset>
                       <select
                         name={`barrier_${resident.id}`}
-                        defaultValue={existing?.barrierReason ?? ""}
+                        defaultValue={existing?.barrierReason ?? (isBedBoundResident ? "BED_BOUND" : "")}
                         className="h-10 rounded-md border px-3 text-sm"
                       >
                         <option value="">No barrier</option>
