@@ -181,6 +181,8 @@ type PlannedEvent = {
   dedupeKey: string;
 };
 
+const STANDARD_TIME_SLOTS = ["10:00", "11:00", "14:00", "15:30", "18:00"] as const;
+
 function slugifyTitle(title: string) {
   return title
     .toLowerCase()
@@ -241,6 +243,13 @@ function getTemplateForDate(dateKey: string) {
   return weekdayTemplate;
 }
 
+function normalizeTemplateTimeSlots(template: ActivityTemplate[]) {
+  return template.map((item, index) => ({
+    ...item,
+    time: STANDARD_TIME_SLOTS[index] ?? item.time
+  }));
+}
+
 function buildMonthPlan(timeZone: string): PlannedEvent[] {
   const events: PlannedEvent[] = [];
   const keys = dateKeysBetweenInclusive(TARGET_MONTH_START, TARGET_MONTH_END);
@@ -251,7 +260,7 @@ function buildMonthPlan(timeZone: string): PlannedEvent[] {
       throw new Error(`Could not parse date key ${dateKey}.`);
     }
 
-    const template = getTemplateForDate(dateKey);
+    const template = normalizeTemplateTimeSlots(getTemplateForDate(dateKey));
 
     for (const item of template) {
       const minutesFromStart = parseTimeToMinutes(item.time);
@@ -366,6 +375,7 @@ async function main() {
   });
 
   const existingByKey = new Map<string, Array<(typeof existing)[number]>>();
+  const existingByDateAndTitle = new Map<string, Array<(typeof existing)[number]>>();
   for (const row of existing) {
     const dateKey = zonedDateKey(row.startAt, scope.timeZone);
     const time = localTimeKey(row.startAt, scope.timeZone);
@@ -373,6 +383,11 @@ async function main() {
     const list = existingByKey.get(key) ?? [];
     list.push(row);
     existingByKey.set(key, list);
+
+    const dateAndTitleKey = `${dateKey}::${slugifyTitle(row.title)}`;
+    const dateAndTitleList = existingByDateAndTitle.get(dateAndTitleKey) ?? [];
+    dateAndTitleList.push(row);
+    existingByDateAndTitle.set(dateAndTitleKey, dateAndTitleList);
   }
 
   let createdCount = 0;
@@ -383,11 +398,15 @@ async function main() {
   const consumedIds = new Set<string>();
   for (const event of planned) {
     const matches = (existingByKey.get(event.dedupeKey) ?? []).filter((item) => !consumedIds.has(item.id));
-    if (matches.length > 0) {
-      const primary = matches[0];
+    const fallbackDateAndTitleMatches = (existingByDateAndTitle.get(`${event.dateKey}::${slugifyTitle(event.title)}`) ?? []).filter(
+      (item) => !consumedIds.has(item.id)
+    );
+    const candidateMatches = matches.length > 0 ? matches : fallbackDateAndTitleMatches;
+    if (candidateMatches.length > 0) {
+      const primary = candidateMatches[0];
       consumedIds.add(primary.id);
-      if (matches.length > 1) {
-        existingDuplicateCount += matches.length - 1;
+      if (candidateMatches.length > 1) {
+        existingDuplicateCount += candidateMatches.length - 1;
       }
 
       const needsUpdate =
