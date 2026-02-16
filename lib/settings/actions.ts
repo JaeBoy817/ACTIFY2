@@ -71,6 +71,7 @@ export async function upsertFacilitySettings(payload: unknown) {
       }
     };
     facilityUpdateData = {
+      name: parsed.values.facilityName,
       timezone: parsed.values.timezone
     };
   }

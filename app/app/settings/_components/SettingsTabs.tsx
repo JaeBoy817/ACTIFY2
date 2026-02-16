@@ -361,6 +361,7 @@ export function SettingsTabs({
   const facilityForm = useForm<z.infer<typeof facilityTabSchema>>({
     resolver: zodResolver(facilityTabSchema),
     defaultValues: {
+      facilityName,
       timezone: facilitySettings.timezone || facilityTimezone,
       useBusinessHoursDefaults: facilitySettings.attendanceRules.useBusinessHoursDefaults,
       roomFormatRule: facilitySettings.roomFormatRule,
@@ -384,6 +385,7 @@ export function SettingsTabs({
         const result = await upsertFacilitySettings({ section: "facility", values });
         setFacilitySavedAt(formatSavedAt(result.updatedAt));
         facilityForm.reset(values);
+        router.refresh();
         toast({ title: "Facility settings saved" });
       } catch (error) {
         toast({
@@ -819,7 +821,7 @@ export function SettingsTabs({
               <h1 className="font-[var(--font-display)] text-3xl text-foreground">Settings</h1>
               <p className="text-sm text-foreground/75">Facility defaults, documentation rules, and your preferences.</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="bg-white/80">{facilityName}</Badge>
+                <Badge variant="outline" className="bg-white/80">{facilityForm.watch("facilityName") || facilityName}</Badge>
                 <Badge variant="outline" className="bg-white/80">Role: {roleLabels[role]}</Badge>
               </div>
             </div>
@@ -853,7 +855,10 @@ export function SettingsTabs({
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-sm">
                   Facility
-                  <Input value={facilityName} disabled className="mt-1" />
+                  <Input className="mt-1" {...facilityForm.register("facilityName")} />
+                  {facilityForm.formState.errors.facilityName ? (
+                    <p className="mt-1 text-xs text-destructive">{facilityForm.formState.errors.facilityName.message}</p>
+                  ) : null}
                 </label>
                 <label className="text-sm">
                   Timezone

@@ -1,0 +1,4 @@
+TODO: Replace /app/favicon.ico with a production favicon converted from the final ACTIFY logo.
+Expected path: /app/favicon.ico
+Suggested source asset: /public/actify-logo.png or /public/actify-logo.svg
+

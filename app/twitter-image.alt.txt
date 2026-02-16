@@ -1,0 +1,2 @@
+ACTIFY social preview card showing the product headline and features for activity directors.
+

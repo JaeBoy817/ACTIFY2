@@ -7,6 +7,7 @@ const daySchema = z.number().int().min(0).max(6);
 
 export const facilityTabSchema = z
   .object({
+    facilityName: z.string().trim().min(2).max(120),
     timezone: z.string().min(2),
     useBusinessHoursDefaults: z.boolean(),
     roomFormatRule: z.nativeEnum(RoomFormatRule),
