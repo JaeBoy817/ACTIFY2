@@ -24,6 +24,12 @@ const updateActivitySchema = z.object({
   location: z.string().min(1)
 });
 
+function fireAndForgetAudit(payload: Parameters<typeof logAudit>[0]) {
+  void logAudit(payload).catch((error) => {
+    console.error("Calendar day audit log failed:", error);
+  });
+}
+
 function asChecklist(value: unknown): { text: string; done: boolean }[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -121,7 +127,7 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
       }
     });
 
-    await logAudit({
+    fireAndForgetAudit({
       facilityId: scoped.facilityId,
       actorUserId: scoped.user.id,
       action: "UPDATE",
@@ -153,7 +159,7 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
       where: { id: existing.id }
     });
 
-    await logAudit({
+    fireAndForgetAudit({
       facilityId: scoped.facilityId,
       actorUserId: scoped.user.id,
       action: "DELETE",
@@ -203,7 +209,7 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
       }
     });
 
-    await logAudit({
+    fireAndForgetAudit({
       facilityId: scoped.facilityId,
       actorUserId: scoped.user.id,
       action: "UPDATE",

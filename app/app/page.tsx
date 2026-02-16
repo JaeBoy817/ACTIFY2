@@ -223,15 +223,6 @@ export default async function DashboardPage() {
   }
 
   const totalAttendance30 = attendanceRows30.length;
-  const attendingResidentIds = new Set(
-    attendanceRows30
-      .filter((row) => row.status === "PRESENT" || row.status === "ACTIVE" || row.status === "LEADING")
-      .map((row) => row.residentId)
-  );
-  const totalResidentsAttending30 = attendingResidentIds.size;
-  const residentParticipationRate30 = activeResidents === 0
-    ? 0
-    : Number(((totalResidentsAttending30 / activeResidents) * 100).toFixed(1));
   const statusBreakdown = attendanceStatusMeta.map((item) => {
     const count = statusCounts[item.status] ?? 0;
     const percent = totalAttendance30 === 0 ? 0 : Number(((count / totalAttendance30) * 100).toFixed(1));
@@ -369,58 +360,56 @@ export default async function DashboardPage() {
               <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-foreground/65">Residents attending (30d)</p>
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Total Attended Residents</p>
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyBlue/15 text-actifyBlue">
                       <Users className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    <CountUpValue value={totalResidentsAttending30} />
+                    <CountUpValue value={facilityPresence.currentMonthTotalResidentsAttended} />
                   </p>
-                  <p className="text-[11px] text-foreground/70">Unique residents with attendance in last 30 days.</p>
+                  <p className="text-[11px] text-foreground/70">{facilityPresence.activeResidentCount} active residents in facility.</p>
                 </div>
                 <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-foreground/65">Participation rate (30d)</p>
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Residents Participated</p>
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyMint/20 text-foreground">
                       <ClipboardCheck className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    <CountUpValue value={residentParticipationRate30} decimals={1} suffix="%" />
+                    <CountUpValue value={facilityPresence.currentMonthResidentsParticipated} />
                   </p>
-                  <p className="text-[11px] text-foreground/70">
-                    {totalResidentsAttending30} of {activeResidents} active residents.
-                  </p>
+                  <p className="text-[11px] text-foreground/70">Unique residents with Present/Active/Leading this month.</p>
                 </div>
                 <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-foreground/65">Present today</p>
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Participation %</p>
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyCoral/20 text-foreground">
                       <CalendarDays className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    <CountUpValue value={facilityPresence.todayPresentResidents} />
+                    <CountUpValue value={facilityPresence.currentMonthParticipationPercent} decimals={1} suffix="%" />
                   </p>
                   <p className="text-[11px] text-foreground/70">
-                    {facilityPresence.todayPresentPercent.toFixed(1)}% of active residents.
+                    {facilityPresence.currentMonthResidentsParticipated} of {facilityPresence.activeResidentCount} active residents.
                   </p>
+                  <p className="text-[11px] text-foreground/70">{monthDeltaLabel}</p>
                 </div>
                 <div className="flex h-full min-h-28 flex-col justify-between rounded-xl border border-white/75 bg-white/70 p-3.5">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-foreground/65">Present this month</p>
+                    <p className="text-xs uppercase tracking-wide text-foreground/65">Average Daily %</p>
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-actifyBlue/15 text-actifyBlue">
                       <Users className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    <CountUpValue value={facilityPresence.currentMonthPresentResidents} />
+                    <CountUpValue value={facilityPresence.currentMonthAverageDailyPercent} decimals={1} suffix="%" />
                   </p>
                   <p className="text-[11px] text-foreground/70">
-                    {facilityPresence.currentMonthPresentPercent.toFixed(1)}% of active residents.
+                    Average daily resident participation in current month.
                   </p>
-                  <p className="text-[11px] text-foreground/70">{monthDeltaLabel}</p>
                 </div>
               </div>
 

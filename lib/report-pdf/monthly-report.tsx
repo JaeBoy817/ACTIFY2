@@ -555,7 +555,7 @@ function monthlyReportDocument({
   } as const;
 
   const supportiveTotal = data.attendanceCounts.present + data.attendanceCounts.active + data.attendanceCounts.leading;
-  const participationRate = toPercent(supportiveTotal, data.attendance.length);
+  const monthlyParticipation = data.monthlyParticipation;
   const programRows = getProgramRows(data, scoreMap);
   const unitRows = getUnitRows(data);
   const barrierRows = getBarrierRows(data);
@@ -622,7 +622,11 @@ function monthlyReportDocument({
               Attendance, engagement, barriers, and outcomes for this month.
             </Text>
             <Text style={{ ...labelStyle, marginTop: 3 }}>
-              Participation rate: {participationRate}% | Supportive marks: {supportiveTotal}
+              Total Attended Residents: {monthlyParticipation.totalResidentsInCurrentMonthThatHaveAttended}
+              {" | "}
+              Participation %: {monthlyParticipation.participationPercent.toFixed(1)}%
+              {" | "}
+              Average daily %: {monthlyParticipation.averageDailyPercent.toFixed(1)}%
             </Text>
           </View>
         </View>
@@ -631,32 +635,32 @@ function monthlyReportDocument({
           <View style={{ width: 266 }}>
             <KpiCard
               theme={theme}
-              label="Total Activities"
-              value={String(data.activities.length)}
-              detail="Scheduled sessions"
+              label="Total Attended Residents"
+              value={String(monthlyParticipation.totalResidentsInCurrentMonthThatHaveAttended)}
+              detail={`${monthlyParticipation.activeResidentCount} active residents`}
               tone="blue"
             />
             <KpiCard
               theme={theme}
-              label="1:1 Notes"
-              value={sections.oneToOneTotals ? String(data.oneToOneTotal) : "—"}
-              detail="Documented this month"
+              label="Residents Participated"
+              value={String(monthlyParticipation.residentsParticipated)}
+              detail="Unique residents with Present/Active/Leading"
               tone="coral"
             />
           </View>
           <View style={{ width: 266 }}>
             <KpiCard
               theme={theme}
-              label="Participation Rate"
-              value={`${participationRate}%`}
-              detail={`${supportiveTotal} supportive marks`}
+              label="Participation %"
+              value={`${monthlyParticipation.participationPercent.toFixed(1)}%`}
+              detail={`${monthlyParticipation.residentsParticipated} of ${monthlyParticipation.activeResidentCount} active residents`}
               tone="mint"
             />
             <KpiCard
               theme={theme}
-              label="Avg Engagement"
-              value={sections.engagementAvg ? data.engagementAvg.toFixed(2) : "—"}
-              detail={`Scale 0 to ${engagementScaleMax}`}
+              label="Average Daily %"
+              value={`${monthlyParticipation.averageDailyPercent.toFixed(1)}%`}
+              detail="Average daily resident participation this month"
               tone="neutral"
             />
           </View>
@@ -834,15 +838,20 @@ function monthlyReportDocument({
             ) : null}
 
             <View style={cardStyle}>
-              <SectionHeading theme={theme} title="Totals" />
-              <Text style={labelStyle}>Attendance: {data.attendance.length}</Text>
-              <Text style={labelStyle}>Supportive: {supportiveTotal}</Text>
-              <Text style={labelStyle}>Refused: {data.attendanceCounts.refused}</Text>
-              <Text style={labelStyle}>No Show: {data.attendanceCounts.noShow}</Text>
-            <Text style={labelStyle}>Participation: {participationRate}%</Text>
-              {sections.oneToOneTotals ? <Text style={labelStyle}>1:1 notes: {data.oneToOneTotal}</Text> : null}
-              <Text style={labelStyle}>Engagement scale max: {engagementScaleMax}</Text>
-            </View>
+            <SectionHeading theme={theme} title="Totals" />
+            <Text style={labelStyle}>Attendance: {data.attendance.length}</Text>
+            <Text style={labelStyle}>Supportive: {supportiveTotal}</Text>
+            <Text style={labelStyle}>
+              Total Attended Residents: {monthlyParticipation.totalResidentsInCurrentMonthThatHaveAttended}
+            </Text>
+            <Text style={labelStyle}>Residents participated: {monthlyParticipation.residentsParticipated}</Text>
+            <Text style={labelStyle}>Participation %: {monthlyParticipation.participationPercent.toFixed(1)}%</Text>
+            <Text style={labelStyle}>Average daily %: {monthlyParticipation.averageDailyPercent.toFixed(1)}%</Text>
+            <Text style={labelStyle}>Refused: {data.attendanceCounts.refused}</Text>
+            <Text style={labelStyle}>No Show: {data.attendanceCounts.noShow}</Text>
+            {sections.oneToOneTotals ? <Text style={labelStyle}>1:1 notes: {data.oneToOneTotal}</Text> : null}
+            <Text style={labelStyle}>Engagement scale max: {engagementScaleMax}</Text>
+          </View>
           </View>
         </View>
 

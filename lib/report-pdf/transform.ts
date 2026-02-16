@@ -23,6 +23,7 @@ export function toReportPdfData(raw: RawMonthlyReport): MonthlyReportPdfData {
       activityTitle: row.activityInstance.title,
       activityStartAt: row.activityInstance.startAt
     })),
+    monthlyParticipation: raw.monthlyParticipation,
     attendanceCounts: raw.attendanceCounts,
     engagementAvg: raw.engagementAvg,
     topPrograms: raw.topPrograms,

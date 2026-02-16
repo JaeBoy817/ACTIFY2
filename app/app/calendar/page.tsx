@@ -35,6 +35,12 @@ const createActivitySchema = z.object({
   checklist: z.string().optional()
 });
 
+function fireAndForgetAudit(payload: Parameters<typeof logAudit>[0]) {
+  void logAudit(payload).catch((error) => {
+    console.error("Calendar audit log failed:", error);
+  });
+}
+
 export default async function CalendarPage({ searchParams }: { searchParams?: { month?: string } }) {
   const context = await requireModulePage("calendar");
   const parsedMonth = searchParams?.month ? parseISO(searchParams.month) : new Date();
@@ -53,11 +59,22 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
           lte: calendarEnd
         }
       },
-      include: { template: true },
+      select: {
+        id: true,
+        title: true,
+        startAt: true,
+        endAt: true,
+        location: true
+      },
       orderBy: { startAt: "asc" }
     }),
     prisma.activityTemplate.findMany({
       where: { facilityId: context.facilityId },
+      select: {
+        id: true,
+        title: true,
+        category: true
+      },
       orderBy: { title: "asc" }
     })
   ]);
@@ -136,7 +153,7 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
       }
     });
 
-    await logAudit({
+    fireAndForgetAudit({
       facilityId: scoped.facilityId,
       actorUserId: scoped.user.id,
       action: "CREATE",
@@ -162,7 +179,12 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
     if (!templateId || !startAt || !endAt) return;
 
     const template = await prisma.activityTemplate.findFirst({
-      where: { id: templateId, facilityId: scoped.facilityId }
+      where: { id: templateId, facilityId: scoped.facilityId },
+      select: {
+        id: true,
+        title: true,
+        defaultChecklist: true
+      }
     });
     if (!template) return;
 
@@ -188,7 +210,7 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
       }
     });
 
-    await logAudit({
+    fireAndForgetAudit({
       facilityId: scoped.facilityId,
       actorUserId: scoped.user.id,
       action: "CREATE",

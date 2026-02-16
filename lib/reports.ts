@@ -2,6 +2,12 @@ import { endOfMonth, startOfMonth } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules } from "@/lib/settings/defaults";
+import { zonedDateKey } from "@/lib/timezone";
+
+function percent(part: number, total: number) {
+  if (total === 0) return 0;
+  return Number(((part / total) * 100).toFixed(1));
+}
 
 export function parseMonthParam(month?: string) {
   if (!month) return new Date();
@@ -14,7 +20,7 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
   const from = startOfMonth(monthDate);
   const to = endOfMonth(monthDate);
 
-  const [activities, attendance, notes, settings] = await Promise.all([
+  const [activities, attendance, notes, settings, facility, activeResidents] = await Promise.all([
     prisma.activityInstance.findMany({
       where: {
         facilityId,
@@ -27,8 +33,10 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
     }),
     prisma.attendance.findMany({
       where: {
-        activityInstance: { facilityId },
-        createdAt: { gte: from, lte: to }
+        activityInstance: {
+          facilityId,
+          startAt: { gte: from, lte: to }
+        }
       },
       include: {
         resident: {
@@ -53,6 +61,23 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
     prisma.facilitySettings.findUnique({
       where: { facilityId },
       select: { attendanceRulesJson: true }
+    }),
+    prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: { timezone: true }
+    }),
+    prisma.resident.findMany({
+      where: {
+        facilityId,
+        OR: [
+          { isActive: true },
+          { status: { in: ["ACTIVE", "BED_BOUND"] } }
+        ],
+        NOT: {
+          status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
+        }
+      },
+      select: { id: true }
     })
   ]);
 
@@ -72,6 +97,37 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
     refused: attendance.filter((row) => row.status === "REFUSED").length,
     noShow: attendance.filter((row) => row.status === "NO_SHOW").length
   };
+
+  const activeResidentCount = activeResidents.length;
+  const activeResidentIds = new Set(activeResidents.map((resident) => resident.id));
+  const supportiveStatuses = new Set(["PRESENT", "ACTIVE", "LEADING"]);
+  const monthResidentParticipants = new Set<string>();
+  const dailyParticipants = new Map<string, Set<string>>();
+  const monthTimeZone = facility?.timezone ?? "UTC";
+
+  for (const row of attendance) {
+    if (!supportiveStatuses.has(row.status)) continue;
+    if (!activeResidentIds.has(row.residentId)) continue;
+
+    monthResidentParticipants.add(row.residentId);
+    const dayKey = zonedDateKey(row.activityInstance.startAt, monthTimeZone);
+    const daySet = dailyParticipants.get(dayKey) ?? new Set<string>();
+    daySet.add(row.residentId);
+    dailyParticipants.set(dayKey, daySet);
+  }
+
+  const residentsParticipated = monthResidentParticipants.size;
+  const participationPercent = percent(residentsParticipated, activeResidentCount);
+  const averageDailyPercent = dailyParticipants.size === 0
+    ? 0
+    : Number(
+        (
+          Array.from(dailyParticipants.values()).reduce(
+            (sum, daySet) => sum + percent(daySet.size, activeResidentCount),
+            0
+          ) / dailyParticipants.size
+        ).toFixed(1)
+      );
 
   const engagementAvg = Number(
     (
@@ -120,13 +176,28 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
     topPrograms,
     barrierSummary,
     oneToOneTotal,
-    notableOutcomes
+    notableOutcomes,
+    monthlyParticipation: {
+      totalResidentsInCurrentMonthThatHaveAttended: residentsParticipated,
+      residentsParticipated,
+      participationPercent,
+      averageDailyPercent,
+      activeResidentCount
+    }
   };
 }
 
 export function toCsv(data: Awaited<ReturnType<typeof getMonthlyReportData>>) {
   const lines = [
     ["Section", "Metric", "Value"].join(","),
+    [
+      "Attendance",
+      "Total Attended Residents",
+      String(data.monthlyParticipation.totalResidentsInCurrentMonthThatHaveAttended)
+    ].join(","),
+    ["Attendance", "Residents Participated", String(data.monthlyParticipation.residentsParticipated)].join(","),
+    ["Attendance", "Participation %", String(data.monthlyParticipation.participationPercent)].join(","),
+    ["Attendance", "Average Daily %", String(data.monthlyParticipation.averageDailyPercent)].join(","),
     ["Attendance", "Present/Active", data.attendanceCounts.present + data.attendanceCounts.active].join(","),
     ["Attendance", "Leading", data.attendanceCounts.leading].join(","),
     ["Attendance", "Refused", data.attendanceCounts.refused].join(","),

@@ -173,42 +173,53 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle>Present Today</CardTitle>
+            <CardTitle>Total Attended Residents</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-3xl font-semibold">{facilityPresence.todayPresentPercent.toFixed(1)}%</p>
+            <p className="text-3xl font-semibold">{facilityPresence.currentMonthTotalResidentsAttended}</p>
             <p className="text-sm text-muted-foreground">
-              {facilityPresence.todayPresentResidents} of {facilityPresence.activeResidentCount} residents were present today.
+              {facilityPresence.activeResidentCount} active residents in facility.
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Present This Month</CardTitle>
+            <CardTitle>Residents Participated</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-3xl font-semibold">{facilityPresence.currentMonthPresentPercent.toFixed(1)}%</p>
+            <p className="text-3xl font-semibold">{facilityPresence.currentMonthResidentsParticipated}</p>
             <p className="text-sm text-muted-foreground">
-              {facilityPresence.currentMonthPresentResidents} of {facilityPresence.activeResidentCount} residents were present this month.
+              Unique residents with Present/Active/Leading this month.
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Month-over-Month</CardTitle>
+            <CardTitle>Participation %</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-3xl font-semibold">{facilityPresence.currentMonthParticipationPercent.toFixed(1)}%</p>
+            <p className="text-sm text-muted-foreground">
+              {facilityPresence.currentMonthResidentsParticipated} of {facilityPresence.activeResidentCount} active residents.
+            </p>
+            <Badge variant="outline">{monthDeltaLabel}</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Average Daily %</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-3xl font-semibold">
-              {facilityPresence.monthOverMonthDelta === null
-                ? "N/A"
-                : `${facilityPresence.monthOverMonthDelta > 0 ? "+" : ""}${facilityPresence.monthOverMonthDelta.toFixed(1)} pts`}
+              {facilityPresence.currentMonthAverageDailyPercent.toFixed(1)}%
             </p>
-            <p className="text-sm text-muted-foreground">{monthDeltaLabel}</p>
+            <p className="text-sm text-muted-foreground">Average daily resident participation in current month.</p>
             <Badge variant="outline">
               Last month: {facilityPresence.previousMonthPresentPercent.toFixed(1)}%
             </Badge>

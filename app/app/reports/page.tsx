@@ -12,11 +12,6 @@ import { requireModulePage } from "@/lib/page-guards";
 import { canExportMonthlyReport } from "@/lib/permissions";
 import { getMonthlyReportData, parseMonthParam } from "@/lib/reports";
 
-function toPercent(value: number, total: number) {
-  if (total === 0) return 0;
-  return Number(((value / total) * 100).toFixed(1));
-}
-
 export default async function ReportsPage({ searchParams }: { searchParams?: { month?: string } }) {
   const context = await requireModulePage("reports");
   const month = searchParams?.month;
@@ -25,33 +20,32 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { m
 
   const canExport = canExportMonthlyReport(context.role);
   const monthParam = month || `${parsedMonth.getFullYear()}-${String(parsedMonth.getMonth() + 1).padStart(2, "0")}`;
-  const successfulAttendance = reportData.attendanceCounts.present + reportData.attendanceCounts.active + reportData.attendanceCounts.leading;
-  const participationRate = toPercent(successfulAttendance, reportData.attendance.length);
+  const monthlyParticipation = reportData.monthlyParticipation;
   const pdfDownloadHref = `/app/reports/pdf?month=${monthParam}`;
   const pdfPreviewHref = `/app/reports/pdf?month=${monthParam}&preview=1&t=${Date.now()}`;
   const summaryTiles = [
     {
-      label: "Activities",
-      value: reportData.activities.length,
-      detail: "Scheduled this month",
+      label: "Total Attended Residents",
+      value: monthlyParticipation.totalResidentsInCurrentMonthThatHaveAttended,
+      detail: `${monthlyParticipation.activeResidentCount} active residents in facility`,
       tone: "bg-actifyBlue/10 text-actifyBlue"
     },
     {
-      label: "Attendance Entries",
-      value: reportData.attendance.length,
-      detail: `${participationRate}% participation`,
+      label: "Residents Participated",
+      value: monthlyParticipation.residentsParticipated,
+      detail: "Unique residents with Present/Active/Leading",
       tone: "bg-actifyMint/20 text-foreground"
     },
     {
-      label: "1:1 Notes",
-      value: reportData.oneToOneTotal,
-      detail: "Resident-specific follow-up",
+      label: "Participation %",
+      value: `${monthlyParticipation.participationPercent.toFixed(1)}%`,
+      detail: `${monthlyParticipation.residentsParticipated} of ${monthlyParticipation.activeResidentCount} active residents`,
       tone: "bg-actifyCoral/20 text-foreground"
     },
     {
-      label: "Engagement Avg",
-      value: reportData.engagementAvg,
-      detail: "Score out of 3",
+      label: "Average Daily %",
+      value: `${monthlyParticipation.averageDailyPercent.toFixed(1)}%`,
+      detail: "Average daily resident participation this month",
       tone: "bg-amber-100 text-amber-700"
     }
   ] as const;

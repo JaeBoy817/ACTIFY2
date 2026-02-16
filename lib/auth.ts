@@ -12,19 +12,29 @@ export async function ensureUserAndFacility() {
     redirect("/sign-in");
   }
 
-  let dbUser = await prisma.user.findUnique({
+  const existingUser = await prisma.user.findUnique({
     where: { clerkUserId: userId },
-    include: { facility: true }
+    include: {
+      settings: { select: { id: true } },
+      facility: {
+        include: {
+          settings: { select: { id: true } }
+        }
+      }
+    }
   });
 
-  if (dbUser) {
-    await ensureSettingsForUserAndFacility({
-      facilityId: dbUser.facilityId,
-      userId: dbUser.id,
-      timezone: dbUser.facility.timezone,
-      moduleFlags: dbUser.facility.moduleFlags
-    });
-    return dbUser;
+  if (existingUser) {
+    // These settings records are needed only once. Avoid upsert writes on every request/action.
+    if (!existingUser.settings || !existingUser.facility.settings) {
+      await ensureSettingsForUserAndFacility({
+        facilityId: existingUser.facilityId,
+        userId: existingUser.id,
+        timezone: existingUser.facility.timezone,
+        moduleFlags: existingUser.facility.moduleFlags
+      });
+    }
+    return existingUser;
   }
 
   const clerk = await currentUser();
@@ -32,7 +42,7 @@ export async function ensureUserAndFacility() {
   const name = [clerk?.firstName, clerk?.lastName].filter(Boolean).join(" ") || clerk?.username || "New User";
 
   try {
-    dbUser = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const facility = await tx.facility.create({
         data: {
           name: "My Facility",
@@ -57,29 +67,56 @@ export async function ensureUserAndFacility() {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const existing = await prisma.user.findUnique({
         where: { clerkUserId: userId },
-        include: { facility: true }
+        include: {
+          settings: { select: { id: true } },
+          facility: {
+            include: {
+              settings: { select: { id: true } }
+            }
+          }
+        }
       });
       if (existing) {
-        await ensureSettingsForUserAndFacility({
-          facilityId: existing.facilityId,
-          userId: existing.id,
-          timezone: existing.facility.timezone,
-          moduleFlags: existing.facility.moduleFlags
-        });
+        if (!existing.settings || !existing.facility.settings) {
+          await ensureSettingsForUserAndFacility({
+            facilityId: existing.facilityId,
+            userId: existing.id,
+            timezone: existing.facility.timezone,
+            moduleFlags: existing.facility.moduleFlags
+          });
+        }
         return existing;
       }
     }
     throw error;
   }
 
-  await ensureSettingsForUserAndFacility({
-    facilityId: dbUser.facilityId,
-    userId: dbUser.id,
-    timezone: dbUser.facility.timezone,
-    moduleFlags: dbUser.facility.moduleFlags
+  const createdUser = await prisma.user.findUnique({
+    where: { clerkUserId: userId },
+    include: {
+      settings: { select: { id: true } },
+      facility: {
+        include: {
+          settings: { select: { id: true } }
+        }
+      }
+    }
   });
 
-  return dbUser;
+  if (!createdUser) {
+    throw new Error("User creation failed: unable to load newly created user.");
+  }
+
+  if (!createdUser.settings || !createdUser.facility.settings) {
+    await ensureSettingsForUserAndFacility({
+      facilityId: createdUser.facilityId,
+      userId: createdUser.id,
+      timezone: createdUser.facility.timezone,
+      moduleFlags: createdUser.facility.moduleFlags
+    });
+  }
+
+  return createdUser;
 }
 
 export async function requireUser() {

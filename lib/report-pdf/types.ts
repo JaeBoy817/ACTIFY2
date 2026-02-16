@@ -26,6 +26,13 @@ export interface MonthlyReportPdfData {
   monthLabel: string;
   activities: MonthlyReportPdfActivity[];
   attendance: MonthlyReportPdfAttendance[];
+  monthlyParticipation: {
+    totalResidentsInCurrentMonthThatHaveAttended: number;
+    residentsParticipated: number;
+    participationPercent: number;
+    averageDailyPercent: number;
+    activeResidentCount: number;
+  };
   attendanceCounts: {
     present: number;
     active: number;

@@ -308,7 +308,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
         </div>
       </GlassCard>
 
-      <section className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-4">
         <GlassCard variant="dense" className="h-full min-h-[144px]">
           <div className="flex h-full flex-col justify-between gap-2">
             <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-actifyBlue/15 text-actifyBlue">
@@ -350,24 +350,44 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
         <GlassCard variant="dense" className="h-full min-h-[144px]">
           <div className="flex h-full flex-col justify-between gap-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/65">Present today</p>
-              <p className="text-2xl font-semibold text-foreground">{facilityPresence.todayPresentPercent.toFixed(1)}%</p>
+              <p className="text-xs uppercase tracking-wide text-foreground/65">Total Attended Residents</p>
+              <p className="text-2xl font-semibold text-foreground">{facilityPresence.currentMonthTotalResidentsAttended}</p>
             </div>
             <p className="text-xs text-foreground/70">
-              {facilityPresence.todayPresentResidents}/{facilityPresence.activeResidentCount} residents
+              {facilityPresence.activeResidentCount} active residents in facility
             </p>
           </div>
         </GlassCard>
         <GlassCard variant="dense" className="h-full min-h-[144px]">
           <div className="flex h-full flex-col justify-between gap-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/65">Present this month</p>
-              <p className="text-2xl font-semibold text-foreground">{facilityPresence.currentMonthPresentPercent.toFixed(1)}%</p>
+              <p className="text-xs uppercase tracking-wide text-foreground/65">Residents Participated</p>
+              <p className="text-2xl font-semibold text-foreground">{facilityPresence.currentMonthResidentsParticipated}</p>
             </div>
             <p className="text-xs text-foreground/70">
-              {facilityPresence.currentMonthPresentResidents}/{facilityPresence.activeResidentCount} residents
+              Unique residents with Present/Active/Leading this month
+            </p>
+          </div>
+        </GlassCard>
+        <GlassCard variant="dense" className="h-full min-h-[144px]">
+          <div className="flex h-full flex-col justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-foreground/65">Participation %</p>
+              <p className="text-2xl font-semibold text-foreground">{facilityPresence.currentMonthParticipationPercent.toFixed(1)}%</p>
+            </div>
+            <p className="text-xs text-foreground/70">
+              {facilityPresence.currentMonthResidentsParticipated}/{facilityPresence.activeResidentCount} active residents
             </p>
             <p className="text-xs text-foreground/70">{monthDeltaLabel}</p>
+          </div>
+        </GlassCard>
+        <GlassCard variant="dense" className="h-full min-h-[144px]">
+          <div className="flex h-full flex-col justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-foreground/65">Average Daily %</p>
+              <p className="text-2xl font-semibold text-foreground">{facilityPresence.currentMonthAverageDailyPercent.toFixed(1)}%</p>
+            </div>
+            <p className="text-xs text-foreground/70">Average daily resident participation in current month</p>
           </div>
         </GlassCard>
       </section>

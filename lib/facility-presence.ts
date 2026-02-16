@@ -2,7 +2,8 @@ import {
   endOfZonedDay,
   startOfZonedDay,
   startOfZonedMonth,
-  startOfZonedMonthShift
+  startOfZonedMonthShift,
+  zonedDateKey
 } from "@/lib/timezone";
 
 export interface FacilityPresenceRow {
@@ -21,6 +22,10 @@ export interface FacilityPresenceMetrics {
   previousMonthPresentPercent: number;
   hasPreviousMonthData: boolean;
   monthOverMonthDelta: number | null;
+  currentMonthTotalResidentsAttended: number;
+  currentMonthResidentsParticipated: number;
+  currentMonthParticipationPercent: number;
+  currentMonthAverageDailyPercent: number;
 }
 
 const presentStatuses = new Set(["PRESENT", "ACTIVE", "LEADING"]);
@@ -58,6 +63,7 @@ export function computeFacilityPresenceMetrics({
 
   const todayResidents = new Set<string>();
   const currentMonthResidents = new Set<string>();
+  const currentMonthDailyResidents = new Map<string, Set<string>>();
   const previousMonthResidents = new Set<string>();
   const allowedResidentIds = activeResidentIds ? new Set(activeResidentIds) : null;
 
@@ -84,6 +90,10 @@ export function computeFacilityPresenceMetrics({
 
     if (inRange(occurredAt, currentMonthStart, currentMonthEnd)) {
       currentMonthResidents.add(row.residentId);
+      const dayKey = zonedDateKey(occurredAt, timeZone);
+      const dayResidents = currentMonthDailyResidents.get(dayKey) ?? new Set<string>();
+      dayResidents.add(row.residentId);
+      currentMonthDailyResidents.set(dayKey, dayResidents);
     }
   }
 
@@ -94,6 +104,14 @@ export function computeFacilityPresenceMetrics({
   const todayPresentPercent = percent(todayPresentResidents, activeResidentCount);
   const currentMonthPresentPercent = percent(currentMonthPresentResidents, activeResidentCount);
   const previousMonthPresentPercent = percent(previousMonthPresentResidents, activeResidentCount);
+  const averageDailyParticipationPercent = currentMonthDailyResidents.size === 0
+    ? 0
+    : Number(
+        (
+          Array.from(currentMonthDailyResidents.values()).reduce((sum, residents) => sum + percent(residents.size, activeResidentCount), 0) /
+          currentMonthDailyResidents.size
+        ).toFixed(1)
+      );
 
   return {
     activeResidentCount,
@@ -106,6 +124,10 @@ export function computeFacilityPresenceMetrics({
     hasPreviousMonthData: previousMonthAnyRows,
     monthOverMonthDelta: previousMonthAnyRows
       ? Number((currentMonthPresentPercent - previousMonthPresentPercent).toFixed(1))
-      : null
+      : null,
+    currentMonthTotalResidentsAttended: currentMonthPresentResidents,
+    currentMonthResidentsParticipated: currentMonthPresentResidents,
+    currentMonthParticipationPercent: currentMonthPresentPercent,
+    currentMonthAverageDailyPercent: averageDailyParticipationPercent
   };
 }
