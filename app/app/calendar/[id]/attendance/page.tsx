@@ -88,6 +88,21 @@ const checklistSchema = z.object({
   residentIds: z.array(z.string().min(1)).default([])
 });
 
+const ATTENDANCE_WRITE_BATCH_SIZE = 20;
+
+function fireAndForgetAudit(payload: Parameters<typeof logAudit>[0]) {
+  void logAudit(payload).catch((error) => {
+    console.error("Attendance audit log failed:", error);
+  });
+}
+
+async function runInBatches(tasks: Array<() => Promise<void>>, batchSize = ATTENDANCE_WRITE_BATCH_SIZE) {
+  for (let index = 0; index < tasks.length; index += batchSize) {
+    const batch = tasks.slice(index, index + batchSize);
+    await Promise.all(batch.map((task) => task()));
+  }
+}
+
 export default async function AttendancePage({
   params,
   searchParams
@@ -164,6 +179,10 @@ export default async function AttendancePage({
         }
       });
       const existingMap = new Map(existingRows.map((row) => [row.residentId, row]));
+      const writeTasks: Array<() => Promise<void>> = [];
+      let createdCount = 0;
+      let updatedCount = 0;
+      let unchangedCount = 0;
 
       for (const residentId of residentIds) {
         if (!validSet.has(residentId)) continue;
@@ -199,23 +218,26 @@ export default async function AttendancePage({
         const existing = existingMap.get(residentId);
 
         if (!existing) {
-          const created = await prisma.attendance.create({
-            data: {
-              activityInstanceId: params.id,
-              residentId,
-              status,
-              barrierReason: barrier,
-              notes
-            }
-          });
+          createdCount += 1;
+          writeTasks.push(async () => {
+            const created = await prisma.attendance.create({
+              data: {
+                activityInstanceId: params.id,
+                residentId,
+                status,
+                barrierReason: barrier,
+                notes
+              }
+            });
 
-          await logAudit({
-            facilityId: scoped.facilityId,
-            actorUserId: scoped.user.id,
-            action: "CREATE",
-            entityType: "Attendance",
-            entityId: created.id,
-            after: created
+            fireAndForgetAudit({
+              facilityId: scoped.facilityId,
+              actorUserId: scoped.user.id,
+              action: "CREATE",
+              entityType: "Attendance",
+              entityId: created.id,
+              after: created
+            });
           });
           continue;
         }
@@ -225,34 +247,49 @@ export default async function AttendancePage({
           existing.barrierReason === barrier &&
           (existing.notes ?? null) === notes
         ) {
+          unchangedCount += 1;
           continue;
         }
 
-        const updated = await prisma.attendance.update({
-          where: { id: existing.id },
-          data: {
-            status,
-            barrierReason: barrier,
-            notes
-          }
-        });
+        updatedCount += 1;
+        writeTasks.push(async () => {
+          const updated = await prisma.attendance.update({
+            where: { id: existing.id },
+            data: {
+              status,
+              barrierReason: barrier,
+              notes
+            }
+          });
 
-        await logAudit({
-          facilityId: scoped.facilityId,
-          actorUserId: scoped.user.id,
-          action: "UPDATE",
-          entityType: "Attendance",
-          entityId: updated.id,
-          before: existing,
-          after: updated
+          fireAndForgetAudit({
+            facilityId: scoped.facilityId,
+            actorUserId: scoped.user.id,
+            action: "UPDATE",
+            entityType: "Attendance",
+            entityId: updated.id,
+            before: existing,
+            after: updated
+          });
         });
       }
+
+      await runInBatches(writeTasks);
+      console.info("Attendance checklist saved", {
+        activityId: params.id,
+        createdCount,
+        updatedCount,
+        unchangedCount
+      });
     }
 
     revalidatePath(`/app/calendar/${params.id}/attendance`);
+    revalidatePath("/app/calendar");
     revalidatePath(`/app/residents`);
     revalidatePath(`/app/attendance`);
     revalidatePath(`/app/analytics`);
+    revalidatePath("/app");
+    revalidatePath("/app/reports");
   }
 
   return (
