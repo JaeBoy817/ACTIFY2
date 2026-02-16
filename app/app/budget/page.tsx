@@ -1,5 +1,7 @@
 import { endOfMonth, format, startOfMonth, subDays, subMonths } from "date-fns";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { Boxes, PiggyBank, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { z } from "zod";
 
@@ -14,6 +16,11 @@ import { readBudgetTrackerConfig, writeBudgetTrackerConfig } from "@/lib/budget-
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import {
+  importWalmartCartToPrizeCart,
+  formatPrizeDecimal,
+  formatPlainDecimal
+} from "@/lib/prize-cart-walmart";
 
 const optionalImageUrlSchema = z.preprocess((value) => {
   if (typeof value !== "string") return undefined;
@@ -32,6 +39,8 @@ const optionalDollarSchema = z.preprocess((value) => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }, z.coerce.number().min(0).optional());
+
+const prizeCategorySchema = z.enum(["DRINK", "SNACK", "CANDY"]);
 
 const budgetSettingsSchema = z.object({
   monthlyBudgetDollars: z.coerce.number().min(0),
@@ -75,6 +84,7 @@ const inventoryTxnSchema = z
 
 const prizeItemSchema = z.object({
   name: z.string().trim().min(2),
+  category: prizeCategorySchema,
   facilityPriceDollars: z.coerce.number().min(0),
   onHand: z.coerce.number().int().nonnegative(),
   reorderAt: z.coerce.number().int().nonnegative(),
@@ -123,15 +133,54 @@ function percent(part: number, total: number) {
   return Number(((part / total) * 100).toFixed(1));
 }
 
+type WalmartImportSummaryBanner = {
+  inStockUniqueItems: number;
+  totalPacks: number;
+  subtotalCents: number;
+  expectedInStockUniqueItems: number;
+  expectedTotalPacks: number;
+  expectedSubtotalCents: number;
+  subtotalMatchesExpected: boolean;
+};
+
+function parseWalmartImportSummaryToken(token?: string): WalmartImportSummaryBanner | null {
+  if (!token) return null;
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf8");
+    const value = JSON.parse(decoded) as WalmartImportSummaryBanner;
+    if (
+      typeof value.inStockUniqueItems !== "number" ||
+      typeof value.totalPacks !== "number" ||
+      typeof value.subtotalCents !== "number"
+    ) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function encodeWalmartImportSummaryToken(value: WalmartImportSummaryBanner) {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
 function revalidateBudgetWorkspace() {
   revalidatePath("/app/budget");
   revalidatePath("/app/inventory");
   revalidatePath("/app/prize-cart");
 }
 
-export default async function BudgetPage() {
+export default async function BudgetPage({
+  searchParams
+}: {
+  searchParams?: {
+    walmartImport?: string;
+  };
+}) {
   const context = await requireModulePage("inventory");
   const writable = context.role !== "READ_ONLY";
+  const walmartImportSummary = parseWalmartImportSummaryToken(searchParams?.walmartImport);
   const now = new Date();
   const currentMonthStart = startOfMonth(now);
   const previousMonthDate = subMonths(now, 1);
@@ -139,7 +188,7 @@ export default async function BudgetPage() {
   const previousMonthEnd = endOfMonth(previousMonthDate);
   const thirtyDaysAgo = subDays(now, 30);
 
-  const [facility, inventoryItems, prizeItems, inventoryTxns, prizeTxns] = await Promise.all([
+  const [facility, inventoryItems, prizeItems, prizeWishlistItems, inventoryTxns, prizeTxns] = await Promise.all([
     prisma.facility.findUnique({
       where: { id: context.facilityId },
       select: { id: true, moduleFlags: true }
@@ -158,6 +207,7 @@ export default async function BudgetPage() {
     prisma.prizeItem.findMany({
       where: { facilityId: context.facilityId },
       include: {
+        inventory: true,
         txns: {
           orderBy: { createdAt: "desc" },
           take: 6,
@@ -165,6 +215,10 @@ export default async function BudgetPage() {
         }
       },
       orderBy: [{ name: "asc" }]
+    }),
+    prisma.prizeWishlistItem.findMany({
+      where: { facilityId: context.facilityId },
+      orderBy: [{ category: "asc" }, { name: "asc" }]
     }),
     prisma.inventoryTxn.findMany({
       where: {
@@ -215,12 +269,19 @@ export default async function BudgetPage() {
   });
 
   const prizeRows = prizeItems.map((item) => {
-    const reorderQty = Math.max(item.reorderAt - item.onHand, 0);
+    const packsOnHand = item.inventory?.packsOnHand ?? 0;
+    const unitsOnHand = item.inventory?.unitsOnHand ?? null;
+    const ozOnHand = item.inventory?.ozOnHand ?? null;
+    const legacyOnHand = item.onHand;
+    const reorderQty = Math.max(item.reorderAt - legacyOnHand, 0);
     return {
       ...item,
       imageUrl: budgetConfig.prizeItemImages[item.id] ?? null,
+      packsOnHand,
+      unitsOnHand,
+      ozOnHand,
       reorderQty,
-      stockValueCents: item.onHand * item.priceCents,
+      stockValueCents: legacyOnHand * item.priceCents,
       reorderCostCents: reorderQty * item.priceCents
     };
   });
@@ -601,6 +662,7 @@ export default async function BudgetPage() {
 
     const parsed = prizeItemSchema.parse({
       name: formData.get("name"),
+      category: formData.get("category"),
       facilityPriceDollars: formData.get("facilityPriceDollars"),
       onHand: formData.get("onHand"),
       reorderAt: formData.get("reorderAt"),
@@ -617,9 +679,19 @@ export default async function BudgetPage() {
       data: {
         facilityId: scoped.facilityId,
         name: parsed.name,
+        category: parsed.category,
         priceCents: toCents(parsed.facilityPriceDollars),
         onHand: parsed.onHand,
-        reorderAt: parsed.reorderAt
+        reorderAt: parsed.reorderAt,
+        unitName: "unit",
+        isAvailable: true,
+        inventory: {
+          create: {
+            packsOnHand: parsed.onHand,
+            unitsOnHand: parsed.onHand,
+            ozOnHand: null
+          }
+        }
       }
     });
 
@@ -661,6 +733,7 @@ export default async function BudgetPage() {
     const parsed = prizeItemUpdateSchema.parse({
       itemId: formData.get("itemId"),
       name: formData.get("name"),
+      category: formData.get("category"),
       facilityPriceDollars: formData.get("facilityPriceDollars"),
       onHand: formData.get("onHand"),
       reorderAt: formData.get("reorderAt"),
@@ -682,9 +755,23 @@ export default async function BudgetPage() {
       where: { id: item.id },
       data: {
         name: parsed.name,
+        category: parsed.category,
         priceCents: toCents(parsed.facilityPriceDollars),
         onHand: parsed.onHand,
-        reorderAt: parsed.reorderAt
+        reorderAt: parsed.reorderAt,
+        inventory: {
+          upsert: {
+            create: {
+              packsOnHand: parsed.onHand,
+              unitsOnHand: parsed.onHand
+            },
+            update: {
+              packsOnHand: parsed.onHand,
+              unitsOnHand: parsed.onHand,
+              ozOnHand: null
+            }
+          }
+        }
       }
     });
 
@@ -789,7 +876,8 @@ export default async function BudgetPage() {
     });
 
     const item = await prisma.prizeItem.findFirst({
-      where: { id: parsed.prizeItemId, facilityId: scoped.facilityId }
+      where: { id: parsed.prizeItemId, facilityId: scoped.facilityId },
+      include: { inventory: true }
     });
     if (!item) return;
 
@@ -802,10 +890,59 @@ export default async function BudgetPage() {
 
     const totalCents = parsed.type === "SALE" ? parsed.totalDollars !== undefined ? toCents(parsed.totalDollars) : item.priceCents * parsed.qty : 0;
 
-    const [updatedItem, txn] = await prisma.$transaction([
+    const isWeightBased = item.unitName === "oz" && !item.unitsPerPack;
+    const previousUnits = item.inventory?.unitsOnHand ?? item.onHand;
+    const previousPacks = item.inventory?.packsOnHand ?? item.onHand;
+    const previousOz = item.inventory?.ozOnHand ? Number(item.inventory.ozOnHand.toString()) : 0;
+
+    let packsDelta = 0;
+    let unitsDelta: number | null = null;
+    let ozDelta: Prisma.Decimal | null = null;
+    let nextUnitsOnHand: number | null = item.inventory?.unitsOnHand ?? null;
+    let nextPacksOnHand = item.inventory?.packsOnHand ?? 0;
+    let nextOzOnHand: Prisma.Decimal | null = item.inventory?.ozOnHand ?? null;
+
+    if (isWeightBased) {
+      const ozChange = parsed.type === "SALE" ? -parsed.qty : parsed.type === "RESTOCK" ? parsed.qty : parsed.qty - previousOz;
+      ozDelta = new Prisma.Decimal(ozChange.toFixed(4));
+      const resolvedOz = parsed.type === "ADJUST" ? parsed.qty : Math.max(previousOz + ozChange, 0);
+      nextOzOnHand = new Prisma.Decimal(resolvedOz.toFixed(4));
+      nextPacksOnHand = item.netWeightOz ? Math.max(Math.round(resolvedOz / Number(item.netWeightOz.toString())), 0) : previousPacks;
+      packsDelta = nextPacksOnHand - previousPacks;
+      nextUnitsOnHand = null;
+    } else {
+      const deltaUnits = parsed.type === "SALE" ? -parsed.qty : parsed.type === "RESTOCK" ? parsed.qty : parsed.qty - previousUnits;
+      unitsDelta = deltaUnits;
+      const resolvedUnits = parsed.type === "ADJUST" ? parsed.qty : Math.max(previousUnits + deltaUnits, 0);
+      nextUnitsOnHand = resolvedUnits;
+      if (item.unitsPerPack && item.unitsPerPack > 0) {
+        const previousPackCount = Math.max(Math.ceil(previousUnits / item.unitsPerPack), 0);
+        nextPacksOnHand = Math.max(Math.ceil(resolvedUnits / item.unitsPerPack), 0);
+        packsDelta = nextPacksOnHand - previousPackCount;
+      } else {
+        packsDelta = deltaUnits;
+        nextPacksOnHand = Math.max(resolvedUnits, 0);
+      }
+    }
+
+    const [updatedItem, , txn] = await prisma.$transaction([
       prisma.prizeItem.update({
         where: { id: item.id },
         data: { onHand: nextOnHand }
+      }),
+      prisma.prizeInventory.upsert({
+        where: { prizeItemId: item.id },
+        create: {
+          prizeItemId: item.id,
+          packsOnHand: nextPacksOnHand,
+          unitsOnHand: nextUnitsOnHand,
+          ozOnHand: nextOzOnHand
+        },
+        update: {
+          packsOnHand: nextPacksOnHand,
+          unitsOnHand: nextUnitsOnHand,
+          ozOnHand: nextOzOnHand
+        }
       }),
       prisma.prizeTxn.create({
         data: {
@@ -813,6 +950,10 @@ export default async function BudgetPage() {
           type: parsed.type,
           qty: parsed.qty,
           totalCents,
+          packsDelta,
+          unitsDelta,
+          ozDelta,
+          packPriceAtTime: item.purchasePackPrice,
           userId: scoped.user.id
         }
       })
@@ -838,6 +979,41 @@ export default async function BudgetPage() {
     });
 
     revalidateBudgetWorkspace();
+  }
+
+  async function importWalmartCart() {
+    "use server";
+
+    const scoped = await requireModulePage("inventory");
+    assertWritable(scoped.role);
+
+    const summary = await importWalmartCartToPrizeCart({
+      facilityId: scoped.facilityId,
+      userId: scoped.user.id
+    });
+
+    await logAudit({
+      facilityId: scoped.facilityId,
+      actorUserId: scoped.user.id,
+      action: "IMPORT",
+      entityType: "PrizeCart",
+      entityId: scoped.facilityId,
+      after: summary
+    });
+
+    revalidateBudgetWorkspace();
+
+    const summaryToken = encodeWalmartImportSummaryToken({
+      inStockUniqueItems: summary.inStockUniqueItems,
+      totalPacks: summary.totalPacks,
+      subtotalCents: summary.subtotalCents,
+      expectedInStockUniqueItems: summary.expectedInStockUniqueItems,
+      expectedTotalPacks: summary.expectedTotalPacks,
+      expectedSubtotalCents: summary.expectedSubtotalCents,
+      subtotalMatchesExpected: summary.subtotalMatchesExpected
+    });
+
+    redirect(`/app/budget?walmartImport=${encodeURIComponent(summaryToken)}`);
   }
 
   return (
@@ -975,6 +1151,31 @@ export default async function BudgetPage() {
         </GlassCard>
       </section>
 
+      {walmartImportSummary ? (
+        <GlassCard variant="dense">
+          <div className="glass-content space-y-2">
+            <h2 className="text-lg font-semibold text-foreground">Walmart cart import complete</h2>
+            <p className="text-sm text-foreground/75">
+              Imported <span className="font-semibold text-foreground">{walmartImportSummary.inStockUniqueItems}</span> in-stock items and{" "}
+              <span className="font-semibold text-foreground">{walmartImportSummary.totalPacks}</span> packs.
+            </p>
+            <p className="text-sm text-foreground/75">
+              Subtotal check: <span className="font-semibold text-foreground">{formatCurrency(walmartImportSummary.subtotalCents)}</span>{" "}
+              {walmartImportSummary.subtotalMatchesExpected ? "matches" : "does not match"} expected{" "}
+              {formatCurrency(walmartImportSummary.expectedSubtotalCents)}.
+            </p>
+            <div className="flex flex-wrap gap-2 text-xs text-foreground/70">
+              <Badge variant="outline">
+                Items {walmartImportSummary.inStockUniqueItems}/{walmartImportSummary.expectedInStockUniqueItems}
+              </Badge>
+              <Badge variant="outline">
+                Packs {walmartImportSummary.totalPacks}/{walmartImportSummary.expectedTotalPacks}
+              </Badge>
+            </div>
+          </div>
+        </GlassCard>
+      ) : null}
+
       <Tabs defaultValue="supplies" className="space-y-4">
         <TabsList className="bg-white/80">
           <TabsTrigger value="supplies">Supplies</TabsTrigger>
@@ -1103,10 +1304,22 @@ export default async function BudgetPage() {
         <TabsContent value="prizes" className="space-y-4">
           <GlassCard variant="dense">
             <div className="glass-content space-y-3">
-              <h2 className="text-lg font-semibold text-foreground">Add prize item</h2>
-              <p className="text-sm text-foreground/75">Set a facility price in dollars for resident purchases, plus an optional image URL.</p>
-              <form action={createPrizeItem} className="grid gap-3 md:grid-cols-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-foreground">Add prize item</h2>
+                <form action={importWalmartCart}>
+                  <GlassButton type="submit" size="sm" disabled={!writable}>
+                    Import Walmart Cart
+                  </GlassButton>
+                </form>
+              </div>
+              <p className="text-sm text-foreground/75">Set facility price, category, and optional image URL. Use Import Walmart Cart to load pack costs and starting inventory.</p>
+              <form action={createPrizeItem} className="grid gap-3 md:grid-cols-6">
                 <Input name="name" placeholder="Name" required disabled={!writable} />
+                <select name="category" defaultValue="SNACK" className="h-10 rounded-md border border-border/80 bg-white px-3 text-sm text-foreground" disabled={!writable}>
+                  <option value="DRINK">Drink</option>
+                  <option value="SNACK">Snack</option>
+                  <option value="CANDY">Candy</option>
+                </select>
                 <Input
                   name="facilityPriceDollars"
                   type="number"
@@ -1119,7 +1332,7 @@ export default async function BudgetPage() {
                 <Input name="onHand" type="number" min="0" placeholder="On hand" required disabled={!writable} />
                 <Input name="reorderAt" type="number" min="0" placeholder="Reorder at" required disabled={!writable} />
                 <Input name="imageUrl" placeholder="Image URL (optional)" disabled={!writable} />
-                <div className="md:col-span-5">
+                <div className="md:col-span-6">
                   <GlassButton type="submit" disabled={!writable}>Add prize item</GlassButton>
                 </div>
               </form>
@@ -1136,6 +1349,72 @@ export default async function BudgetPage() {
               <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2 text-sm text-foreground/80">
                 <p className="font-medium text-foreground">Fastest sellers (last 30 days)</p>
                 <p className="text-foreground/70">{fastestSellers.length > 0 ? fastestSellers.map((entry) => `${entry.name} (${entry.soldQty})`).join(" · ") : "No sales yet"}</p>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-white/70 bg-white/70">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white/75 text-xs uppercase tracking-wide text-foreground/65">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Item</th>
+                      <th className="px-3 py-2 text-left font-medium">Category</th>
+                      <th className="px-3 py-2 text-right font-medium">Pack Price</th>
+                      <th className="px-3 py-2 text-right font-medium">Packs On Hand</th>
+                      <th className="px-3 py-2 text-right font-medium">Units/Pack</th>
+                      <th className="px-3 py-2 text-right font-medium">Unit Cost</th>
+                      <th className="px-3 py-2 text-right font-medium">Units On Hand</th>
+                      <th className="px-3 py-2 text-right font-medium">Availability</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prizeRows.map((row) => (
+                      <tr key={`summary-${row.id}`} className="border-t border-white/70">
+                        <td className="px-3 py-2 text-left text-foreground">{row.name}</td>
+                        <td className="px-3 py-2 text-left text-foreground/80">{row.category}</td>
+                        <td className="px-3 py-2 text-right text-foreground">{row.purchasePackPrice !== null ? formatPrizeDecimal(row.purchasePackPrice, 2) : "—"}</td>
+                        <td className="px-3 py-2 text-right text-foreground">{row.packsOnHand}</td>
+                        <td className="px-3 py-2 text-right text-foreground">
+                          {row.unitsPerPack ?? (row.netWeightOz ? `${formatPlainDecimal(row.netWeightOz, 2)} oz` : "—")}
+                        </td>
+                        <td className="px-3 py-2 text-right text-foreground">{row.costPerUnit !== null ? `${formatPrizeDecimal(row.costPerUnit, 2)} / ${row.unitName}` : "—"}</td>
+                        <td className="px-3 py-2 text-right text-foreground">
+                          {row.unitsOnHand !== null && row.unitsOnHand !== undefined
+                            ? row.unitsOnHand
+                              : row.ozOnHand !== null
+                              ? `${formatPlainDecimal(row.ozOnHand, 2)} oz`
+                              : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Badge variant={row.isAvailable ? "secondary" : "destructive"}>
+                            {row.isAvailable ? "Available" : "Unavailable"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-white/70 bg-white/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-foreground">Wishlist / Backorder</p>
+                  <Badge variant="outline">{prizeWishlistItems.length} items</Badge>
+                </div>
+                {prizeWishlistItems.length === 0 ? (
+                  <p className="text-sm text-foreground/70">No unavailable items tracked.</p>
+                ) : (
+                  prizeWishlistItems.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-foreground">{item.name}</p>
+                        <p className="text-xs text-foreground/70">{item.category}</p>
+                      </div>
+                      <div className="text-right text-foreground/80">
+                        <p>Desired qty: {item.quantityDesired}</p>
+                        <p>Last known price: {item.lastKnownPrice ? formatPrizeDecimal(item.lastKnownPrice, 2) : "—"}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {prizeRows.length === 0 ? (
@@ -1155,11 +1434,22 @@ export default async function BudgetPage() {
                         )}
                         <div>
                           <p className="font-semibold text-foreground">{row.name}</p>
-                          <p className="text-xs text-foreground/70">On hand {row.onHand} · Reorder at {row.reorderAt}</p>
+                          <p className="text-xs text-foreground/70">
+                            {row.category} · Packs {row.packsOnHand}
+                            {row.unitsOnHand !== null && row.unitsOnHand !== undefined ? ` · Units ${row.unitsOnHand}` : ""}
+                            {row.ozOnHand !== null ? ` · ${formatPlainDecimal(row.ozOnHand, 2)} oz` : ""}
+                            {" · "}Reorder at {row.reorderAt}
+                          </p>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">Facility price {formatCurrency(row.priceCents)}</Badge>
+                        <Badge variant="outline">
+                          Pack {row.purchasePackPrice !== null ? formatPrizeDecimal(row.purchasePackPrice, 2) : "—"}
+                        </Badge>
+                        <Badge variant="outline">
+                          Unit {row.costPerUnit !== null ? `${formatPrizeDecimal(row.costPerUnit, 2)} / ${row.unitName}` : "—"}
+                        </Badge>
                         <Badge variant="outline">Stock {formatCurrency(row.stockValueCents)}</Badge>
                         <Badge variant={row.reorderQty > 0 ? "destructive" : "secondary"}>
                           {row.reorderQty > 0 ? `Restock ${row.reorderQty}` : "In range"}
@@ -1169,9 +1459,14 @@ export default async function BudgetPage() {
 
                     {writable ? (
                       <>
-                        <form action={updatePrizeItem} className="mt-3 grid gap-2 md:grid-cols-6">
+                        <form action={updatePrizeItem} className="mt-3 grid gap-2 md:grid-cols-7">
                           <input type="hidden" name="itemId" value={row.id} />
                           <Input name="name" defaultValue={row.name} required />
+                          <select name="category" defaultValue={row.category} className="h-10 rounded-md border border-border/80 bg-white px-3 text-sm text-foreground">
+                            <option value="DRINK">Drink</option>
+                            <option value="SNACK">Snack</option>
+                            <option value="CANDY">Candy</option>
+                          </select>
                           <Input
                             name="facilityPriceDollars"
                             type="number"
