@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "node --import tsx prisma/seed.ts",
     "templates:import:custom": "node --import tsx scripts/import-activity-templates-custom-json.ts",
+    "templates:import:text-pack": "node --import tsx scripts/import-activity-templates-from-text-pack.ts",
     "residents:import:custom": "node --import tsx scripts/import-residents-custom-json.ts",
     "residents:import:jason": "node --import tsx scripts/importResidentsJasonAddington.ts"
   },
