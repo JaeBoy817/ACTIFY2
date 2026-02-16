@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { addDays, endOfDay, format, isToday, isValid, parse, startOfDay, startOfMonth, subDays, subMonths } from "date-fns";
 import { BarChart3, CalendarDays, ClipboardCheck, Users } from "lucide-react";
 
 import { GlassButton } from "@/components/glass/GlassButton";
@@ -11,6 +10,16 @@ import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules } from "@/lib/settings/defaults";
+import {
+  addZonedDays,
+  endOfZonedDay,
+  formatInTimeZone,
+  startOfZonedDay,
+  startOfZonedMonthShift,
+  subtractDays,
+  zonedDateKey,
+  zonedDateStringToUtcStart
+} from "@/lib/timezone";
 
 type AttendanceTrackerPageProps = {
   searchParams?: {
@@ -24,38 +33,49 @@ type PastDaySummary = {
   attendanceEntries: number;
 };
 
-function resolveSelectedDay(rawDate: string | undefined, now: Date) {
-  const todayStart = startOfDay(now);
+function formatDayKeyLabel(dayKey: string, timeZone: string): string {
+  const dayStart = zonedDateStringToUtcStart(dayKey, timeZone);
+  if (!dayStart) return dayKey;
+  return formatInTimeZone(dayStart, timeZone, {
+    weekday: "long",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function resolveSelectedDay(rawDate: string | undefined, now: Date, timeZone: string) {
+  const todayStart = startOfZonedDay(now, timeZone);
   if (!rawDate) {
     return todayStart;
   }
 
-  const parsed = parse(rawDate, "yyyy-MM-dd", now);
-  if (!isValid(parsed)) {
+  const parsed = zonedDateStringToUtcStart(rawDate, timeZone);
+  if (!parsed) {
     return todayStart;
   }
 
-  const selected = startOfDay(parsed);
-  if (selected > todayStart) {
+  if (parsed > todayStart) {
     return todayStart;
   }
 
-  return selected;
+  return parsed;
 }
 
 export default async function AttendanceTrackerPage({ searchParams }: AttendanceTrackerPageProps) {
   const context = await requireModulePage("calendar");
+  const timeZone = context.facility.timezone;
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayKey = format(todayStart, "yyyy-MM-dd");
-  const selectedDayStart = resolveSelectedDay(searchParams?.date, now);
-  const selectedDayEnd = endOfDay(selectedDayStart);
-  const selectedDayKey = format(selectedDayStart, "yyyy-MM-dd");
-  const selectedDayIsToday = isToday(selectedDayStart);
+  const todayStart = startOfZonedDay(now, timeZone);
+  const todayEnd = endOfZonedDay(now, timeZone);
+  const todayKey = zonedDateKey(now, timeZone);
+  const selectedDayStart = resolveSelectedDay(searchParams?.date, now, timeZone);
+  const selectedDayEnd = endOfZonedDay(selectedDayStart, timeZone);
+  const selectedDayKey = zonedDateKey(selectedDayStart, timeZone);
+  const selectedDayIsToday = selectedDayStart.getTime() === todayStart.getTime();
 
-  const presenceWindowStart = startOfMonth(subMonths(now, 1));
-  const presenceWindowEnd = endOfDay(now);
-  const pastDaysWindowStart = subDays(todayStart, 30);
+  const presenceWindowStart = startOfZonedMonthShift(now, timeZone, -1);
+  const presenceWindowEnd = todayEnd;
+  const pastDaysWindowStart = subtractDays(todayStart, 30);
 
   const [activities, pastActivities, activeResidents, settings] = await Promise.all([
     prisma.activityInstance.findMany({
@@ -162,12 +182,13 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
     })),
     activeResidentIds,
     activeResidentCount,
-    now
+    now,
+    timeZone
   });
 
   const pastDaySummaryMap = new Map<string, PastDaySummary>();
   for (const activity of pastActivities) {
-    const dateKey = format(activity.startAt, "yyyy-MM-dd");
+    const dateKey = zonedDateKey(activity.startAt, timeZone);
     const existing = pastDaySummaryMap.get(dateKey);
     if (existing) {
       existing.activityCount += 1;
@@ -203,11 +224,16 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
         ? `Down ${Math.abs(facilityPresence.monthOverMonthDelta).toFixed(1)} pts from last month.`
         : "No change from last month.";
 
-  const previousDayKey = format(addDays(selectedDayStart, -1), "yyyy-MM-dd");
-  const nextDay = addDays(selectedDayStart, 1);
-  const nextDayKey = format(nextDay, "yyyy-MM-dd");
+  const previousDay = addZonedDays(selectedDayStart, timeZone, -1);
+  const previousDayKey = zonedDateKey(previousDay, timeZone);
+  const nextDay = addZonedDays(selectedDayStart, timeZone, 1);
+  const nextDayKey = zonedDateKey(nextDay, timeZone);
   const canGoForward = nextDay <= todayStart;
-  const selectedDayLabel = format(selectedDayStart, "EEEE, MMM d");
+  const selectedDayLabel = formatInTimeZone(selectedDayStart, timeZone, {
+    weekday: "long",
+    month: "short",
+    day: "numeric"
+  });
 
   return (
     <div className="space-y-6">
@@ -393,7 +419,8 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
                 ? activity.attendance.reduce((sum, row) => sum + (engagementScoreMap[row.status] ?? 0), 0) / activity.attendance.length
                 : 0;
               const hasEntries = activity._count.attendance > 0;
-              const timingLabel = isToday(activity.startAt) ? "Today" : "Past day";
+              const activityDayStart = startOfZonedDay(activity.startAt, timeZone);
+              const timingLabel = activityDayStart.getTime() === todayStart.getTime() ? "Today" : "Past day";
 
               return (
                 <div
@@ -404,7 +431,19 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
                     <div>
                       <p className="font-medium text-foreground">{activity.title}</p>
                       <p className="text-xs text-foreground/70">
-                        {format(activity.startAt, "EEE, MMM d · h:mm a")} - {format(activity.endAt, "h:mm a")} · {activity.location}
+                        {formatInTimeZone(activity.startAt, timeZone, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit"
+                        })}{" "}
+                        -{" "}
+                        {formatInTimeZone(activity.endAt, timeZone, {
+                          hour: "numeric",
+                          minute: "2-digit"
+                        })}{" "}
+                        · {activity.location}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -432,7 +471,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
                     </GlassButton>
                     <GlassButton asChild size="sm" variant="dense" className="min-w-[9.5rem] justify-center">
                       <Link
-                        href={`/app/calendar/day/${format(activity.startAt, "yyyy-MM-dd")}`}
+                        href={`/app/calendar/day/${zonedDateKey(activity.startAt, timeZone)}`}
                         className="inline-flex items-center gap-1.5"
                       >
                         <CalendarDays className="h-4 w-4" />
@@ -465,7 +504,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
                   className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/65 p-3"
                 >
                   <div>
-                    <p className="font-medium text-foreground">{format(parse(day.dateKey, "yyyy-MM-dd", now), "EEEE, MMM d")}</p>
+                    <p className="font-medium text-foreground">{formatDayKeyLabel(day.dateKey, timeZone)}</p>
                     <p className="text-xs text-foreground/70">
                       {day.activityCount} activities · {day.attendanceEntries} attendance entries
                     </p>

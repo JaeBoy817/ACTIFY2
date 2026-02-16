@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { endOfDay, endOfWeek, format, startOfDay, startOfMonth, startOfWeek, subDays, subMonths } from "date-fns";
 import { CalendarDays, ClipboardCheck, Package, Users } from "lucide-react";
 
 import { GlassButton } from "@/components/glass/GlassButton";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { GlassPanel } from "@/components/glass/GlassPanel";
+import { LiveDateTimeBadge } from "@/components/app/live-date-time-badge";
+import { DailyBoostQuote } from "@/components/dashboard/DailyBoostQuote";
 import { CountUpValue } from "@/components/motion/CountUpValue";
 import { Reveal } from "@/components/motion/Reveal";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,15 @@ import { requireFacilityContext } from "@/lib/auth";
 import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules } from "@/lib/settings/defaults";
+import {
+  endOfZonedDay,
+  endOfZonedWeek,
+  formatInTimeZone,
+  startOfZonedDay,
+  startOfZonedMonthShift,
+  startOfZonedWeek,
+  subtractDays
+} from "@/lib/timezone";
 
 const attendanceStatusMeta = [
   { status: "PRESENT_ACTIVE", label: "Present/Active", tone: "bg-actifyBlue/20 text-actifyBlue" },
@@ -21,17 +31,18 @@ const attendanceStatusMeta = [
 ];
 
 export default async function DashboardPage() {
-  const { facilityId } = await requireFacilityContext();
+  const { facilityId, facility } = await requireFacilityContext();
+  const timeZone = facility.timezone;
 
   const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-  const dayStart = startOfDay(now);
-  const dayEnd = endOfDay(now);
-  const last7 = subDays(now, 7);
-  const last30 = subDays(now, 30);
-  const presenceWindowStart = startOfMonth(subMonths(now, 1));
-  const presenceWindowEnd = endOfDay(now);
+  const weekStart = startOfZonedWeek(now, timeZone, 1);
+  const weekEnd = endOfZonedWeek(now, timeZone, 1);
+  const dayStart = startOfZonedDay(now, timeZone);
+  const dayEnd = endOfZonedDay(now, timeZone);
+  const last7 = subtractDays(now, 7);
+  const last30 = subtractDays(now, 30);
+  const presenceWindowStart = startOfZonedMonthShift(now, timeZone, -1);
+  const presenceWindowEnd = dayEnd;
 
   const [
     activeResidentRows,
@@ -184,7 +195,8 @@ export default async function DashboardPage() {
     })),
     activeResidentIds,
     activeResidentCount: activeResidents,
-    now
+    now,
+    timeZone
   });
   const attendanceRows7 = attendanceRows30.filter((row) => row.activityInstance.startAt >= last7);
   const engagementAverage7 = attendanceRows7.length === 0
@@ -270,7 +282,10 @@ export default async function DashboardPage() {
 
   const schedulePreview = todaysActivities.map((item) => ({
     id: item.id,
-    time: format(item.startAt, "h:mm a"),
+    time: formatInTimeZone(item.startAt, timeZone, {
+      hour: "numeric",
+      minute: "2-digit"
+    }),
     name: item.title,
     location: item.location
   }));
@@ -283,7 +298,7 @@ export default async function DashboardPage() {
             <div className="space-y-2">
               <h1 className="font-[var(--font-display)] text-3xl text-foreground">Dashboard</h1>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{format(now, "EEEE, MMMM d")}</Badge>
+                <LiveDateTimeBadge timeZone={timeZone} mode="date-time" />
                 <Badge variant="outline">Engagement (7d): {engagementAverage7.toFixed(1)} / {engagementScaleMax}</Badge>
               </div>
               <p className="text-sm text-foreground/70">
@@ -437,7 +452,7 @@ export default async function DashboardPage() {
             <div className="flex h-full flex-col">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Today&apos;s schedule</h2>
-                <Badge variant="secondary">{format(now, "EEE, MMM d")}</Badge>
+                <LiveDateTimeBadge timeZone={timeZone} mode="short-date" variant="secondary" />
               </div>
               <div className="flex-1 space-y-2">
                 {schedulePreview.length === 0 && (
@@ -461,6 +476,10 @@ export default async function DashboardPage() {
             </div>
           </GlassCard>
         </Reveal>
+      </section>
+
+      <section className="mt-10 border-t border-border/60 pt-8">
+        <DailyBoostQuote />
       </section>
 
     </div>

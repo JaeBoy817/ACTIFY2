@@ -1,4 +1,9 @@
-import { endOfDay, startOfDay, startOfMonth, subMonths } from "date-fns";
+import {
+  endOfZonedDay,
+  startOfZonedDay,
+  startOfZonedMonth,
+  startOfZonedMonthShift
+} from "@/lib/timezone";
 
 export interface FacilityPresenceRow {
   residentId: string;
@@ -33,22 +38,23 @@ export function computeFacilityPresenceMetrics({
   rows,
   activeResidentCount,
   activeResidentIds,
-  now
+  now,
+  timeZone
 }: {
   rows: FacilityPresenceRow[];
   activeResidentCount: number;
   activeResidentIds?: Iterable<string>;
   now: Date;
+  timeZone?: string | null;
 }): FacilityPresenceMetrics {
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
+  const todayStart = startOfZonedDay(now, timeZone);
+  const todayEnd = endOfZonedDay(now, timeZone);
 
-  const currentMonthStart = startOfMonth(now);
+  const currentMonthStart = startOfZonedMonth(now, timeZone);
   const currentMonthEnd = todayEnd;
 
-  const previousMonthAnchor = subMonths(now, 1);
-  const previousMonthStart = startOfMonth(previousMonthAnchor);
-  const previousMonthEnd = endOfDay(new Date(currentMonthStart.getTime() - 1));
+  const previousMonthStart = startOfZonedMonthShift(now, timeZone, -1);
+  const previousMonthEnd = new Date(currentMonthStart.getTime() - 1);
 
   const todayResidents = new Set<string>();
   const currentMonthResidents = new Set<string>();

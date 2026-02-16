@@ -1,5 +1,3 @@
-import { endOfDay, format, startOfMonth, startOfWeek, subDays, subMonths } from "date-fns";
-
 import { EngagementTrendChart } from "@/components/app/engagement-trend-chart";
 import { TopAttendeesBarChart } from "@/components/app/top-attendees-bar-chart";
 import { Badge } from "@/components/ui/badge";
@@ -8,15 +6,24 @@ import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules } from "@/lib/settings/defaults";
+import {
+  endOfZonedDay,
+  formatInTimeZone,
+  startOfZonedMonthShift,
+  startOfZonedWeek,
+  subtractDays
+} from "@/lib/timezone";
 
 export default async function AnalyticsPage() {
   const context = await requireModulePage("analyticsHeatmaps");
+  const timeZone = context.facility.timezone;
 
   const now = new Date();
-  const last60 = subDays(now, 60);
-  const last30 = subDays(now, 30);
-  const presenceWindowStart = startOfMonth(subMonths(now, 1));
-  const presenceWindowEnd = endOfDay(now);
+  const todayEnd = endOfZonedDay(now, timeZone);
+  const last60 = subtractDays(now, 60);
+  const last30 = subtractDays(now, 30);
+  const presenceWindowStart = startOfZonedMonthShift(now, timeZone, -1);
+  const presenceWindowEnd = todayEnd;
   const residents = await prisma.resident.findMany({
     where: {
       facilityId: context.facilityId,
@@ -130,7 +137,10 @@ export default async function AnalyticsPage() {
 
   const weeklyScores = new Map<string, { sum: number; count: number }>();
   attendanceRows.forEach((row) => {
-    const week = format(startOfWeek(row.activityInstance.startAt, { weekStartsOn: 1 }), "MMM d");
+    const week = formatInTimeZone(startOfZonedWeek(row.activityInstance.startAt, timeZone, 1), timeZone, {
+      month: "short",
+      day: "numeric"
+    });
     const current = weeklyScores.get(week) ?? { sum: 0, count: 0 };
     const score = scoreMap[row.status] ?? 0;
     weeklyScores.set(week, { sum: current.sum + score, count: current.count + 1 });
@@ -149,7 +159,8 @@ export default async function AnalyticsPage() {
     })),
     activeResidentIds,
     activeResidentCount: residents.length,
-    now
+    now,
+    timeZone
   });
 
   const monthDeltaLabel = facilityPresence.monthOverMonthDelta === null
