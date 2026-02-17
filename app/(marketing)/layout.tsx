@@ -27,7 +27,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
 
   return (
     <MarketingMotionProvider userReducedMotion={userReducedMotion}>
-      <div className="min-h-screen bg-actify-dashboard bg-actify-orbs">
+      <div data-ambient="marketing" className="min-h-screen bg-actify-dashboard bg-actify-orbs">
         <LiquidOrbs />
         <RouteTransitionOverlay />
         <header className="container relative z-40 pt-4">

@@ -12,9 +12,11 @@ import {
   startOfWeek
 } from "date-fns";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { CalendarDays, Layers, Printer, Sparkles } from "lucide-react";
+import { z } from "zod";
 
+import { CalendarPdfPreviewDialog } from "@/components/app/calendar-pdf-preview-dialog";
+import { CalendarWeekWorkspace } from "@/components/app/calendar-week-workspace";
 import { TemplateDragDropScheduler } from "@/components/app/template-drag-drop-scheduler";
 import { GlassButton } from "@/components/glass/GlassButton";
 import { GlassCard } from "@/components/glass/GlassCard";
@@ -26,6 +28,8 @@ import { logAudit } from "@/lib/audit";
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+
+type CalendarView = "month" | "week";
 
 const createActivitySchema = z.object({
   title: z.string().min(2),
@@ -41,43 +45,81 @@ function fireAndForgetAudit(payload: Parameters<typeof logAudit>[0]) {
   });
 }
 
-export default async function CalendarPage({ searchParams }: { searchParams?: { month?: string } }) {
+function parseAnchorDate(searchParams?: { month?: string; date?: string }) {
+  const candidates = [searchParams?.date, searchParams?.month];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = parseISO(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return new Date();
+}
+
+export default async function CalendarPage({
+  searchParams
+}: {
+  searchParams?: { month?: string; view?: string; date?: string };
+}) {
   const context = await requireModulePage("calendar");
-  const parsedMonth = searchParams?.month ? parseISO(searchParams.month) : new Date();
-  const month = Number.isNaN(parsedMonth.getTime()) ? new Date() : parsedMonth;
-  const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
+  const timeZone = context.facility.timezone || "America/Chicago";
+  const view: CalendarView = searchParams?.view === "week" ? "week" : "month";
+  const anchorDate = parseAnchorDate(searchParams);
+  const weekStart = startOfWeek(anchorDate, { weekStartsOn: 1 });
+
+  const templates = await prisma.activityTemplate.findMany({
+    where: { facilityId: context.facilityId },
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      difficulty: true,
+      defaultChecklist: true,
+      adaptations: true
+    },
+    orderBy: { title: "asc" }
+  });
+
+  if (view === "week") {
+    return (
+      <CalendarWeekWorkspace
+        templates={templates.map((template) => ({
+          id: template.id,
+          title: template.title,
+          category: template.category,
+          difficulty: template.difficulty || "Moderate",
+          defaultChecklist: template.defaultChecklist,
+          adaptations: template.adaptations
+        }))}
+        initialWeekStart={format(weekStart, "yyyy-MM-dd")}
+        timeZone={timeZone}
+      />
+    );
+  }
+
+  const monthStart = startOfMonth(anchorDate);
+  const monthEnd = endOfMonth(monthStart);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
-  const [activities, templates] = await Promise.all([
-    prisma.activityInstance.findMany({
-      where: {
-        facilityId: context.facilityId,
-        startAt: {
-          gte: calendarStart,
-          lte: calendarEnd
-        }
-      },
-      select: {
-        id: true,
-        title: true,
-        startAt: true,
-        endAt: true,
-        location: true
-      },
-      orderBy: { startAt: "asc" }
-    }),
-    prisma.activityTemplate.findMany({
-      where: { facilityId: context.facilityId },
-      select: {
-        id: true,
-        title: true,
-        category: true
-      },
-      orderBy: { title: "asc" }
-    })
-  ]);
+  const activities = await prisma.activityInstance.findMany({
+    where: {
+      facilityId: context.facilityId,
+      startAt: {
+        gte: calendarStart,
+        lte: calendarEnd
+      }
+    },
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      endAt: true,
+      location: true
+    },
+    orderBy: { startAt: "asc" }
+  });
 
   const byDay = new Map<string, typeof activities>();
   activities.forEach((activity) => {
@@ -89,15 +131,18 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
   for (let day = calendarStart; day <= calendarEnd; day = addDays(day, 1)) {
     days.push(day);
   }
+
   const monthActivities = activities.filter((activity) => isSameMonth(activity.startAt, monthStart));
-  const nextMonthHref = `/app/calendar?month=${format(addMonths(monthStart, 1), "yyyy-MM-dd")}`;
-  const previousMonthHref = `/app/calendar?month=${format(addMonths(monthStart, -1), "yyyy-MM-dd")}`;
+  const previousMonthHref = `/app/calendar?view=month&month=${format(addMonths(monthStart, -1), "yyyy-MM-dd")}`;
+  const nextMonthHref = `/app/calendar?view=month&month=${format(addMonths(monthStart, 1), "yyyy-MM-dd")}`;
+  const weekHref = `/app/calendar?view=week&date=${format(weekStart, "yyyy-MM-dd")}`;
   const todayKey = format(new Date(), "yyyy-MM-dd");
   const currentWeekStartKey = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const currentMonthKey = format(monthStart, "yyyy-MM-dd");
   const dailyPdfPreviewHref = `/app/calendar/pdf?view=daily&date=${todayKey}&preview=1`;
   const weeklyPdfPreviewHref = `/app/calendar/pdf?view=weekly&weekStart=${currentWeekStartKey}&preview=1`;
   const monthlyPdfPreviewHref = `/app/calendar/pdf?view=monthly&month=${currentMonthKey}&preview=1`;
+
   const dragDropDays = days.map((day) => {
     const key = format(day, "yyyy-MM-dd");
     const dayActivities = byDay.get(key) ?? [];
@@ -109,9 +154,14 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
       outsideMonth: !isSameMonth(day, monthStart),
       today: isToday(day),
       activityCount: dayActivities.length,
-      previewItems: dayActivities
-        .slice(0, 2)
-        .map((activity) => `${format(activity.startAt, "h:mm a")} ${activity.title}`)
+      previewItems: dayActivities.slice(0, 3).map((activity) => ({
+        id: activity.id,
+        title: activity.title,
+        startAt: activity.startAt.toISOString(),
+        endAt: activity.endAt.toISOString(),
+        location: activity.location,
+        timeLabel: format(activity.startAt, "h:mm a")
+      }))
     };
   });
 
@@ -183,7 +233,8 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
       select: {
         id: true,
         title: true,
-        defaultChecklist: true
+        defaultChecklist: true,
+        adaptations: true
       }
     });
     if (!template) return;
@@ -196,13 +247,16 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
         startAt: new Date(startAt),
         endAt: new Date(endAt),
         location,
-        adaptationsEnabled: {
-          bedBound: false,
-          dementiaFriendly: false,
-          lowVisionHearing: false,
-          oneToOneMini: false,
-          overrides: {}
-        },
+        adaptationsEnabled:
+          template.adaptations && typeof template.adaptations === "object"
+            ? template.adaptations
+            : {
+                bedBound: false,
+                dementiaFriendly: false,
+                lowVisionHearing: false,
+                oneToOneMini: false,
+                overrides: {}
+              },
         checklist: (Array.isArray(template.defaultChecklist) ? template.defaultChecklist : []).map((item) => ({
           text: String(item),
           done: false
@@ -234,13 +288,24 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
               <Badge className="border-0 bg-actify-warm text-foreground">{format(monthStart, "MMMM yyyy")}</Badge>
               <Badge variant="outline">{monthActivities.length} scheduled activities</Badge>
             </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-foreground/75">
+              <GlassButton asChild size="sm" variant="dense">
+                <Link href={`/app/calendar?view=month&month=${format(monthStart, "yyyy-MM-dd")}`}>Month</Link>
+              </GlassButton>
+              <GlassButton asChild size="sm" variant="dense">
+                <Link href={weekHref}>Week</Link>
+              </GlassButton>
+              <GlassButton asChild size="sm" variant="dense">
+                <Link href={`/app/calendar/day/${todayKey}`}>Day</Link>
+              </GlassButton>
+            </div>
             <p className="max-w-3xl text-sm text-foreground/75">
-              Plan your month, create from templates, and keep attendance + notes workflows connected in one place.
+              Plan your month, drag templates into days, and jump into week grid scheduling when you need time-slot detail.
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-foreground/70">
               <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-3 py-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                Month + list view
+                Month view
               </span>
               <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-3 py-1">
                 <Layers className="h-3.5 w-3.5" />
@@ -273,6 +338,12 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
                 Monthly PDF
               </Link>
             </GlassButton>
+            <CalendarPdfPreviewDialog
+              dateKey={todayKey}
+              weekStartKey={currentWeekStartKey}
+              monthKey={currentMonthKey}
+              defaultView="monthly"
+            />
           </div>
         </div>
       </GlassPanel>
@@ -310,7 +381,7 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
               </span>
               <div>
                 <h2 className="text-base font-semibold text-foreground">Template quick-schedule</h2>
-                <p className="text-xs text-foreground/70">Drag templates into dates below and open day details from month cells.</p>
+                <p className="text-xs text-foreground/70">Drag templates into dates below and use inline edit/delete for speed.</p>
               </div>
             </div>
             <div className="space-y-3 rounded-xl border border-white/70 bg-white/65 p-4">
@@ -323,8 +394,8 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
                   <p className="text-xs text-foreground/65">Bingo, trivia, exercise, and custom programs.</p>
                 </div>
                 <div className="rounded-lg border border-white/70 bg-white/75 px-3 py-2 text-sm">
-                  <p className="font-medium text-foreground">Drop to schedule</p>
-                  <p className="text-xs text-foreground/65">Select time + location in a lightweight modal.</p>
+                  <p className="font-medium text-foreground">Inline day actions</p>
+                  <p className="text-xs text-foreground/65">Edit/Delete from month cells without opening day details.</p>
                 </div>
               </div>
               <GlassButton asChild variant="warm" className="w-full sm:w-auto">
@@ -352,16 +423,15 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
             <Badge variant="outline">Click any month cell</Badge>
           </div>
           <p className="rounded-lg border border-white/70 bg-white/65 px-4 py-3 text-sm text-foreground/75">
-            To keep this month view clean, detailed editing now lives on the dedicated day page. Select any date in the
-            month grid and choose <span className="font-medium">View day</span> to modify activities, update adaptations,
-            manage checklists, and remove events.
+            Detailed editing still lives on the day page. Select any date and choose <span className="font-medium">View day</span>
+            to manage adaptations, checklist progress, and attendance links.
           </p>
           <div className="flex flex-wrap gap-2">
             <GlassButton asChild variant="dense" size="sm">
               <Link href={`/app/calendar/day/${format(new Date(), "yyyy-MM-dd")}`}>Open today&apos;s details</Link>
             </GlassButton>
             <GlassButton asChild variant="dense" size="sm">
-              <Link href="/app/templates">Open templates tab</Link>
+              <Link href={weekHref}>Open week scheduler</Link>
             </GlassButton>
           </div>
         </div>

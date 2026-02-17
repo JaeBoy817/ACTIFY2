@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { AttendanceChecklistClient } from "@/app/app/calendar/[id]/attendance/attendance-checklist-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { logAudit } from "@/lib/audit";
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
@@ -28,16 +28,6 @@ const barrierReasonSchema = z.enum(barrierReasonValues);
 type AttendanceStatus = "PRESENT" | "ACTIVE" | "LEADING" | "REFUSED" | "NO_SHOW";
 type UiAttendanceStatus = (typeof uiStatusValues)[number];
 const uiStatusSet = new Set<UiAttendanceStatus>(uiStatusValues);
-
-const statusOptions: Array<{
-  value: UiAttendanceStatus;
-  label: string;
-}> = [
-  { value: "PRESENT_ACTIVE", label: "Present/Active" },
-  { value: "LEADING", label: "Leading" },
-  { value: "REFUSED", label: "Refused" },
-  { value: "NO_SHOW", label: "No show" }
-];
 
 function parseRoomForSort(room: string) {
   const value = room.trim().toUpperCase();
@@ -76,14 +66,6 @@ function compareRoomOrder(aRoom: string, bRoom: string) {
   return aRoom.localeCompare(bRoom, undefined, { sensitivity: "base", numeric: true });
 }
 
-function getDefaultStatusSelections(status?: AttendanceStatus): UiAttendanceStatus[] {
-  if (!status) return [];
-  if (status === "LEADING") return ["PRESENT_ACTIVE", "LEADING"];
-  if (status === "PRESENT" || status === "ACTIVE") return ["PRESENT_ACTIVE"];
-  if (status === "REFUSED") return ["REFUSED"];
-  return ["NO_SHOW"];
-}
-
 const checklistSchema = z.object({
   residentIds: z.array(z.string().min(1)).default([])
 });
@@ -104,14 +86,11 @@ async function runInBatches(tasks: Array<() => Promise<void>>, batchSize = ATTEN
 }
 
 export default async function AttendancePage({
-  params,
-  searchParams
+  params
 }: {
   params: { id: string };
-  searchParams?: { q?: string };
 }) {
   const context = await requireModulePage("calendar");
-  const search = searchParams?.q?.trim() ?? "";
 
   const activity = await prisma.activityInstance.findFirst({
     where: { id: params.id, facilityId: context.facilityId },
@@ -125,15 +104,7 @@ export default async function AttendancePage({
   const residents = await prisma.resident.findMany({
     where: {
       facilityId: context.facilityId,
-      isActive: true,
-      OR: search
-        ? [
-            { firstName: { contains: search } },
-            { lastName: { contains: search } },
-            { room: { contains: search } },
-            { notes: { contains: search } }
-          ]
-        : undefined
+      isActive: true
     },
     include: { unit: true },
     orderBy: [{ unit: { name: "asc" } }, { room: "asc" }, { lastName: "asc" }]
@@ -314,110 +285,31 @@ export default async function AttendancePage({
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Mark each resident with a status. Use barriers for refused/no show cases. Everything saves in one submit.
+            Mark each resident with a status. Search updates in real time. Use barriers for refused/no show cases. Everything saves in one submit.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <form method="GET" className="flex flex-wrap items-center gap-2">
-              <Input
-                name="q"
-                placeholder="Search resident by name, room, or notes"
-                defaultValue={search}
-                className="max-w-md bg-white/85"
-              />
-              <Button type="submit" variant="outline">Search</Button>
-              {search ? (
-                <Button asChild type="button" variant="ghost">
-                  <Link href={`/app/calendar/${params.id}/attendance`}>Clear</Link>
-                </Button>
-              ) : null}
-            </form>
-            <Button type="submit" form="attendance-checklist-form">
-              Save checklist attendance
-            </Button>
-            <span className="text-xs text-muted-foreground">{orderedResidents.length} residents shown</span>
-          </div>
-          <form id="attendance-checklist-form" action={saveChecklistAttendance} className="space-y-4">
-            <div className="space-y-2">
-              {orderedResidents.length === 0 ? (
-                <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                  No residents matched your search.
-                </p>
-              ) : null}
-              {orderedResidents.map((resident) => {
-                const existing = attendanceMap.get(resident.id);
-                const isBedBoundResident = resident.status === "BED_BOUND";
-                const defaultStatusSelections = new Set(
-                  existing?.status
-                    ? getDefaultStatusSelections(existing.status)
-                    : isBedBoundResident
-                      ? (["NO_SHOW"] as UiAttendanceStatus[])
-                      : []
-                );
-                return (
-                  <div key={`check-${resident.id}`} className="rounded-md border p-3">
-                    <input type="hidden" name="residentIds" value={resident.id} />
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="font-medium">
-                        {resident.lastName}, {resident.firstName}
-                      </p>
-                      <span className="text-xs text-muted-foreground">
-                        Room {resident.room} · {resident.unit?.name ?? "No unit"}
-                      </span>
-                    </div>
-                    <div className="grid gap-2 lg:grid-cols-3">
-                      <fieldset className="flex flex-wrap gap-3 rounded-md border bg-muted/20 px-3 py-2">
-                        <legend className="px-1 text-[11px] font-medium text-muted-foreground">Status</legend>
-                        {statusOptions.map((option) => (
-                          <label key={`${resident.id}-${option.value}`} className="inline-flex items-center gap-1.5 text-xs">
-                            <input
-                              type="checkbox"
-                              name={`status_${resident.id}`}
-                              value={option.value}
-                              defaultChecked={defaultStatusSelections.has(option.value)}
-                              className="h-3.5 w-3.5"
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                        {isBedBoundResident ? (
-                          <p className="w-full text-[11px] text-muted-foreground">
-                            Bed Bound residents default to No show with Bed bound barrier when left unchecked, but you can select other options.
-                          </p>
-                        ) : (
-                          <p className="w-full text-[11px] text-muted-foreground">
-                            You can check multiple. Save uses highest selected: No show &gt; Refused &gt; Leading &gt; Present/Active. If left unchecked, it saves as No show.
-                          </p>
-                        )}
-                      </fieldset>
-                      <select
-                        name={`barrier_${resident.id}`}
-                        defaultValue={existing?.barrierReason ?? (isBedBoundResident ? "BED_BOUND" : "")}
-                        className="h-10 rounded-md border px-3 text-sm"
-                      >
-                        <option value="">No barrier</option>
-                        <option value="ASLEEP">Asleep</option>
-                        <option value="BED_BOUND">Bed bound</option>
-                        <option value="THERAPY">Therapy</option>
-                        <option value="AT_APPOINTMENT">At appointment</option>
-                        <option value="REFUSED">Refused</option>
-                        <option value="NOT_INFORMED">Not informed</option>
-                        <option value="PAIN">Pain</option>
-                        <option value="ISOLATION_PRECAUTIONS">Isolation precautions</option>
-                        <option value="OTHER">Other</option>
-                      </select>
-
-                      <Input
-                        name={`notes_${resident.id}`}
-                        defaultValue={existing?.notes ?? ""}
-                        placeholder="Optional notes"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Button type="submit">Save checklist attendance</Button>
-          </form>
+          <AttendanceChecklistClient
+            activityId={params.id}
+            residents={orderedResidents.map((resident) => ({
+              id: resident.id,
+              firstName: resident.firstName,
+              lastName: resident.lastName,
+              room: resident.room,
+              unitName: resident.unit?.name ?? null,
+              status: resident.status,
+              notes: resident.notes ?? null
+            }))}
+            existingByResidentId={Object.fromEntries(
+              Array.from(attendanceMap.entries()).map(([residentId, row]) => [
+                residentId,
+                {
+                  status: row.status,
+                  barrierReason: row.barrierReason,
+                  notes: row.notes
+                }
+              ])
+            )}
+            saveAction={saveChecklistAttendance}
+          />
         </CardContent>
       </Card>
     </div>

@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await ensureUserAndFacility();
 
   return (
-    <div className="min-h-screen bg-actify-dashboard bg-actify-orbs md:flex">
+    <div data-ambient="dashboard" className="min-h-screen bg-actify-dashboard bg-actify-orbs md:flex">
       <LiquidOrbs />
       <div className="w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />

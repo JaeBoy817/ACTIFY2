@@ -264,6 +264,7 @@ model Facility {
   units                   Unit[]
   residents               Resident[]
   activityTemplates       ActivityTemplate[]
+  activitySeries          ActivitySeries[]
   activityInstances       ActivityInstance[]
   progressNoteTemplates   ProgressNoteTemplate[]
   volunteers              Volunteer[]
@@ -345,16 +346,46 @@ model ActivityTemplate {
   defaultChecklist  Json
   createdAt         DateTime           @default(now())
   facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  activitySeries    ActivitySeries[]
   activityInstances ActivityInstance[]
 
   @@index([facilityId])
   @@index([category])
 }
 
+model ActivitySeries {
+  id          String             @id @default(cuid())
+  facilityId  String
+  title       String
+  location    String?
+  templateId  String?
+  dtstart     DateTime
+  durationMin Int
+  rrule       String
+  until       DateTime?
+  timezone    String             @default("America/Chicago")
+  checklist   Json?
+  adaptations Json?
+  exdates     Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  facility    Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  template    ActivityTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  activities  ActivityInstance[]
+
+  @@index([facilityId, dtstart])
+  @@index([facilityId, until])
+  @@index([templateId])
+}
+
 model ActivityInstance {
   id                 String            @id @default(cuid())
   facilityId         String
   templateId         String?
+  seriesId           String?
+  occurrenceKey      String?
+  isOverride         Boolean           @default(false)
+  conflictOverride   Boolean           @default(false)
   title              String
   startAt            DateTime
   endAt              DateTime
@@ -364,13 +395,18 @@ model ActivityInstance {
   createdAt          DateTime          @default(now())
   facility           Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   template           ActivityTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  series             ActivitySeries?   @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   invitations        Invitation[]
   attendance         Attendance[]
   progressNotes      ProgressNote[]
 
+  @@unique([seriesId, occurrenceKey])
   @@index([facilityId])
   @@index([templateId])
   @@index([startAt])
+  @@index([endAt])
+  @@index([facilityId, location, startAt])
+  @@index([seriesId, occurrenceKey])
 }
 
 model Invitation {

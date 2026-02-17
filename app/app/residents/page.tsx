@@ -1,115 +1,21 @@
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import {
-  ArrowRightLeft,
-  BedDouble,
-  CircleCheck,
-  CircleHelp,
-  DoorOpen,
-  Hospital,
-  PlaneTakeoff,
-  Skull,
-  type LucideIcon
-} from "lucide-react";
 import { z } from "zod";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GlassButton } from "@/components/glass/GlassButton";
+import { GlassCard } from "@/components/glass/GlassCard";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { logAudit } from "@/lib/audit";
 import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import {
+  compareResidentsByRoom,
+  residentStatusOptions,
+  statusIsActive,
+  type ResidentStatusValue
+} from "@/lib/resident-status";
 
-const residentStatusOptions = [
-  "ACTIVE",
-  "BED_BOUND",
-  "DISCHARGED",
-  "HOSPITALIZED",
-  "ON_LEAVE",
-  "TRANSFERRED",
-  "DECEASED",
-  "OTHER"
-] as const;
-
-type ResidentStatusValue = (typeof residentStatusOptions)[number];
-const residentStatusSchema = z.enum(residentStatusOptions);
-const bulkStatusFormId = "resident-status-bulk-form";
-
-const residentStatusMeta: Record<
-  ResidentStatusValue,
-  { icon: LucideIcon; badgeClass: string }
-> = {
-  ACTIVE: {
-    icon: CircleCheck,
-    badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700"
-  },
-  BED_BOUND: {
-    icon: BedDouble,
-    badgeClass: "border-sky-200 bg-sky-50 text-sky-700"
-  },
-  DISCHARGED: {
-    icon: DoorOpen,
-    badgeClass: "border-zinc-300 bg-zinc-100 text-zinc-700"
-  },
-  HOSPITALIZED: {
-    icon: Hospital,
-    badgeClass: "border-rose-200 bg-rose-50 text-rose-700"
-  },
-  ON_LEAVE: {
-    icon: PlaneTakeoff,
-    badgeClass: "border-indigo-200 bg-indigo-50 text-indigo-700"
-  },
-  TRANSFERRED: {
-    icon: ArrowRightLeft,
-    badgeClass: "border-amber-200 bg-amber-50 text-amber-700"
-  },
-  DECEASED: {
-    icon: Skull,
-    badgeClass: "border-slate-300 bg-slate-200 text-slate-700"
-  },
-  OTHER: {
-    icon: CircleHelp,
-    badgeClass: "border-violet-200 bg-violet-50 text-violet-700"
-  }
-};
-
-function formatResidentStatusLabel(status: ResidentStatusValue) {
-  return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function statusIsActive(status: ResidentStatusValue) {
-  return status === "ACTIVE" || status === "BED_BOUND";
-}
-
-function getRoomSortParts(room: string) {
-  const normalized = room.trim().toUpperCase();
-  const match = normalized.match(/^(\d+)\s*([A-Z]*)/);
-  return {
-    numeric: match ? Number(match[1]) : Number.POSITIVE_INFINITY,
-    suffix: match ? match[2] : normalized,
-    normalized
-  };
-}
-
-function compareResidentsByRoom(
-  a: { room: string; lastName: string; firstName: string },
-  b: { room: string; lastName: string; firstName: string }
-) {
-  const aRoom = getRoomSortParts(a.room);
-  const bRoom = getRoomSortParts(b.room);
-
-  if (aRoom.numeric !== bRoom.numeric) return aRoom.numeric - bRoom.numeric;
-  const suffixCompare = aRoom.suffix.localeCompare(bRoom.suffix, undefined, { numeric: true, sensitivity: "base" });
-  if (suffixCompare !== 0) return suffixCompare;
-  const roomCompare = aRoom.normalized.localeCompare(bRoom.normalized, undefined, { numeric: true, sensitivity: "base" });
-  if (roomCompare !== 0) return roomCompare;
-  const lastCompare = a.lastName.localeCompare(b.lastName, undefined, { sensitivity: "base" });
-  if (lastCompare !== 0) return lastCompare;
-  return a.firstName.localeCompare(b.firstName, undefined, { sensitivity: "base" });
-}
+import { ResidentsLiveTable } from "./residents-live-table";
 
 const createResidentSchema = z.object({
   firstName: z.string().min(1),
@@ -129,23 +35,15 @@ const bulkUpdateResidentStatusesSchema = z.object({
   residentIds: z.array(z.string().min(1)).default([])
 });
 
-export default async function ResidentsPage({ searchParams }: { searchParams?: { q?: string } }) {
+const residentStatusSchema = z.enum(residentStatusOptions);
+
+export default async function ResidentsPage() {
   const { facilityId, role } = await getFacilityContextWithSubscription();
-  const search = searchParams?.q?.trim() ?? "";
 
   const [units, residents] = await Promise.all([
     prisma.unit.findMany({ where: { facilityId }, orderBy: { name: "asc" } }),
     prisma.resident.findMany({
-      where: {
-        facilityId,
-        OR: search
-          ? [
-              { firstName: { contains: search } },
-              { lastName: { contains: search } },
-              { room: { contains: search } }
-            ]
-          : undefined
-      },
+      where: { facilityId },
       include: {
         unit: true,
         _count: {
@@ -160,8 +58,6 @@ export default async function ResidentsPage({ searchParams }: { searchParams?: {
 
   const allowCreate = canWrite(role);
   const roomSortedResidents = [...residents].sort(compareResidentsByRoom);
-  const currentResidents = roomSortedResidents.filter((resident) => resident.status !== "DISCHARGED");
-  const dischargedResidents = roomSortedResidents.filter((resident) => resident.status === "DISCHARGED");
 
   async function createResident(formData: FormData) {
     "use server";
@@ -300,232 +196,52 @@ export default async function ResidentsPage({ searchParams }: { searchParams?: {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Residents</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form method="GET" className="flex gap-2">
-            <Input name="q" placeholder="Search by name or room" defaultValue={search} />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
+      <ResidentsLiveTable
+        residents={roomSortedResidents.map((resident) => ({
+          id: resident.id,
+          firstName: resident.firstName,
+          lastName: resident.lastName,
+          room: resident.room,
+          unitName: resident.unit?.name ?? null,
+          status: resident.status as ResidentStatusValue,
+          attendanceCount: resident._count.attendance
+        }))}
+        allowCreate={allowCreate}
+        saveAllResidentStatuses={saveAllResidentStatuses}
+        deleteResident={deleteResident}
+      />
 
-          {allowCreate && (
-            <form id={bulkStatusFormId} action={saveAllResidentStatuses} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2">
-              <p className="text-xs text-muted-foreground">
-                Residents are sorted by room number. Update status dropdowns, then save once.
-              </p>
-              <Button type="submit" size="sm">Save all status changes</Button>
-            </form>
-          )}
-
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Attendance history</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Update status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentResidents.map((resident) => (
-                <TableRow key={resident.id}>
-                  <TableCell>{resident.firstName} {resident.lastName}</TableCell>
-                  <TableCell>{resident.room}</TableCell>
-                  <TableCell>{resident.unit?.name ?? "-"}</TableCell>
-                  <TableCell>{resident._count.attendance}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      const status = resident.status as ResidentStatusValue;
-                      const meta = residentStatusMeta[status];
-                      const StatusIcon = meta.icon;
-                      return (
-                        <Badge className={`w-fit gap-1 border ${meta.badgeClass}`}>
-                          <StatusIcon className="h-3.5 w-3.5" />
-                          {formatResidentStatusLabel(status)}
-                        </Badge>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    {allowCreate ? (
-                      <div className="flex items-center gap-2">
-                        <input type="hidden" name="residentIds" value={resident.id} form={bulkStatusFormId} />
-                        <select
-                          name={`status_${resident.id}`}
-                          defaultValue={resident.status}
-                          className="h-9 rounded-md border px-2 text-xs"
-                          form={bulkStatusFormId}
-                        >
-                          {residentStatusOptions.map((status) => (
-                            <option key={status} value={status}>
-                              {formatResidentStatusLabel(status)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Read-only</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                      <Button asChild size="sm" variant="ghost">
-                        <Link href={`/app/residents/${resident.id}`}>Open</Link>
-                      </Button>
-                      {allowCreate && (
-                        <form action={deleteResident}>
-                          <input type="hidden" name="residentId" value={resident.id} />
-                          <Button type="submit" size="sm" variant="destructive">Delete</Button>
-                        </form>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {currentResidents.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-sm text-muted-foreground">
-                    No current residents found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-
-          <details className="rounded-md border bg-muted/20">
-            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium">
-              Discharged residents ({dischargedResidents.length})
-            </summary>
-            <div className="border-t px-4 py-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Room</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead>Attendance history</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Update status</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dischargedResidents.map((resident) => (
-                    <TableRow key={`discharged-${resident.id}`}>
-                      <TableCell>{resident.firstName} {resident.lastName}</TableCell>
-                      <TableCell>{resident.room}</TableCell>
-                      <TableCell>{resident.unit?.name ?? "-"}</TableCell>
-                      <TableCell>{resident._count.attendance}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const status = resident.status as ResidentStatusValue;
-                          const meta = residentStatusMeta[status];
-                          const StatusIcon = meta.icon;
-                          return (
-                            <Badge className={`w-fit gap-1 border ${meta.badgeClass}`}>
-                              <StatusIcon className="h-3.5 w-3.5" />
-                              {formatResidentStatusLabel(status)}
-                            </Badge>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        {allowCreate ? (
-                          <div className="flex items-center gap-2">
-                            <input type="hidden" name="residentIds" value={resident.id} form={bulkStatusFormId} />
-                            <select
-                              name={`status_${resident.id}`}
-                              defaultValue={resident.status}
-                              className="h-9 rounded-md border px-2 text-xs"
-                              form={bulkStatusFormId}
-                            >
-                              {residentStatusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {formatResidentStatusLabel(status)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Read-only</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-2">
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={`/app/residents/${resident.id}`}>Open</Link>
-                          </Button>
-                          {allowCreate && (
-                            <form action={deleteResident}>
-                              <input type="hidden" name="residentId" value={resident.id} />
-                              <Button type="submit" size="sm" variant="destructive">Delete</Button>
-                            </form>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {dischargedResidents.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-sm text-muted-foreground">
-                        No discharged residents found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </details>
-
-          {allowCreate && (
-            <div className="flex justify-end">
-              <Button type="submit" form={bulkStatusFormId}>
-                Save all status changes
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add resident</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={createResident} className="grid gap-3 md:grid-cols-2">
-            <Input name="firstName" placeholder="First name" required disabled={!allowCreate} />
-            <Input name="lastName" placeholder="Last name" required disabled={!allowCreate} />
-            <Input name="room" placeholder="Room" required disabled={!allowCreate} />
-            <select name="unitId" className="h-10 rounded-md border px-3 text-sm" disabled={!allowCreate}>
-              <option value="">No unit</option>
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </select>
-            <select name="status" className="h-10 rounded-md border px-3 text-sm" defaultValue="ACTIVE" disabled={!allowCreate}>
-              {residentStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {formatResidentStatusLabel(status)}
-                </option>
-              ))}
-            </select>
-            <Input name="bestTimesOfDay" placeholder="Best times of day" disabled={!allowCreate} />
-            <Input name="notes" placeholder="Resident notes" disabled={!allowCreate} />
-            <Button type="submit" className="md:col-span-2" disabled={!allowCreate}>
-              Create resident
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <GlassCard variant="dense" className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Add resident</h2>
+          <p className="mt-1 text-sm text-foreground/70">Add new residents with room, unit, and status details.</p>
+        </div>
+        <form action={createResident} className="grid gap-3 md:grid-cols-2">
+          <Input name="firstName" placeholder="First name" required disabled={!allowCreate} className="bg-white/90" />
+          <Input name="lastName" placeholder="Last name" required disabled={!allowCreate} className="bg-white/90" />
+          <Input name="room" placeholder="Room" required disabled={!allowCreate} className="bg-white/90" />
+          <select name="unitId" className="h-10 rounded-md border border-white/70 bg-white/90 px-3 text-sm" disabled={!allowCreate}>
+            <option value="">No unit</option>
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </select>
+          <select name="status" className="h-10 rounded-md border border-white/70 bg-white/90 px-3 text-sm" defaultValue="ACTIVE" disabled={!allowCreate}>
+            {residentStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}
+              </option>
+            ))}
+          </select>
+          <Input name="bestTimesOfDay" placeholder="Best times of day" disabled={!allowCreate} className="bg-white/90" />
+          <Input name="notes" placeholder="Resident notes" disabled={!allowCreate} className="bg-white/90" />
+          <GlassButton type="submit" className="md:col-span-2" disabled={!allowCreate}>
+            Create resident
+          </GlassButton>
+        </form>
+      </GlassCard>
     </div>
   );
 }

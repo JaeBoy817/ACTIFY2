@@ -27,7 +27,7 @@ export function AuthShell({ mode, variant, userReducedMotion, children }: AuthSh
     );
 
   return (
-    <div className="relative min-h-screen bg-actify-dashboard">
+    <div data-ambient="auth" className="relative min-h-screen bg-actify-dashboard">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-20 top-6 h-72 w-72 rounded-full bg-actifyBlue/14 blur-3xl" />
         <div className="absolute -right-20 top-16 h-72 w-72 rounded-full bg-actifyMint/14 blur-3xl" />

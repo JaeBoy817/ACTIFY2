@@ -244,10 +244,19 @@ function getTemplateForDate(dateKey: string) {
 }
 
 function normalizeTemplateTimeSlots(template: ActivityTemplate[]) {
-  return template.map((item, index) => ({
-    ...item,
-    time: STANDARD_TIME_SLOTS[index] ?? item.time
-  }));
+  return template.map((item, index) => {
+    const normalizedTime = STANDARD_TIME_SLOTS[index] ?? item.time;
+    if (item.title.toLowerCase().includes("smoke break")) {
+      return {
+        ...item,
+        time: "13:30"
+      };
+    }
+    return {
+      ...item,
+      time: normalizedTime
+    };
+  });
 }
 
 function buildMonthPlan(timeZone: string): PlannedEvent[] {
@@ -265,7 +274,8 @@ function buildMonthPlan(timeZone: string): PlannedEvent[] {
     for (const item of template) {
       const minutesFromStart = parseTimeToMinutes(item.time);
       const startAt = new Date(dayStartUtc.getTime() + minutesFromStart * 60_000);
-      const endAt = new Date(startAt.getTime() + 60 * 60_000);
+      const durationMinutes = item.title.toLowerCase().includes("smoke break") ? 30 : 60;
+      const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
       events.push({
         dateKey,
         time: item.time,

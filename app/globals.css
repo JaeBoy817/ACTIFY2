@@ -31,7 +31,19 @@
   --gradient-warm: linear-gradient(135deg, #2DD4BF 0%, #FB7185 100%);
   --gradient-dashboard: radial-gradient(900px circle at 20% 10%, rgba(45, 212, 191, 0.20), transparent 60%),
     radial-gradient(900px circle at 80% 20%, rgba(37, 99, 235, 0.18), transparent 55%),
-    #FFF7ED;
+    rgba(255, 247, 237, 0.72);
+  /* Ambient drift knobs */
+  --ambient-opacity: 0.42;
+  --ambient-intensity: 1;
+  --ambient-blur: 56px;
+  --ambient-speed-a: 46s;
+  --ambient-speed-b: 54s;
+  --ambient-speed-c: 60s;
+  --ambient-speed-d: 50s;
+  --ambient-blob-1: 37 99 235;
+  --ambient-blob-2: 45 212 191;
+  --ambient-blob-3: 251 113 133;
+  --ambient-blob-4: 99 102 241;
   --glass-blur: 22px;
   --glass-saturation: 140%;
   --glass-bg: rgba(255, 255, 255, 0.30);
@@ -56,6 +68,116 @@
 
 body {
   @apply bg-background text-foreground antialiased;
+}
+
+body[data-ambient="default"] {
+  --ambient-opacity: 0.42;
+  --ambient-intensity: 1;
+  --ambient-blob-1: 37 99 235;
+  --ambient-blob-2: 45 212 191;
+  --ambient-blob-3: 251 113 133;
+  --ambient-blob-4: 99 102 241;
+}
+
+body:has([data-ambient="dashboard"]) {
+  --ambient-opacity: 0.44;
+  --ambient-intensity: 1;
+  --ambient-blob-1: 29 78 216;
+  --ambient-blob-2: 20 184 166;
+  --ambient-blob-3: 244 114 182;
+  --ambient-blob-4: 14 165 233;
+}
+
+body:has([data-ambient="marketing"]) {
+  --ambient-opacity: 0.4;
+  --ambient-intensity: 0.96;
+  --ambient-blob-1: 59 130 246;
+  --ambient-blob-2: 45 212 191;
+  --ambient-blob-3: 251 146 60;
+  --ambient-blob-4: 168 85 247;
+}
+
+body:has([data-ambient="auth"]) {
+  --ambient-opacity: 0.36;
+  --ambient-intensity: 0.92;
+  --ambient-blob-1: 37 99 235;
+  --ambient-blob-2: 34 211 238;
+  --ambient-blob-3: 248 113 113;
+  --ambient-blob-4: 14 165 233;
+}
+
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  opacity: var(--ambient-opacity);
+  isolation: isolate;
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  filter: blur(var(--ambient-blur));
+}
+
+.ambient-blob-a {
+  left: -24vmax;
+  top: -18vmax;
+  height: 76vmax;
+  width: 76vmax;
+  background: radial-gradient(circle at 32% 34%, rgb(var(--ambient-blob-1) / calc(0.28 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-1) / calc(0.1 * var(--ambient-intensity))) 38%, transparent 72%);
+  animation: ambient-drift-a var(--ambient-speed-a) linear infinite alternate;
+}
+
+.ambient-blob-b {
+  right: -22vmax;
+  top: -20vmax;
+  height: 82vmax;
+  width: 82vmax;
+  background: radial-gradient(circle at 56% 40%, rgb(var(--ambient-blob-2) / calc(0.24 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-2) / calc(0.09 * var(--ambient-intensity))) 40%, transparent 72%);
+  animation: ambient-drift-b var(--ambient-speed-b) linear infinite alternate;
+}
+
+.ambient-blob-c {
+  left: 12vmax;
+  bottom: -30vmax;
+  height: 70vmax;
+  width: 70vmax;
+  background: radial-gradient(circle at 45% 38%, rgb(var(--ambient-blob-3) / calc(0.18 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-3) / calc(0.07 * var(--ambient-intensity))) 42%, transparent 74%);
+  animation: ambient-drift-c var(--ambient-speed-c) linear infinite alternate;
+}
+
+.ambient-blob-d {
+  right: 8vmax;
+  bottom: -28vmax;
+  height: 66vmax;
+  width: 66vmax;
+  background: radial-gradient(circle at 52% 44%, rgb(var(--ambient-blob-4) / calc(0.16 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-4) / calc(0.06 * var(--ambient-intensity))) 44%, transparent 76%);
+  animation: ambient-drift-d var(--ambient-speed-d) linear infinite alternate;
+}
+
+@media (prefers-color-scheme: dark) {
+  body[data-ambient="default"],
+  body:has([data-ambient="dashboard"]),
+  body:has([data-ambient="marketing"]),
+  body:has([data-ambient="auth"]) {
+    --ambient-opacity: 0.28;
+    --ambient-intensity: 0.88;
+  }
+}
+
+html.dark body[data-ambient="default"],
+html.dark body:has([data-ambient="dashboard"]),
+html.dark body:has([data-ambient="marketing"]),
+html.dark body:has([data-ambient="auth"]) {
+  --ambient-opacity: 0.28;
+  --ambient-intensity: 0.88;
 }
 
 h1,
@@ -487,6 +609,46 @@ h6 {
   }
 }
 
+@keyframes ambient-drift-a {
+  0% {
+    transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1);
+  }
+
+  100% {
+    transform: translate3d(6%, 5%, 0) rotate(12deg) scale(1.08);
+  }
+}
+
+@keyframes ambient-drift-b {
+  0% {
+    transform: translate3d(5%, -6%, 0) rotate(0deg) scale(1.03);
+  }
+
+  100% {
+    transform: translate3d(-7%, 7%, 0) rotate(-10deg) scale(1.12);
+  }
+}
+
+@keyframes ambient-drift-c {
+  0% {
+    transform: translate3d(-3%, 6%, 0) rotate(0deg) scale(1.02);
+  }
+
+  100% {
+    transform: translate3d(8%, -4%, 0) rotate(9deg) scale(1.1);
+  }
+}
+
+@keyframes ambient-drift-d {
+  0% {
+    transform: translate3d(4%, 3%, 0) rotate(0deg) scale(1);
+  }
+
+  100% {
+    transform: translate3d(-6%, -8%, 0) rotate(-8deg) scale(1.09);
+  }
+}
+
 @keyframes liquid-enter {
   0% {
     opacity: 0;
@@ -775,6 +937,7 @@ h6 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ambient-blob,
   .actify-orb-blue,
   .actify-orb-mint,
   .actify-orb-coral,

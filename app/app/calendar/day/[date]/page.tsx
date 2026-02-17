@@ -282,6 +282,9 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
             <Link href={monthHref}>Back to month view</Link>
           </GlassButton>
         </div>
+        <p className="text-xs text-foreground/60">
+          Quick flow: adjust details here, then track attendance per activity. Week grid supports keyboard move and inline edits.
+        </p>
       </GlassPanel>
 
       {activities.length === 0 ? (
@@ -305,7 +308,7 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
           : {};
 
         return (
-          <GlassCard key={activity.id} variant="dense" className="space-y-4">
+          <GlassCard key={activity.id} variant="dense" className="space-y-4 transition hover:shadow-md">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold text-foreground">{activity.title}</p>
