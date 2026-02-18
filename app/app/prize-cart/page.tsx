@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function PrizeCartPage() {
-  redirect("/app/budget");
+  redirect("/app/dashboard/budget-stock");
 }

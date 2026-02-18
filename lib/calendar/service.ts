@@ -254,12 +254,19 @@ export async function getCalendarRangeActivities(params: {
       endAt: { gte: params.rangeStart }
     },
     orderBy: { startAt: "asc" },
-    include: {
-      _count: {
-        select: {
-          attendance: true
-        }
-      }
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      endAt: true,
+      location: true,
+      templateId: true,
+      seriesId: true,
+      occurrenceKey: true,
+      isOverride: true,
+      conflictOverride: true,
+      checklist: true,
+      adaptationsEnabled: true
     }
   });
 

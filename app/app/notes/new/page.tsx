@@ -40,7 +40,7 @@ function parseQuickPhrases(raw: string | null) {
 export default async function NewProgressNotePage() {
   const context = await requireModulePage("notes");
 
-  const [residents, activities, templates, goals, documentationRulesRecord] = await Promise.all([
+  const [residents, activities, templates, documentationRulesRecord] = await Promise.all([
     prisma.resident.findMany({
       where: { facilityId: context.facilityId, isActive: true },
       include: { unit: true },
@@ -53,14 +53,6 @@ export default async function NewProgressNotePage() {
     }),
     prisma.progressNoteTemplate.findMany({
       where: { facilityId: context.facilityId },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.carePlanGoal.findMany({
-      where: {
-        resident: { facilityId: context.facilityId },
-        isActive: true
-      },
-      include: { resident: true },
       orderBy: { createdAt: "desc" }
     }),
     prisma.facilitySettings.findUnique({
@@ -89,7 +81,6 @@ export default async function NewProgressNotePage() {
       quickPhrases: parseQuickPhrases(formData.get("quickPhrases") as string | null)
     });
 
-    const goalIds = formData.getAll("goalIds").map(String).filter(Boolean);
     const facilitySettings = await prisma.facilitySettings.findUnique({
       where: { facilityId: scoped.facilityId },
       select: { documentationRulesJson: true }
@@ -102,10 +93,6 @@ export default async function NewProgressNotePage() {
 
     if (documentationRules.noteRequiredFields.includes("followUp") && !parsed.followUp?.trim()) {
       throw new Error("Follow-up is required by documentation rules.");
-    }
-
-    if (parsed.type === "ONE_TO_ONE" && documentationRules.requireGoalLinkForOneToOne && goalIds.length === 0) {
-      throw new Error("At least one goal link is required for 1:1 notes.");
     }
 
     const note = await prisma.progressNote.create({
@@ -124,15 +111,6 @@ export default async function NewProgressNotePage() {
         createdByUserId: scoped.user.id
       }
     });
-
-    if (goalIds.length) {
-      await prisma.goalLink.createMany({
-        data: goalIds.map((goalId) => ({
-          goalId,
-          noteId: note.id
-        }))
-      });
-    }
 
     await logAudit({
       facilityId: scoped.facilityId,
@@ -197,11 +175,6 @@ export default async function NewProgressNotePage() {
           title: template.title,
           quickPhrases: Array.isArray(template.quickPhrases) ? template.quickPhrases.map(String) : [],
           bodyTemplate: template.bodyTemplate
-        }))}
-        goals={goals.map((goal) => ({
-          id: goal.id,
-          residentId: goal.residentId,
-          label: `${goal.type}: ${goal.description}`
         }))}
       />
     </div>

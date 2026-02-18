@@ -77,7 +77,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
   const presenceWindowEnd = todayEnd;
   const pastDaysWindowStart = subtractDays(todayStart, 30);
 
-  const [activities, pastActivities, activeResidents, settings] = await Promise.all([
+  const [activities, pastActivities, activeResidentCount, settings] = await Promise.all([
     prisma.activityInstance.findMany({
       where: {
         facilityId: context.facilityId,
@@ -119,7 +119,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
         }
       }
     }),
-    prisma.resident.findMany({
+    prisma.resident.count({
       where: {
         facilityId: context.facilityId,
         OR: [
@@ -129,8 +129,7 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
         NOT: {
           status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
         }
-      },
-      select: { id: true }
+      }
     }),
     prisma.facilitySettings.findUnique({
       where: { facilityId: context.facilityId },
@@ -148,13 +147,18 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
     NO_SHOW: 0
   };
 
-  const activeResidentIds = activeResidents.map((resident) => resident.id);
-  const activeResidentCount = activeResidentIds.length;
-  const residentIdFilter = activeResidentIds.length > 0 ? { in: activeResidentIds } : { in: ["__none__"] };
-
   const presenceRows = await prisma.attendance.findMany({
     where: {
-      residentId: residentIdFilter,
+      resident: {
+        facilityId: context.facilityId,
+        OR: [
+          { isActive: true },
+          { status: { in: ["ACTIVE", "BED_BOUND"] } }
+        ],
+        NOT: {
+          status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
+        }
+      },
       activityInstance: {
         facilityId: context.facilityId,
         startAt: {
@@ -180,7 +184,6 @@ export default async function AttendanceTrackerPage({ searchParams }: Attendance
       status: row.status,
       occurredAt: row.activityInstance.startAt
     })),
-    activeResidentIds,
     activeResidentCount,
     now,
     timeZone

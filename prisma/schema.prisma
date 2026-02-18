@@ -111,6 +111,88 @@ enum ResponseType {
   RESISTANT
 }
 
+enum CarePlanFrequency {
+  DAILY
+  THREE_PER_WEEK
+  WEEKLY
+  PRN
+  CUSTOM
+}
+
+enum CarePlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GoalBaseline {
+  RARE
+  SOMETIMES
+  OFTEN
+}
+
+enum ReviewResult {
+  IMPROVED
+  NO_CHANGE
+  DECLINED
+}
+
+enum CarePlanParticipationLevel {
+  LOW
+  MODERATE
+  HIGH
+}
+
+enum InterventionType {
+  GROUP
+  ONE_TO_ONE
+  INDEPENDENT
+}
+
+enum OneOnOneQueueSkipReason {
+  RESIDENT_DECLINED
+  ASLEEP
+  IN_APPOINTMENT
+  CLINICAL_HOLD
+  STAFFING_CONSTRAINT
+  OTHER
+}
+
+enum ResidentPlanAreaKey {
+  LEISURE_ENGAGEMENT
+  SOCIALIZATION
+  COGNITIVE_STIMULATION
+  MOOD_WELLBEING
+  PHYSICAL_ENGAGEMENT
+  COMMUNICATION_SUPPORT
+  SENSORY_STIMULATION
+  BEHAVIORAL_SUPPORT
+  SPIRITUAL_CULTURAL
+  COMMUNITY_INTEGRATION
+}
+
+enum ResidentPlanFrequency {
+  DAILY
+  TWO_TO_THREE_WEEK
+  WEEKLY
+  MONTHLY
+  PRN
+}
+
+enum ResidentPlanCueingLevel {
+  NONE
+  VERBAL
+  VISUAL
+  TACTILE_HAND_OVER_HAND
+  ENVIRONMENTAL
+}
+
+enum ResidentPlanGroupPreference {
+  GROUP
+  ONE_TO_ONE
+  INDEPENDENT
+  MIXED
+}
+
 enum InventoryTxnType {
   IN
   OUT
@@ -232,22 +314,23 @@ enum AdPlacement {
 }
 
 model User {
-  id             String           @id @default(cuid())
-  clerkUserId    String           @unique
+  id             String            @id @default(cuid())
+  clerkUserId    String            @unique
   email          String
   name           String
-  role           Role             @default(AD)
+  role           Role              @default(AD)
   facilityId     String
-  createdAt      DateTime         @default(now())
-  facility       Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  invited        Invitation[]     @relation("InvitedByUser")
-  progressNotes  ProgressNote[]   @relation("ProgressNoteCreator")
-  signedIn       VolunteerVisit[] @relation("SignedInBy")
-  signedOut      VolunteerVisit[] @relation("SignedOutBy")
+  createdAt      DateTime          @default(now())
+  facility       Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  invited        Invitation[]      @relation("InvitedByUser")
+  progressNotes  ProgressNote[]    @relation("ProgressNoteCreator")
+  signedIn       VolunteerVisit[]  @relation("SignedInBy")
+  signedOut      VolunteerVisit[]  @relation("SignedOutBy")
   inventoryTxns  InventoryTxn[]
   prizeTxns      PrizeTxn[]
-  auditEntries   AuditLog[]       @relation("AuditActor")
-  advertisements Advertisement[]  @relation("AdCreatedBy")
+  auditEntries   AuditLog[]        @relation("AuditActor")
+  notifications  AppNotification[]
+  advertisements Advertisement[]   @relation("AdCreatedBy")
   settings       UserSettings?
 
   @@index([facilityId])
@@ -255,11 +338,11 @@ model User {
 }
 
 model Facility {
-  id                      String                   @id @default(cuid())
+  id                      String                     @id @default(cuid())
   name                    String
-  timezone                String                   @default("America/New_York")
+  timezone                String                     @default("America/New_York")
   moduleFlags             Json
-  createdAt               DateTime                 @default(now())
+  createdAt               DateTime                   @default(now())
   users                   User[]
   units                   Unit[]
   residents               Resident[]
@@ -272,10 +355,17 @@ model Facility {
   prizeItems              PrizeItem[]
   prizeWishlistItems      PrizeWishlistItem[]
   residentCouncilMeetings ResidentCouncilMeeting[]
+  dailyOneOnOneQueues     DailyOneOnOneQueue[]
+  notifications           AppNotification[]
   subscription            Subscription?
   auditLogs               AuditLog[]
   advertisements          Advertisement[]
   settings                FacilitySettings?
+  budgetStockItems        BudgetStockItem[]
+  budgetStockCategories   BudgetStockCategory[]
+  budgetStockExpenses     BudgetStockExpense[]
+  budgetStockSales        BudgetStockSale[]
+  budgetStockMigrations   BudgetStockMigrationMeta[]
 }
 
 model Unit {
@@ -297,6 +387,7 @@ model Resident {
   firstName                       String
   lastName                        String
   room                            String
+  birthDate                       DateTime?
   bestTimesOfDay                  String?
   notes                           String?
   isActive                        Boolean                          @default(true)
@@ -309,6 +400,9 @@ model Resident {
   carePlanGoals                   CarePlanGoal[]
   progressNotes                   ProgressNote[]
   familyEngagementNotes           FamilyEngagementNote[]
+  dailyOneOnOneQueues             DailyOneOnOneQueue[]
+  planItems                       ResidentPlanItem[]
+  carePlans                       CarePlan[]
   activitiesCarePlan              ActivitiesCarePlan?
   activitiesCarePlanFocuses       ActivitiesCarePlanFocus[]
   activitiesCarePlanGoals         ActivitiesCarePlanGoal[]
@@ -317,9 +411,52 @@ model Resident {
   activitiesCarePlanReviews       ActivitiesCarePlanReview[]
 
   @@index([facilityId])
+  @@index([facilityId, room])
+  @@index([facilityId, birthDate])
   @@index([unitId])
   @@index([status])
   @@index([lastName, firstName])
+}
+
+model ResidentPlanItem {
+  id              String                      @id @default(uuid())
+  residentId      String
+  planAreaKey     ResidentPlanAreaKey
+  goalTemplateId  String?
+  customGoalText  String?
+  targetFrequency ResidentPlanFrequency       @default(WEEKLY)
+  interventions   String[]
+  cueingLevel     ResidentPlanCueingLevel     @default(NONE)
+  groupPreference ResidentPlanGroupPreference @default(MIXED)
+  barriers        String[]                    @default([])
+  notes           String?
+  active          Boolean                     @default(true)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  resident        Resident                    @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@index([residentId, active, createdAt])
+  @@index([residentId, planAreaKey, active])
+}
+
+model AppNotification {
+  id         String    @id @default(cuid())
+  facilityId String
+  userId     String
+  kind       String
+  title      String
+  body       String
+  actionUrl  String?
+  payload    Json?
+  dedupeKey  String?   @unique
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  facility   Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, kind, createdAt])
 }
 
 model InterestAssessment {
@@ -350,6 +487,7 @@ model ActivityTemplate {
   activityInstances ActivityInstance[]
 
   @@index([facilityId])
+  @@index([facilityId, title])
   @@index([category])
 }
 
@@ -405,6 +543,7 @@ model ActivityInstance {
   @@index([templateId])
   @@index([startAt])
   @@index([endAt])
+  @@index([facilityId, startAt, endAt])
   @@index([facilityId, location, startAt])
   @@index([seriesId, occurrenceKey])
 }
@@ -442,7 +581,84 @@ model Attendance {
   @@unique([activityInstanceId, residentId])
   @@index([activityInstanceId])
   @@index([residentId])
+  @@index([residentId, status, createdAt])
   @@index([barrierReason])
+}
+
+model CarePlan {
+  id              String                 @id @default(cuid())
+  residentId      String
+  status          CarePlanStatus         @default(ACTIVE)
+  focusAreas      Json
+  barriers        Json?
+  supports        Json?
+  preferencesText String?                @db.Text
+  safetyNotes     String?                @db.Text
+  frequency       CarePlanFrequency
+  frequencyCustom String?
+  nextReviewDate  DateTime
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  createdByUserId String
+  updatedByUserId String?
+  goals           CarePlanGoalItem[]
+  interventions   CarePlanIntervention[]
+  reviews         CarePlanReview[]
+  resident        Resident               @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@index([residentId])
+  @@index([residentId, status])
+  @@index([nextReviewDate])
+}
+
+model CarePlanGoalItem {
+  id            String       @id @default(cuid())
+  carePlanId    String
+  templateKey   String?
+  customText    String?      @db.Text
+  baseline      GoalBaseline
+  target        GoalBaseline
+  timeframeDays Int
+  createdAt     DateTime     @default(now())
+  carePlan      CarePlan     @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+
+  @@index([carePlanId])
+}
+
+model CarePlanIntervention {
+  id                    String           @id @default(cuid())
+  carePlanId            String
+  title                 String
+  type                  InterventionType
+  bedBoundFriendly      Boolean          @default(false)
+  dementiaFriendly      Boolean          @default(false)
+  lowVisionFriendly     Boolean          @default(false)
+  hardOfHearingFriendly Boolean          @default(false)
+  order                 Int              @default(0)
+  createdAt             DateTime         @default(now())
+  carePlan              CarePlan         @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+
+  @@index([carePlanId])
+  @@index([carePlanId, order])
+}
+
+model CarePlanReview {
+  id                  String                     @id @default(cuid())
+  carePlanId          String
+  reviewDate          DateTime                   @default(now())
+  result              ReviewResult
+  participation       CarePlanParticipationLevel
+  response            ResponseType
+  workedChips         Json?
+  adjustChips         Json?
+  note                String?                    @db.Text
+  nextReviewDateAfter DateTime
+  createdAt           DateTime                   @default(now())
+  createdByUserId     String
+  carePlan            CarePlan                   @relation(fields: [carePlanId], references: [id], onDelete: Cascade)
+
+  @@index([carePlanId])
+  @@index([reviewDate])
 }
 
 model CarePlanGoal {
@@ -506,8 +722,37 @@ model ProgressNote {
   goalLinks          GoalLink[]
 
   @@index([residentId])
+  @@index([residentId, type, createdAt])
   @@index([activityInstanceId])
   @@index([createdByUserId])
+  @@index([type, createdAt])
+}
+
+model DailyOneOnOneQueue {
+  id            String                   @id @default(cuid())
+  facilityId    String
+  residentId    String
+  queueDate     DateTime
+  queueDateKey  String
+  position      Int
+  queueSize     Int                      @default(6)
+  reason        String
+  isPinned      Boolean                  @default(false)
+  pinnedAt      DateTime?
+  pinnedForDate DateTime?
+  completedAt   DateTime?
+  skippedAt     DateTime?
+  skipReason    OneOnOneQueueSkipReason?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  facility      Facility                 @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  resident      Resident                 @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, queueDate, residentId])
+  @@index([facilityId, queueDate, position])
+  @@index([facilityId, queueDate, isPinned])
+  @@index([facilityId, queueDateKey])
+  @@index([facilityId, pinnedForDate])
 }
 
 model Volunteer {
@@ -554,6 +799,109 @@ model InventoryItem {
 
   @@index([facilityId])
   @@index([category])
+}
+
+model BudgetStockItem {
+  id             String               @id @default(cuid())
+  facilityId     String
+  name           String
+  category       String
+  unit           String?
+  onHand         Int                  @default(0)
+  parLevel       Int                  @default(0)
+  reorderPoint   Int?
+  costPerUnit    Float?
+  vendor         String?
+  isActive       Boolean              @default(true)
+  legacySource   String?
+  legacySourceId String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  facility       Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  expenses       BudgetStockExpense[]
+  sales          BudgetStockSale[]
+
+  @@unique([facilityId, legacySource, legacySourceId])
+  @@index([facilityId, category])
+  @@index([facilityId, isActive])
+  @@index([facilityId, onHand])
+  @@index([facilityId, reorderPoint])
+}
+
+model BudgetStockCategory {
+  id           String               @id @default(cuid())
+  facilityId   String
+  name         String
+  monthlyLimit Float                @default(0)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  facility     Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  expenses     BudgetStockExpense[]
+
+  @@unique([facilityId, name])
+  @@index([facilityId])
+}
+
+model BudgetStockExpense {
+  id                String               @id @default(cuid())
+  facilityId        String
+  date              DateTime
+  category          String
+  amount            Float
+  vendor            String?
+  note              String?
+  linkedItemId      String?
+  linkedItem        BudgetStockItem?     @relation(fields: [linkedItemId], references: [id], onDelete: SetNull)
+  categoryId        String?
+  budgetCategory    BudgetStockCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  legacySource      String?
+  legacySourceId    String?
+  legacyFingerprint String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  facility          Facility             @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, legacySource, legacySourceId])
+  @@unique([facilityId, legacyFingerprint])
+  @@index([facilityId, date])
+  @@index([facilityId, category])
+  @@index([linkedItemId])
+  @@index([categoryId])
+}
+
+model BudgetStockSale {
+  id               String          @id @default(cuid())
+  facilityId       String
+  itemId           String
+  date             DateTime        @default(now())
+  qty              Int
+  sellPricePerUnit Float
+  revenue          Float
+  costBasis        Float
+  profit           Float
+  residentName     String?
+  note             String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  facility         Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  item             BudgetStockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, date])
+  @@index([facilityId, itemId])
+  @@index([itemId, date])
+}
+
+model BudgetStockMigrationMeta {
+  id         String   @id @default(cuid())
+  facilityId String
+  key        String
+  valueJson  Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, key])
+  @@index([facilityId])
 }
 
 model InventoryTxn {

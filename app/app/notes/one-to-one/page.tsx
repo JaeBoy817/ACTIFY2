@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { subDays } from "date-fns";
 import { z } from "zod";
 
 import { OneToOneLiveWorkspace } from "./one-to-one-live-workspace";
@@ -61,7 +60,7 @@ export default async function OneToOneNotesPage({
   const residentIds = new Set(residents.map((resident) => resident.id));
   const residentIdFilter = residentIds.has(requestedResidentId) ? requestedResidentId : "";
 
-  const [notes, totalNotesCount, notesLast30Days] = await Promise.all([
+  const [notes, totalNotesCount, notesLast30DayResidents] = await Promise.all([
     prisma.progressNote.findMany({
       where: {
         type: "ONE_TO_ONE",
@@ -93,17 +92,19 @@ export default async function OneToOneNotesPage({
         resident: { facilityId: context.facilityId }
       }
     }),
-    prisma.progressNote.findMany({
+    prisma.progressNote.groupBy({
+      by: ["residentId"],
       where: {
         type: "ONE_TO_ONE",
         resident: { facilityId: context.facilityId },
-        createdAt: { gte: subDays(new Date(), 30) }
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        }
       },
-      select: { residentId: true }
     })
   ]);
 
-  const residentsTouchedLast30 = new Set(notesLast30Days.map((row) => row.residentId)).size;
+  const residentsTouchedLast30 = notesLast30DayResidents.length;
 
   async function createOneToOneNote(formData: FormData) {
     "use server";
@@ -193,10 +194,6 @@ export default async function OneToOneNotesPage({
     });
 
     if (!existing) return;
-
-    await prisma.activitiesCarePlanEvidenceLink.deleteMany({
-      where: { progressNoteId: noteId }
-    });
 
     await prisma.progressNote.delete({ where: { id: noteId } });
 

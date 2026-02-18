@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "node --import tsx prisma/seed.ts",
     "templates:import:custom": "node --import tsx scripts/import-activity-templates-custom-json.ts",
@@ -17,6 +18,8 @@
     "residents:import:jason": "node --import tsx scripts/importResidentsJasonAddington.ts",
     "import:1to1:jason": "node --import tsx scripts/importOneOnOneNotesJasonAddington.ts",
     "calendar:import:feb-2026": "node --import tsx scripts/import-calendar-feb-2026.ts",
+    "migrate:budget-stock": "node --import tsx scripts/migrateBudgetStock.ts",
+    "test:budget-stock": "node --import tsx --test lib/budget-stock/__tests__/logic.test.ts",
     "test:calendar": "node --import tsx --test lib/calendar/__tests__/calendar-logic.test.ts"
   },
   "dependencies": {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
   BarChart3,
   CalendarDays,
   ClipboardCheck,
@@ -73,9 +74,10 @@ const groupedLinks: SidebarGroup[] = [
     icon: FolderOpen,
     links: [
       { href: "/app/volunteers", label: "Volunteers", icon: Handshake, moduleKey: "volunteers" },
-      { href: "/app/budget", label: "Budget + Stock", icon: Landmark, moduleKey: "inventory" },
+      { href: "/app/dashboard/budget-stock", label: "Budget + Stock", icon: Landmark, moduleKey: "inventory" },
       { href: "/app/resident-council", label: "Resident Council", icon: UsersRound, moduleKey: "residentCouncil" },
-      { href: "/app/reports", label: "Reports", icon: FileText, moduleKey: "reports" }
+      { href: "/app/reports", label: "Reports", icon: FileText, moduleKey: "reports" },
+      { href: "/app/notifications", label: "Notifications", icon: Bell }
     ]
   }
 ];

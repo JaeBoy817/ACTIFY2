@@ -1,33 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { subDays } from "date-fns";
 import { z } from "zod";
 
-import { GoalProgressChart } from "@/components/app/goal-progress-chart";
+import { ResidentPlanSection } from "@/components/residents/ResidentPlanSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { logAudit } from "@/lib/audit";
 import { getFacilityContextWithSubscription } from "@/lib/page-guards";
+import { barriers as planBarriers, goalTemplates, interventions as planInterventions } from "@/lib/planLibrary";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-
-const goalSchema = z.object({
-  type: z.enum(["SOCIALIZATION", "COGNITION", "MOBILITY_ENGAGEMENT", "LEISURE_SKILLS"]),
-  description: z.string().min(3),
-  targetMetric: z.string().optional()
-});
-
-const evidenceSchema = z.object({
-  goalId: z.string().min(1),
-  attendanceId: z.string().optional(),
-  noteId: z.string().optional()
-});
 
 const assessmentSchema = z.object({
   music: z.string().optional(),
@@ -42,6 +29,42 @@ const familySchema = z.object({
   bestContactTimes: z.string().optional(),
   preferences: z.string().optional(),
   calmingThings: z.string().optional()
+});
+
+const residentPlanItemSchema = z
+  .object({
+    residentId: z.string().min(1),
+    planItemId: z.string().optional(),
+    planAreaKey: z.enum([
+      "LEISURE_ENGAGEMENT",
+      "SOCIALIZATION",
+      "COGNITIVE_STIMULATION",
+      "MOOD_WELLBEING",
+      "PHYSICAL_ENGAGEMENT",
+      "COMMUNICATION_SUPPORT",
+      "SENSORY_STIMULATION",
+      "BEHAVIORAL_SUPPORT",
+      "SPIRITUAL_CULTURAL",
+      "COMMUNITY_INTEGRATION"
+    ]),
+    goalTemplateId: z.string().optional(),
+    customGoalText: z.string().optional(),
+    targetFrequency: z.enum(["DAILY", "TWO_TO_THREE_WEEK", "WEEKLY", "MONTHLY", "PRN"]),
+    cueingLevel: z.enum(["NONE", "VERBAL", "VISUAL", "TACTILE_HAND_OVER_HAND", "ENVIRONMENTAL"]),
+    groupPreference: z.enum(["GROUP", "ONE_TO_ONE", "INDEPENDENT", "MIXED"]),
+    interventions: z.array(z.string()).min(1),
+    barriers: z.array(z.string()).optional().default([]),
+    notes: z.string().optional(),
+    active: z.boolean().default(true)
+  })
+  .refine(
+    (value) => Boolean(value.goalTemplateId) || Boolean(value.customGoalText?.trim()),
+    { message: "Select a goal template or add a custom goal.", path: ["goalTemplateId"] }
+  );
+
+const residentPlanArchiveSchema = z.object({
+  residentId: z.string().min(1),
+  planItemId: z.string().min(1)
 });
 
 function suggestProgramsFromAssessment(input: { music?: string; topics?: string; faith?: string; hobbies?: string }) {
@@ -81,6 +104,38 @@ function suggestProgramsFromAssessment(input: { music?: string; topics?: string;
   return Array.from(suggestions);
 }
 
+function parseBoolean(raw: FormDataEntryValue | null) {
+  return raw === "on" || raw === "true" || raw === "1";
+}
+
+function formatBirthDate(value: Date | null) {
+  if (!value) return "Not set";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  }).format(value);
+}
+
+function getNextBirthdaySummary(value: Date | null) {
+  if (!value) return "Add a birthday to track reminders.";
+
+  const now = new Date();
+  const month = value.getUTCMonth();
+  const day = value.getUTCDate();
+
+  let next = new Date(Date.UTC(now.getUTCFullYear(), month, day, 12, 0, 0));
+  if (next.getTime() < now.getTime()) {
+    next = new Date(Date.UTC(now.getUTCFullYear() + 1, month, day, 12, 0, 0));
+  }
+
+  const daysUntil = Math.ceil((next.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  if (daysUntil <= 0) return "Birthday is today.";
+  if (daysUntil === 1) return "Birthday is tomorrow.";
+  return `${daysUntil} days until next birthday.`;
+}
+
 export default async function ResidentProfilePage({ params }: { params: { id: string } }) {
   const context = await getFacilityContextWithSubscription();
 
@@ -91,21 +146,6 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
     },
     include: {
       unit: true,
-      carePlanGoals: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          goalLinks: {
-            include: {
-              attendance: {
-                include: { activityInstance: true }
-              },
-              note: {
-                include: { activityInstance: true }
-              }
-            }
-          }
-        }
-      },
       assessments: {
         orderBy: { createdAt: "desc" },
         take: 5
@@ -123,101 +163,17 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
         include: { activityInstance: true },
         orderBy: { createdAt: "desc" },
         take: 30
+      },
+      planItems: {
+        orderBy: [{ active: "desc" }, { updatedAt: "desc" }]
       }
     }
   });
 
   if (!resident) notFound();
 
-  const ninetyDays = subDays(new Date(), 90);
-  const thirtyDays = subDays(new Date(), 30);
-
-  const goalProgressByMonth = new Map<string, number>();
-  resident.carePlanGoals.forEach((goal) => {
-    goal.goalLinks
-      .filter((link) => link.createdAt >= ninetyDays)
-      .forEach((link) => {
-        const label = link.createdAt.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        goalProgressByMonth.set(label, (goalProgressByMonth.get(label) ?? 0) + 1);
-      });
-  });
-
-  const chartData = Array.from(goalProgressByMonth.entries()).map(([month, count]) => ({ month, count }));
-
-  const last30EvidenceCount = resident.carePlanGoals.reduce(
-    (total, goal) => total + goal.goalLinks.filter((link) => link.createdAt >= thirtyDays).length,
-    0
-  );
-
-  async function createGoal(formData: FormData) {
-    "use server";
-
-    const scoped = await getFacilityContextWithSubscription();
-    assertWritable(scoped.role);
-
-    const parsed = goalSchema.parse({
-      type: formData.get("type"),
-      description: formData.get("description"),
-      targetMetric: formData.get("targetMetric") || undefined
-    });
-
-    const goal = await prisma.carePlanGoal.create({
-      data: {
-        residentId: params.id,
-        type: parsed.type,
-        description: parsed.description,
-        targetMetric: parsed.targetMetric,
-        isActive: true
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "CarePlanGoal",
-      entityId: goal.id,
-      after: goal
-    });
-
-    revalidatePath(`/app/residents/${params.id}`);
-  }
-
-  async function linkEvidence(formData: FormData) {
-    "use server";
-
-    const scoped = await getFacilityContextWithSubscription();
-    assertWritable(scoped.role);
-
-    const parsed = evidenceSchema.parse({
-      goalId: formData.get("goalId"),
-      attendanceId: formData.get("attendanceId") || undefined,
-      noteId: formData.get("noteId") || undefined
-    });
-
-    if (!parsed.attendanceId && !parsed.noteId) {
-      return;
-    }
-
-    const link = await prisma.goalLink.create({
-      data: {
-        goalId: parsed.goalId,
-        attendanceId: parsed.attendanceId || null,
-        noteId: parsed.noteId || null
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "GoalLink",
-      entityId: link.id,
-      after: link
-    });
-
-    revalidatePath(`/app/residents/${params.id}`);
-  }
+  const canEditPlanAreas = context.role !== "READ_ONLY";
+  const activePlanAreasCount = resident.planItems.filter((item) => item.active).length;
 
   async function createAssessment(formData: FormData) {
     "use server";
@@ -278,6 +234,163 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
     revalidatePath(`/app/residents/${params.id}`);
   }
 
+  async function saveResidentPlanItem(formData: FormData) {
+    "use server";
+
+    const scoped = await getFacilityContextWithSubscription();
+    assertWritable(scoped.role);
+
+    const parsed = residentPlanItemSchema.parse({
+      residentId: String(formData.get("residentId") || ""),
+      planItemId: String(formData.get("planItemId") || "") || undefined,
+      planAreaKey: String(formData.get("planAreaKey") || ""),
+      goalTemplateId: String(formData.get("goalTemplateId") || "") || undefined,
+      customGoalText: String(formData.get("customGoalText") || "") || undefined,
+      targetFrequency: String(formData.get("targetFrequency") || ""),
+      cueingLevel: String(formData.get("cueingLevel") || ""),
+      groupPreference: String(formData.get("groupPreference") || ""),
+      interventions: formData.getAll("interventions").map(String).filter(Boolean),
+      barriers: formData.getAll("barriers").map(String).filter(Boolean),
+      notes: String(formData.get("notes") || "") || undefined,
+      active: parseBoolean(formData.get("active"))
+    });
+
+    if (parsed.residentId !== params.id) {
+      throw new Error("Resident mismatch for plan item save.");
+    }
+
+    const residentScoped = await prisma.resident.findFirst({
+      where: {
+        id: parsed.residentId,
+        facilityId: scoped.facilityId
+      },
+      select: { id: true }
+    });
+    if (!residentScoped) {
+      throw new Error("Resident not found in your facility.");
+    }
+
+    const validTemplateIds = new Set(goalTemplates[parsed.planAreaKey].map((template) => template.id));
+    if (parsed.goalTemplateId && !validTemplateIds.has(parsed.goalTemplateId)) {
+      throw new Error("Selected goal template is not valid for this plan area.");
+    }
+
+    const validInterventionKeys = new Set(planInterventions[parsed.planAreaKey].map((item) => item.key));
+    const sanitizedInterventions = Array.from(new Set(parsed.interventions)).filter((value) => validInterventionKeys.has(value));
+    if (sanitizedInterventions.length === 0) {
+      throw new Error("Select at least one valid intervention.");
+    }
+
+    const validBarrierKeys = new Set(planBarriers.map((barrier) => barrier.key));
+    const sanitizedBarriers = Array.from(new Set(parsed.barriers)).filter((value) => validBarrierKeys.has(value));
+
+    const payload = {
+      residentId: parsed.residentId,
+      planAreaKey: parsed.planAreaKey,
+      goalTemplateId: parsed.customGoalText?.trim() ? null : parsed.goalTemplateId ?? null,
+      customGoalText: parsed.customGoalText?.trim() ? parsed.customGoalText.trim() : null,
+      targetFrequency: parsed.targetFrequency,
+      interventions: sanitizedInterventions,
+      cueingLevel: parsed.cueingLevel,
+      groupPreference: parsed.groupPreference,
+      barriers: sanitizedBarriers,
+      notes: parsed.notes?.trim() ? parsed.notes.trim() : null,
+      active: parsed.active
+    };
+
+    if (parsed.planItemId) {
+      const existing = await prisma.residentPlanItem.findFirst({
+        where: {
+          id: parsed.planItemId,
+          residentId: parsed.residentId,
+          resident: {
+            facilityId: scoped.facilityId
+          }
+        }
+      });
+      if (!existing) {
+        throw new Error("Plan item not found.");
+      }
+
+      const updated = await prisma.residentPlanItem.update({
+        where: { id: parsed.planItemId },
+        data: payload
+      });
+
+      await logAudit({
+        facilityId: scoped.facilityId,
+        actorUserId: scoped.user.id,
+        action: "UPDATE",
+        entityType: "ResidentPlanItem",
+        entityId: updated.id,
+        before: existing,
+        after: updated
+      });
+    } else {
+      const created = await prisma.residentPlanItem.create({
+        data: payload
+      });
+
+      await logAudit({
+        facilityId: scoped.facilityId,
+        actorUserId: scoped.user.id,
+        action: "CREATE",
+        entityType: "ResidentPlanItem",
+        entityId: created.id,
+        after: created
+      });
+    }
+
+    revalidatePath(`/app/residents/${parsed.residentId}`);
+  }
+
+  async function archiveResidentPlanItem(formData: FormData) {
+    "use server";
+
+    const scoped = await getFacilityContextWithSubscription();
+    assertWritable(scoped.role);
+
+    const parsed = residentPlanArchiveSchema.parse({
+      residentId: String(formData.get("residentId") || ""),
+      planItemId: String(formData.get("planItemId") || "")
+    });
+
+    if (parsed.residentId !== params.id) {
+      throw new Error("Resident mismatch for archive action.");
+    }
+
+    const existing = await prisma.residentPlanItem.findFirst({
+      where: {
+        id: parsed.planItemId,
+        residentId: parsed.residentId,
+        resident: {
+          facilityId: scoped.facilityId
+        }
+      }
+    });
+
+    if (!existing) {
+      throw new Error("Plan item not found.");
+    }
+
+    const updated = await prisma.residentPlanItem.update({
+      where: { id: parsed.planItemId },
+      data: { active: false }
+    });
+
+    await logAudit({
+      facilityId: scoped.facilityId,
+      actorUserId: scoped.user.id,
+      action: "UPDATE",
+      entityType: "ResidentPlanItem",
+      entityId: updated.id,
+      before: existing,
+      after: updated
+    });
+
+    revalidatePath(`/app/residents/${parsed.residentId}`);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -286,6 +399,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
           <p className="text-sm text-muted-foreground">
             Room {resident.room} · {resident.unit?.name ?? "No unit"}
           </p>
+          <p className="text-sm text-muted-foreground">Birthday: {formatBirthDate(resident.birthDate)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild>
@@ -300,21 +414,21 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
         </div>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Goals tracked</CardTitle>
+            <CardTitle className="text-base">Active Plan Areas</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">{resident.carePlanGoals.length}</p>
+            <p className="text-3xl font-semibold">{activePlanAreasCount}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Evidence last 30 days</CardTitle>
+            <CardTitle className="text-base">Total Plan Areas</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">{last30EvidenceCount}</p>
+            <p className="text-3xl font-semibold">{resident.planItems.length}</p>
           </CardContent>
         </Card>
         <Card>
@@ -325,102 +439,39 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
             <p className="text-3xl font-semibold">{resident.progressNotes.length}</p>
           </CardContent>
         </Card>
-      </section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Goal progress (last 90 days)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <GoalProgressChart data={chartData} />
-        </CardContent>
-      </Card>
-
-      <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Create care plan goal</CardTitle>
+            <CardTitle className="text-base">Birthday</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={createGoal} className="space-y-3">
-              <Select name="type" defaultValue="SOCIALIZATION">
-                <SelectTrigger>
-                  <SelectValue placeholder="Goal type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SOCIALIZATION">Socialization</SelectItem>
-                  <SelectItem value="COGNITION">Cognition</SelectItem>
-                  <SelectItem value="MOBILITY_ENGAGEMENT">Mobility/Engagement</SelectItem>
-                  <SelectItem value="LEISURE_SKILLS">Leisure skills</SelectItem>
-                </SelectContent>
-              </Select>
-              <Textarea name="description" placeholder="Goal description" required />
-              <Input name="targetMetric" placeholder="Target metric (optional)" />
-              <Button type="submit">Add goal</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Link goal evidence</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={linkEvidence} className="space-y-3">
-              <select name="goalId" className="h-10 w-full rounded-md border px-3 text-sm" required>
-                <option value="">Select goal</option>
-                {resident.carePlanGoals.map((goal) => (
-                  <option key={goal.id} value={goal.id}>
-                    {goal.type}: {goal.description.slice(0, 70)}
-                  </option>
-                ))}
-              </select>
-              <select name="attendanceId" className="h-10 w-full rounded-md border px-3 text-sm">
-                <option value="">Attendance evidence (optional)</option>
-                {resident.attendance.map((attendance) => (
-                  <option key={attendance.id} value={attendance.id}>
-                    {attendance.activityInstance.title} - {attendance.status}
-                  </option>
-                ))}
-              </select>
-              <select name="noteId" className="h-10 w-full rounded-md border px-3 text-sm">
-                <option value="">Progress note evidence (optional)</option>
-                {resident.progressNotes.map((note) => (
-                  <option key={note.id} value={note.id}>
-                    {new Date(note.createdAt).toLocaleDateString()} - {note.type}
-                  </option>
-                ))}
-              </select>
-              <Button type="submit" variant="outline">Link evidence</Button>
-            </form>
+            <p className="text-base font-semibold">{formatBirthDate(resident.birthDate)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{getNextBirthdaySummary(resident.birthDate)}</p>
           </CardContent>
         </Card>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Goal evidence list</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {resident.carePlanGoals.map((goal) => (
-            <div key={goal.id} className="rounded-md border p-4">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{goal.type}</Badge>
-                <p className="text-sm font-medium">{goal.description}</p>
-              </div>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {goal.goalLinks.length === 0 && <li>No linked evidence yet.</li>}
-                {goal.goalLinks.map((link) => (
-                  <li key={link.id} className="rounded-md bg-muted/40 p-2">
-                    {link.attendance ? `Attendance: ${link.attendance.activityInstance.title} (${link.attendance.status})` : ""}
-                    {link.note ? ` Note: ${new Date(link.note.createdAt).toLocaleDateString()} ${link.note.type}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <ResidentPlanSection
+        residentId={resident.id}
+        residentName={`${resident.firstName} ${resident.lastName}`}
+        canEdit={canEditPlanAreas}
+        items={resident.planItems.map((item) => ({
+          id: item.id,
+          planAreaKey: item.planAreaKey,
+          goalTemplateId: item.goalTemplateId,
+          customGoalText: item.customGoalText,
+          targetFrequency: item.targetFrequency,
+          interventions: item.interventions,
+          cueingLevel: item.cueingLevel,
+          groupPreference: item.groupPreference,
+          barriers: item.barriers,
+          notes: item.notes,
+          active: item.active,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString()
+        }))}
+        savePlanItemAction={saveResidentPlanItem}
+        archivePlanItemAction={archiveResidentPlanItem}
+      />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>

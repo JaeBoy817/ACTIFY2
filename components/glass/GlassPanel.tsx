@@ -11,7 +11,12 @@ interface GlassPanelProps extends React.HTMLAttributes<HTMLDivElement> {
 export function GlassPanel({ className, variant = "warm", hover = false, children, ...props }: GlassPanelProps) {
   return (
     <section
-      className={cn("rounded-3xl p-6 md:p-8", getGlassVariantClass(variant), hover && "glass-hover hover-lift hover-specular", className)}
+      className={cn(
+        "rounded-3xl p-6 shadow-xl shadow-black/15 md:p-8",
+        getGlassVariantClass(variant),
+        hover && "glass-hover hover-lift hover-specular",
+        className
+      )}
       {...props}
     >
       <div className="glass-content">{children}</div>

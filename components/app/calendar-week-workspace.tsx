@@ -65,7 +65,6 @@ type CalendarEventLite = {
   occurrenceKey: string | null;
   isOverride: boolean;
   conflictOverride: boolean;
-  attendanceCount: number;
   checklist: unknown;
   adaptationsEnabled: unknown;
 };
@@ -307,57 +306,87 @@ export function CalendarWeekWorkspace({
     return () => window.clearTimeout(timeout);
   }, [templateSearch]);
 
-  const weekDays = useMemo(() => {
-    const days = Array.from({ length: 7 }).map((_, index) => addDays(weekStart, index));
-    if (!activeMobileDayKey) {
-      const today = new Date();
-      const todayKey = zonedDateKey(today, timeZone);
-      const fallback = days.some((day) => zonedDateKey(day, timeZone) === todayKey)
-        ? todayKey
-        : zonedDateKey(days[0], timeZone);
-      setActiveMobileDayKey(fallback);
-    }
-    return days;
-  }, [activeMobileDayKey, timeZone, weekStart]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }).map((_, index) => addDays(weekStart, index)),
+    [weekStart]
+  );
+
+  useEffect(() => {
+    const todayKey = zonedDateKey(new Date(), timeZone);
+    const weekContainsActiveDay = activeMobileDayKey
+      ? weekDays.some((day) => zonedDateKey(day, timeZone) === activeMobileDayKey)
+      : false;
+    if (weekContainsActiveDay) return;
+
+    const fallback = weekDays.some((day) => zonedDateKey(day, timeZone) === todayKey)
+      ? todayKey
+      : zonedDateKey(weekDays[0], timeZone);
+    setActiveMobileDayKey(fallback);
+  }, [activeMobileDayKey, timeZone, weekDays]);
 
   const weekStartKey = useMemo(() => zonedDateKey(weekDays[0], timeZone), [timeZone, weekDays]);
   const monthKey = useMemo(() => format(weekDays[0], "yyyy-MM-01"), [weekDays]);
   const todayKey = useMemo(() => zonedDateKey(new Date(), timeZone), [timeZone]);
-  const weekLabel = `${format(weekDays[0], "MMM d")} - ${format(weekDays[6], "MMM d, yyyy")}`;
+  const weekLabel = useMemo(
+    () => `${format(weekDays[0], "MMM d")} - ${format(weekDays[6], "MMM d, yyyy")}`,
+    [weekDays]
+  );
   const slots = useMemo(() => createWeekSlots(), []);
   const totalGridHeight = slots.length * SLOT_HEIGHT;
 
   const loadWeekEvents = useCallback(
-    async (targetWeekStart: Date) => {
+    async (
+      targetWeekStart: Date,
+      options?: {
+        signal?: AbortSignal;
+        silent?: boolean;
+      }
+    ) => {
       const rangeStart = startOfDay(targetWeekStart);
       const rangeEnd = endOfDay(addDays(rangeStart, 6));
+      const silent = Boolean(options?.silent);
 
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const response = await fetch(
           `/api/calendar/range?start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}&view=week`,
-          { cache: "no-store" }
+          {
+            cache: "no-store",
+            signal: options?.signal
+          }
         );
+        if (options?.signal?.aborted) return;
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(parseApiErrorMessage(payload, "Could not load week schedule."));
         }
         setEvents(Array.isArray(payload.activities) ? payload.activities : []);
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         toast({
           title: "Unable to load week schedule",
           description: error instanceof Error ? error.message : "Please try again.",
           variant: "destructive"
         });
       } finally {
-        setLoading(false);
+        if (!silent && !options?.signal?.aborted) {
+          setLoading(false);
+        }
       }
     },
     [toast]
   );
 
   useEffect(() => {
-    void loadWeekEvents(weekStart);
+    const controller = new AbortController();
+    void loadWeekEvents(weekStart, { signal: controller.signal });
+    return () => {
+      controller.abort();
+    };
   }, [loadWeekEvents, weekStart]);
 
   const templatesById = useMemo(
@@ -392,34 +421,102 @@ export function CalendarWeekWorkspace({
     const map = new Map<string, CalendarEventLite[]>();
     for (const event of events) {
       const dateKey = zonedDateKey(new Date(event.startAt), timeZone);
-      map.set(dateKey, [...(map.get(dateKey) ?? []), event]);
+      const existing = map.get(dateKey);
+      if (existing) {
+        existing.push(event);
+      } else {
+        map.set(dateKey, [event]);
+      }
     }
-    for (const [key, rows] of map.entries()) {
+    for (const rows of map.values()) {
       rows.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-      map.set(key, rows);
     }
     return map;
   }, [events, timeZone]);
 
+  const eventsById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+
   const conflictingEventIds = useMemo(() => {
     const ids = new Set<string>();
     for (const rows of eventsByDay.values()) {
-      for (let i = 0; i < rows.length; i += 1) {
-        for (let j = i + 1; j < rows.length; j += 1) {
-          if (rows[i].location !== rows[j].location) continue;
-          const aStart = new Date(rows[i].startAt).getTime();
-          const aEnd = new Date(rows[i].endAt).getTime();
-          const bStart = new Date(rows[j].startAt).getTime();
-          const bEnd = new Date(rows[j].endAt).getTime();
-          if (aStart < bEnd && aEnd > bStart) {
-            ids.add(rows[i].id);
-            ids.add(rows[j].id);
+      const byLocation = new Map<string, Array<{ id: string; start: number; end: number }>>();
+      for (const row of rows) {
+        const bucket = byLocation.get(row.location) ?? [];
+        bucket.push({
+          id: row.id,
+          start: new Date(row.startAt).getTime(),
+          end: new Date(row.endAt).getTime()
+        });
+        byLocation.set(row.location, bucket);
+      }
+
+      for (const locationRows of byLocation.values()) {
+        locationRows.sort((a, b) => a.start - b.start);
+        const active: Array<{ id: string; end: number }> = [];
+
+        for (const row of locationRows) {
+          while (active.length > 0 && active[0].end <= row.start) {
+            active.shift();
           }
+          if (active.length > 0) {
+            ids.add(row.id);
+            for (const overlapping of active) {
+              ids.add(overlapping.id);
+            }
+          }
+          active.push({ id: row.id, end: row.end });
+          active.sort((a, b) => a.end - b.end);
         }
       }
     }
     return ids;
   }, [eventsByDay]);
+
+  const eventLayoutsByDay = useMemo(() => {
+    const map = new Map<
+      string,
+      Array<{
+        event: CalendarEventLite;
+        top: number;
+        height: number;
+        compactCard: boolean;
+        tightCard: boolean;
+        isConflict: boolean;
+        hasChecklist: boolean;
+        hasAdaptations: boolean;
+        timeRangeLabel: string;
+      }>
+    >();
+
+    for (const [dayKey, dayEvents] of eventsByDay.entries()) {
+      const layouts = dayEvents.map((event) => {
+        const eventStart = new Date(event.startAt);
+        const eventEnd = new Date(event.endAt);
+        const startTime = formatInTimeZone(eventStart, timeZone, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        const endTime = formatInTimeZone(eventEnd, timeZone, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        const startMinutes = parseTimeToMinutes(startTime);
+        const endMinutes = parseTimeToMinutes(endTime);
+        const top = ((startMinutes - GRID_START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
+        const height = Math.max(((endMinutes - startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT, 28);
+        const compactCard = height < 88;
+        const tightCard = height < 68;
+        return {
+          event,
+          top,
+          height,
+          compactCard,
+          tightCard,
+          isConflict: conflictingEventIds.has(event.id),
+          hasChecklist: hasChecklistItems(event.checklist),
+          hasAdaptations: hasAdaptationsEnabled(event.adaptationsEnabled),
+          timeRangeLabel: formatEventTimeRange(event.startAt, event.endAt, timeZone)
+        };
+      });
+      map.set(dayKey, layouts);
+    }
+
+    return map;
+  }, [conflictingEventIds, eventsByDay, timeZone]);
 
   const weekActivityCount = events.length;
   const monthActivityCount = useMemo(() => {
@@ -602,7 +699,7 @@ export function CalendarWeekWorkspace({
     toast({
       title: params.successMessage
     });
-    await loadWeekEvents(weekStart);
+    await loadWeekEvents(weekStart, { silent: true });
     return true;
   }
 
@@ -725,7 +822,7 @@ export function CalendarWeekWorkspace({
       return;
     }
     toast({ title: "Event deleted" });
-    await loadWeekEvents(weekStart);
+    await loadWeekEvents(weekStart, { silent: true });
   }
 
   async function skipOccurrence() {
@@ -753,11 +850,11 @@ export function CalendarWeekWorkspace({
     }
     toast({ title: "Occurrence skipped" });
     setEditOpen(false);
-    await loadWeekEvents(weekStart);
+    await loadWeekEvents(weekStart, { silent: true });
   }
 
   async function moveEvent(eventId: string, targetDateKey: string, targetStartMinutes: number) {
-    const source = events.find((event) => event.id === eventId);
+    const source = eventsById.get(eventId);
     if (!source) return;
 
     const sourceStart = new Date(source.startAt);
@@ -820,7 +917,7 @@ export function CalendarWeekWorkspace({
     }
 
     toast({ title: "Activity moved" });
-    await loadWeekEvents(weekStart);
+    await loadWeekEvents(weekStart, { silent: true });
   }
 
   function clampGridMinute(minute: number) {
@@ -1180,7 +1277,7 @@ export function CalendarWeekWorkspace({
 
                 {weekDays.map((day, dayIndex) => {
                   const dayKey = zonedDateKey(day, timeZone);
-                  const dayEvents = eventsByDay.get(dayKey) ?? [];
+                  const dayLayouts = eventLayoutsByDay.get(dayKey) ?? [];
                   return (
                     <div
                       key={`day-col-${dayKey}`}
@@ -1221,21 +1318,7 @@ export function CalendarWeekWorkspace({
                         />
                       ))}
 
-                      {dayEvents.map((event) => {
-                        const eventStart = new Date(event.startAt);
-                        const eventEnd = new Date(event.endAt);
-                        const startTime = formatInTimeZone(eventStart, timeZone, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-                        const endTime = formatInTimeZone(eventEnd, timeZone, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-                        const startMinutes = parseTimeToMinutes(startTime);
-                        const endMinutes = parseTimeToMinutes(endTime);
-                        const top = ((startMinutes - GRID_START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
-                        const height = Math.max(((endMinutes - startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT, 28);
-                        const compactCard = height < 88;
-                        const tightCard = height < 68;
-                        const isConflict = conflictingEventIds.has(event.id);
-                        const hasChecklist = hasChecklistItems(event.checklist);
-                        const hasAdaptations = hasAdaptationsEnabled(event.adaptationsEnabled);
-
+                      {dayLayouts.map(({ event, top, height, compactCard, tightCard, isConflict, hasChecklist, hasAdaptations, timeRangeLabel }) => {
                         return (
                           <div
                             key={event.id}
@@ -1351,7 +1434,7 @@ export function CalendarWeekWorkspace({
 
                             <p className="truncate pr-7 font-semibold text-foreground">{event.title}</p>
                             <p className="truncate pr-7 text-[11px] text-foreground/70">
-                              {formatEventTimeRange(event.startAt, event.endAt, timeZone)}
+                              {timeRangeLabel}
                             </p>
                             {!tightCard ? <p className="truncate pr-7 text-[11px] text-foreground/65">{event.location}</p> : null}
                             <div className={cn("mt-1 flex flex-wrap items-center gap-1.5 pr-7", tightCard && "mt-0.5")}>

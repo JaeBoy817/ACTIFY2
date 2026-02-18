@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function InventoryPage() {
-  redirect("/app/budget");
+  redirect("/app/dashboard/budget-stock");
 }

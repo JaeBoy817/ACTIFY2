@@ -21,6 +21,7 @@ const createResidentSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   room: z.string().min(1),
+  birthDate: z.string().optional(),
   unitId: z.string().optional(),
   status: z.enum(residentStatusOptions).default("ACTIVE"),
   bestTimesOfDay: z.string().optional(),
@@ -36,6 +37,26 @@ const bulkUpdateResidentStatusesSchema = z.object({
 });
 
 const residentStatusSchema = z.enum(residentStatusOptions);
+
+const updateResidentSchema = z.object({
+  residentId: z.string().min(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  room: z.string().min(1),
+  birthDate: z.string().optional(),
+  unitId: z.string().optional(),
+  status: z.enum(residentStatusOptions).default("ACTIVE"),
+  bestTimesOfDay: z.string().optional(),
+  notes: z.string().optional()
+});
+
+function parseBirthDateInput(value?: string) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(`${trimmed}T12:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 export default async function ResidentsPage() {
   const { facilityId, role } = await getFacilityContextWithSubscription();
@@ -69,6 +90,7 @@ export default async function ResidentsPage() {
       firstName: formData.get("firstName"),
       lastName: formData.get("lastName"),
       room: formData.get("room"),
+      birthDate: formData.get("birthDate") || undefined,
       unitId: formData.get("unitId") || undefined,
       status: formData.get("status") || "ACTIVE",
       bestTimesOfDay: formData.get("bestTimesOfDay") || undefined,
@@ -84,6 +106,7 @@ export default async function ResidentsPage() {
         firstName: parsed.firstName,
         lastName: parsed.lastName,
         room: parsed.room,
+        birthDate: parseBirthDateInput(parsed.birthDate),
         bestTimesOfDay: parsed.bestTimesOfDay,
         notes: parsed.notes
       }
@@ -194,6 +217,64 @@ export default async function ResidentsPage() {
     revalidatePath("/app/analytics");
   }
 
+  async function updateResident(formData: FormData) {
+    "use server";
+
+    const context = await getFacilityContextWithSubscription();
+    if (!canWrite(context.role)) return;
+
+    const parsed = updateResidentSchema.parse({
+      residentId: formData.get("residentId"),
+      firstName: formData.get("firstName"),
+      lastName: formData.get("lastName"),
+      room: formData.get("room"),
+      birthDate: formData.get("birthDate") || undefined,
+      unitId: formData.get("unitId") || undefined,
+      status: formData.get("status") || "ACTIVE",
+      bestTimesOfDay: formData.get("bestTimesOfDay") || undefined,
+      notes: formData.get("notes") || undefined
+    });
+
+    const existing = await prisma.resident.findFirst({
+      where: {
+        id: parsed.residentId,
+        facilityId: context.facilityId
+      }
+    });
+    if (!existing) return;
+
+    const updated = await prisma.resident.update({
+      where: { id: existing.id },
+      data: {
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
+        room: parsed.room,
+        birthDate: parseBirthDateInput(parsed.birthDate),
+        unitId: parsed.unitId || null,
+        status: parsed.status,
+        isActive: statusIsActive(parsed.status),
+        bestTimesOfDay: parsed.bestTimesOfDay,
+        notes: parsed.notes
+      }
+    });
+
+    await logAudit({
+      facilityId: context.facilityId,
+      actorUserId: context.user.id,
+      action: "UPDATE",
+      entityType: "Resident",
+      entityId: updated.id,
+      before: existing,
+      after: updated
+    });
+
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${updated.id}`);
+    revalidatePath(`/app/residents/${updated.id}/care-plan`);
+    revalidatePath("/app/attendance");
+    revalidatePath("/app/analytics");
+  }
+
   return (
     <div className="space-y-6">
       <ResidentsLiveTable
@@ -202,12 +283,21 @@ export default async function ResidentsPage() {
           firstName: resident.firstName,
           lastName: resident.lastName,
           room: resident.room,
+          unitId: resident.unitId,
           unitName: resident.unit?.name ?? null,
           status: resident.status as ResidentStatusValue,
+          birthDate: resident.birthDate?.toISOString() ?? null,
+          bestTimesOfDay: resident.bestTimesOfDay ?? "",
+          notes: resident.notes ?? "",
           attendanceCount: resident._count.attendance
+        }))}
+        units={units.map((unit) => ({
+          id: unit.id,
+          name: unit.name
         }))}
         allowCreate={allowCreate}
         saveAllResidentStatuses={saveAllResidentStatuses}
+        updateResident={updateResident}
         deleteResident={deleteResident}
       />
 
@@ -220,6 +310,7 @@ export default async function ResidentsPage() {
           <Input name="firstName" placeholder="First name" required disabled={!allowCreate} className="bg-white/90" />
           <Input name="lastName" placeholder="Last name" required disabled={!allowCreate} className="bg-white/90" />
           <Input name="room" placeholder="Room" required disabled={!allowCreate} className="bg-white/90" />
+          <Input name="birthDate" type="date" placeholder="Birthday" disabled={!allowCreate} className="bg-white/90" />
           <select name="unitId" className="h-10 rounded-md border border-white/70 bg-white/90 px-3 text-sm" disabled={!allowCreate}>
             <option value="">No unit</option>
             {units.map((unit) => (

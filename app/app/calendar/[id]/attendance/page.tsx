@@ -94,8 +94,19 @@ export default async function AttendancePage({
 
   const activity = await prisma.activityInstance.findFirst({
     where: { id: params.id, facilityId: context.facilityId },
-    include: {
-      attendance: true
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      attendance: {
+        select: {
+          id: true,
+          residentId: true,
+          status: true,
+          barrierReason: true,
+          notes: true
+        }
+      }
     }
   });
 
@@ -106,7 +117,19 @@ export default async function AttendancePage({
       facilityId: context.facilityId,
       isActive: true
     },
-    include: { unit: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      room: true,
+      status: true,
+      notes: true,
+      unit: {
+        select: {
+          name: true
+        }
+      }
+    },
     orderBy: [{ unit: { name: "asc" } }, { room: "asc" }, { lastName: "asc" }]
   });
 

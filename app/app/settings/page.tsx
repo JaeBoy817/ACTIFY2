@@ -35,7 +35,7 @@ export default async function SettingsPage({
 }) {
   const context = await requireFacilityContext();
 
-  const [facilitySettings, userSettings, users, units] = await Promise.all([
+  const [facilitySettings, userSettings, users, units, auditEntries] = await Promise.all([
     ensureFacilitySettingsRecord({
       facilityId: context.facilityId,
       timezone: context.facility.timezone,
@@ -59,6 +59,25 @@ export default async function SettingsPage({
         name: true
       },
       orderBy: { name: "asc" }
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        facilityId: context.facilityId,
+        OR: [{ action: "SETTINGS_UPDATE" }, { action: "ROLE_UPDATE" }]
+      },
+      select: {
+        id: true,
+        action: true,
+        entityType: true,
+        createdAt: true,
+        actorUser: {
+          select: {
+            name: true
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20
     })
   ]);
 
@@ -77,6 +96,13 @@ export default async function SettingsPage({
         role: user.role as Role
       }))}
       units={units}
+      auditEntries={auditEntries.map((entry) => ({
+        id: entry.id,
+        action: entry.action,
+        entityType: entry.entityType,
+        createdAt: entry.createdAt.toISOString(),
+        actorName: entry.actorUser?.name ?? null
+      }))}
       facilitySettings={parseFacilitySettingsRow(facilitySettings)}
       userSettings={parseUserSettingsRow(userSettings)}
     />

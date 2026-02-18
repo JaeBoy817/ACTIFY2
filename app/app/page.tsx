@@ -6,11 +6,16 @@ import { GlassCard } from "@/components/glass/GlassCard";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { LiveDateTimeBadge } from "@/components/app/live-date-time-badge";
 import { DailyBoostQuote } from "@/components/dashboard/DailyBoostQuote";
+import { OneOnOneSpotlight } from "@/components/dashboard/one-on-one-spotlight";
 import { CountUpValue } from "@/components/motion/CountUpValue";
 import { Reveal } from "@/components/motion/Reveal";
 import { Badge } from "@/components/ui/badge";
 import { requireFacilityContext } from "@/lib/auth";
 import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
+import { getOneOnOneSpotlightSnapshot, serializeOneOnOneSpotlightSnapshot } from "@/lib/one-on-one-queue/service";
+import { asModuleFlags } from "@/lib/module-flags";
+import { ensureUserNotificationFeed } from "@/lib/notifications/service";
+import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules } from "@/lib/settings/defaults";
 import {
@@ -31,8 +36,15 @@ const attendanceStatusMeta = [
 ];
 
 export default async function DashboardPage() {
-  const { facilityId, facility } = await requireFacilityContext();
+  const { facilityId, facility, role, user } = await requireFacilityContext();
+  const canEditOneOnOne = canWrite(role);
   const timeZone = facility.timezone;
+  const moduleFlags = asModuleFlags(facility.moduleFlags);
+  await ensureUserNotificationFeed({
+    userId: user.id,
+    facilityId,
+    timezone: timeZone
+  });
 
   const now = new Date();
   const weekStart = startOfZonedWeek(now, timeZone, 1);
@@ -45,16 +57,17 @@ export default async function DashboardPage() {
   const presenceWindowEnd = dayEnd;
 
   const [
-    activeResidentRows,
+    activeResidentCount,
     scheduledThisWeek,
-    attendanceRows30,
     presenceRows,
     inventoryLevels,
     prizeLevels,
     todaysActivities,
-    settings
+    settings,
+    oneOnOneSnapshot,
+    birthdayResidents
   ] = await Promise.all([
-    prisma.resident.findMany({
+    prisma.resident.count({
       where: {
         facilityId,
         OR: [
@@ -65,7 +78,6 @@ export default async function DashboardPage() {
           status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
         }
       },
-      select: { id: true }
     }),
     prisma.activityInstance.count({
       where: {
@@ -73,36 +85,6 @@ export default async function DashboardPage() {
         startAt: {
           gte: weekStart,
           lte: weekEnd
-        }
-      }
-    }),
-    prisma.attendance.findMany({
-      where: {
-        resident: {
-          facilityId,
-          OR: [
-            { isActive: true },
-            { status: { in: ["ACTIVE", "BED_BOUND"] } }
-          ],
-          NOT: {
-            status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
-          }
-        },
-        activityInstance: {
-          facilityId,
-          startAt: {
-            gte: last30,
-            lte: now
-          }
-        }
-      },
-      select: {
-        residentId: true,
-        status: true,
-        activityInstance: {
-          select: {
-            startAt: true
-          }
         }
       }
     }),
@@ -172,6 +154,28 @@ export default async function DashboardPage() {
       select: {
         attendanceRulesJson: true
       }
+    }),
+    getOneOnOneSpotlightSnapshot({
+      facilityId
+    }),
+    prisma.resident.findMany({
+      where: {
+        facilityId,
+        birthDate: { not: null },
+        NOT: {
+          status: {
+            in: ["DISCHARGED", "TRANSFERRED", "DECEASED"]
+          }
+        }
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        room: true,
+        birthDate: true
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }]
     })
   ]);
 
@@ -185,15 +189,16 @@ export default async function DashboardPage() {
   };
   const engagementScaleMax = Math.max(weights.leading, weights.active, weights.present);
 
-  const activeResidents = activeResidentRows.length;
-  const activeResidentIds = activeResidentRows.map((resident) => resident.id);
+  const activeResidents = activeResidentCount;
+  const attendanceRows30 = presenceRows.filter(
+    (row) => row.activityInstance.startAt >= last30 && row.activityInstance.startAt <= now
+  );
   const facilityPresence = computeFacilityPresenceMetrics({
     rows: presenceRows.map((row) => ({
       residentId: row.residentId,
       status: row.status,
       occurredAt: row.activityInstance.startAt
     })),
-    activeResidentIds,
     activeResidentCount: activeResidents,
     now,
     timeZone
@@ -280,6 +285,13 @@ export default async function DashboardPage() {
     name: item.title,
     location: item.location
   }));
+  const todayMonthDay = formatInTimeZone(now, timeZone, { month: "2-digit", day: "2-digit" });
+  const birthdaysToday = birthdayResidents.filter((resident) => {
+    if (!resident.birthDate) return false;
+    const residentMonthDay = formatInTimeZone(resident.birthDate, "UTC", { month: "2-digit", day: "2-digit" });
+    return residentMonthDay === todayMonthDay;
+  });
+  const showBirthdaysWidget = moduleFlags.widgets.birthdays;
 
   return (
     <div className="space-y-6">
@@ -466,6 +478,46 @@ export default async function DashboardPage() {
           </GlassCard>
         </Reveal>
       </section>
+
+      <section>
+        <Reveal delayMs={220}>
+          <OneOnOneSpotlight
+            initialSnapshot={serializeOneOnOneSpotlightSnapshot(oneOnOneSnapshot)}
+            canEdit={canEditOneOnOne}
+            timeZone={timeZone}
+          />
+        </Reveal>
+      </section>
+
+      {showBirthdaysWidget ? (
+        <section>
+          <Reveal delayMs={250}>
+            <GlassCard variant="dense" className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Resident Birthdays</h2>
+                <Badge variant="secondary">{birthdaysToday.length} today</Badge>
+              </div>
+              {birthdaysToday.length === 0 ? (
+                <p className="text-sm text-foreground/70">No resident birthdays today.</p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {birthdaysToday.map((resident) => (
+                    <div key={resident.id} className="rounded-lg border border-white/70 bg-white/65 px-3 py-2.5">
+                      <p className="text-sm font-medium">{resident.firstName} {resident.lastName}</p>
+                      <p className="text-xs text-foreground/70">Room {resident.room}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <GlassButton asChild size="sm" variant="dense">
+                  <Link href="/app/residents">Open residents</Link>
+                </GlassButton>
+              </div>
+            </GlassCard>
+          </Reveal>
+        </section>
+      ) : null}
 
       <section className="mt-10 border-t border-border/60 pt-8">
         <DailyBoostQuote />

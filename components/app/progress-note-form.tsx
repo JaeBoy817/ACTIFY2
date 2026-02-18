@@ -28,17 +28,10 @@ type TemplateOption = {
   bodyTemplate: string;
 };
 
-type GoalOption = {
-  id: string;
-  residentId: string;
-  label: string;
-};
-
 type ProgressNoteFormProps = {
   residents: ResidentOption[];
   activities: ActivityOption[];
   templates: TemplateOption[];
-  goals: GoalOption[];
   action: (formData: FormData) => void;
   showIntro?: boolean;
   minNarrativeLen?: number;
@@ -64,7 +57,6 @@ export function ProgressNoteForm({
   residents,
   activities,
   templates,
-  goals,
   action,
   showIntro = true,
   minNarrativeLen = 10,
@@ -86,8 +78,6 @@ export function ProgressNoteForm({
   const resident = useMemo(() => residents.find((item) => item.id === residentId), [residents, residentId]);
   const template = useMemo(() => templates.find((item) => item.id === templateId), [templates, templateId]);
   const selectedActivity = useMemo(() => activities.find((activity) => activity.id === activityId), [activities, activityId]);
-
-  const residentGoals = useMemo(() => goals.filter((goal) => goal.residentId === residentId), [goals, residentId]);
 
   const filteredResidents = useMemo(() => {
     const q = residentSearch.trim().toLowerCase();
@@ -355,28 +345,8 @@ export function ProgressNoteForm({
         </CardContent>
       </Card>
 
-      <Card className="glass">
-        <CardHeader>
-          <CardTitle className="font-[var(--font-display)]">Goal Links</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 rounded-lg border border-border bg-white/65 p-3">
-            <p className="text-sm font-medium">Link to care plan goals (optional)</p>
-            {residentGoals.length === 0 && <p className="text-xs text-muted-foreground">No active goals for this resident yet.</p>}
-            <div className="grid gap-2">
-              {residentGoals.map((goal) => (
-                <label key={goal.id} className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" name="goalIds" value={goal.id} className="mt-1" />
-                  {goal.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-white/65 p-3">
-        <p className="text-xs text-muted-foreground">Saving adds this note to the resident timeline and linked goals.</p>
+        <p className="text-xs text-muted-foreground">Saving adds this note to the resident timeline.</p>
         <Button type="submit">Save progress note</Button>
       </div>
     </form>

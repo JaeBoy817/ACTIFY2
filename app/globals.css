@@ -70,6 +70,43 @@ body {
   @apply bg-background text-foreground antialiased;
 }
 
+section {
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
+}
+
+button {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  transition: box-shadow var(--motion-quick) var(--ease-gentle);
+}
+
+button:hover {
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+}
+
+button:disabled {
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+select {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+input,
+textarea {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  transition: box-shadow var(--motion-quick) var(--ease-gentle);
+}
+
+input:hover,
+textarea:hover {
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+}
+
+input:disabled,
+textarea:disabled {
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
 body[data-ambient="default"] {
   --ambient-opacity: 0.42;
   --ambient-intensity: 1;
@@ -305,6 +342,51 @@ h6 {
 }
 
 .glass-content {
+  position: relative;
+  z-index: 1;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.glass-panel-strong {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.glass-chip {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.gradient-drift {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.gradient-drift::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.35), transparent 45%),
+    radial-gradient(circle at 80% 30%, rgba(16, 185, 129, 0.25), transparent 45%),
+    radial-gradient(circle at 50% 80%, rgba(236, 72, 153, 0.22), transparent 55%);
+  filter: blur(28px);
+  animation: drift 14s ease-in-out infinite;
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.gradient-drift > * {
   position: relative;
   z-index: 1;
 }
@@ -576,6 +658,20 @@ h6 {
   .glass-warm::after,
   .glass-dense::after {
     opacity: 0.11;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(-2%, -2%) scale(1.02);
+  }
+
+  50% {
+    transform: translate(2%, 3%) scale(1.08);
+  }
+
+  100% {
+    transform: translate(-2%, -2%) scale(1.02);
   }
 }
 

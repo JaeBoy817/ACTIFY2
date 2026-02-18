@@ -20,31 +20,54 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
   const from = startOfMonth(monthDate);
   const to = endOfMonth(monthDate);
 
-  const [activities, attendance, notes, settings, facility, activeResidents] = await Promise.all([
+  const [activities, attendance, notes, settings, facility, activeResidentCount] = await Promise.all([
     prisma.activityInstance.findMany({
       where: {
         facilityId,
         startAt: { gte: from, lte: to }
       },
-      include: {
-        attendance: true
+      select: {
+        id: true,
+        title: true,
+        startAt: true
       },
       orderBy: { startAt: "asc" }
     }),
     prisma.attendance.findMany({
       where: {
+        resident: {
+          facilityId,
+          OR: [{ isActive: true }, { status: { in: ["ACTIVE", "BED_BOUND"] } }],
+          NOT: { status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] } }
+        },
         activityInstance: {
           facilityId,
           startAt: { gte: from, lte: to }
         }
       },
-      include: {
+      select: {
+        id: true,
+        residentId: true,
+        status: true,
+        barrierReason: true,
+        createdAt: true,
         resident: {
-          include: {
-            unit: true
+          select: {
+            firstName: true,
+            lastName: true,
+            unit: {
+              select: {
+                name: true
+              }
+            }
           }
         },
-        activityInstance: true
+        activityInstance: {
+          select: {
+            title: true,
+            startAt: true
+          }
+        }
       }
     }),
     prisma.progressNote.findMany({
@@ -52,9 +75,16 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
         resident: { facilityId },
         createdAt: { gte: from, lte: to }
       },
-      include: {
-        resident: true,
-        activityInstance: true
+      select: {
+        type: true,
+        narrative: true,
+        createdAt: true,
+        resident: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        }
       },
       orderBy: { createdAt: "desc" }
     }),
@@ -66,7 +96,7 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
       where: { id: facilityId },
       select: { timezone: true }
     }),
-    prisma.resident.findMany({
+    prisma.resident.count({
       where: {
         facilityId,
         OR: [
@@ -76,8 +106,7 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
         NOT: {
           status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
         }
-      },
-      select: { id: true }
+      }
     })
   ]);
 
@@ -91,23 +120,25 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
   };
 
   const attendanceCounts = {
-    present: attendance.filter((row) => row.status === "PRESENT").length,
-    active: attendance.filter((row) => row.status === "ACTIVE").length,
-    leading: attendance.filter((row) => row.status === "LEADING").length,
-    refused: attendance.filter((row) => row.status === "REFUSED").length,
-    noShow: attendance.filter((row) => row.status === "NO_SHOW").length
+    present: 0,
+    active: 0,
+    leading: 0,
+    refused: 0,
+    noShow: 0
   };
-
-  const activeResidentCount = activeResidents.length;
-  const activeResidentIds = new Set(activeResidents.map((resident) => resident.id));
   const supportiveStatuses = new Set(["PRESENT", "ACTIVE", "LEADING"]);
   const monthResidentParticipants = new Set<string>();
   const dailyParticipants = new Map<string, Set<string>>();
   const monthTimeZone = facility?.timezone ?? "UTC";
 
   for (const row of attendance) {
+    if (row.status === "PRESENT") attendanceCounts.present += 1;
+    if (row.status === "ACTIVE") attendanceCounts.active += 1;
+    if (row.status === "LEADING") attendanceCounts.leading += 1;
+    if (row.status === "REFUSED") attendanceCounts.refused += 1;
+    if (row.status === "NO_SHOW") attendanceCounts.noShow += 1;
+
     if (!supportiveStatuses.has(row.status)) continue;
-    if (!activeResidentIds.has(row.residentId)) continue;
 
     monthResidentParticipants.add(row.residentId);
     const dayKey = zonedDateKey(row.activityInstance.startAt, monthTimeZone);
@@ -154,16 +185,20 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
     return acc;
   }, {});
 
-  const oneToOneTotal = notes.filter((note) => note.type === "ONE_TO_ONE").length;
-
-  const notableOutcomes = notes
-    .filter((note) => note.narrative)
-    .slice(0, 12)
-    .map((note) => ({
-      resident: `${note.resident.firstName} ${note.resident.lastName}`,
-      createdAt: note.createdAt,
-      narrative: note.narrative
-    }));
+  let oneToOneTotal = 0;
+  const notableOutcomes: Array<{ resident: string; createdAt: Date; narrative: string }> = [];
+  for (const note of notes) {
+    if (note.type === "ONE_TO_ONE") {
+      oneToOneTotal += 1;
+    }
+    if (note.narrative && notableOutcomes.length < 12) {
+      notableOutcomes.push({
+        resident: `${note.resident.firstName} ${note.resident.lastName}`,
+        createdAt: note.createdAt,
+        narrative: note.narrative
+      });
+    }
+  }
 
   return {
     monthLabel: from.toLocaleDateString("en-US", { month: "long", year: "numeric" }),

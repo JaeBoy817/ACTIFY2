@@ -124,7 +124,12 @@ export default async function CalendarPage({
   const byDay = new Map<string, typeof activities>();
   activities.forEach((activity) => {
     const key = format(activity.startAt, "yyyy-MM-dd");
-    byDay.set(key, [...(byDay.get(key) ?? []), activity]);
+    const rows = byDay.get(key);
+    if (rows) {
+      rows.push(activity);
+    } else {
+      byDay.set(key, [activity]);
+    }
   });
 
   const days: Date[] = [];

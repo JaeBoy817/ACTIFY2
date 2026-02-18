@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   ArrowRightLeft,
   BedDouble,
@@ -10,6 +10,7 @@ import {
   DoorOpen,
   Hospital,
   PlaneTakeoff,
+  Pencil,
   Search,
   Skull,
   X,
@@ -21,8 +22,10 @@ import { GlassCard } from "@/components/glass/GlassCard";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { formatResidentStatusLabel, type ResidentStatusValue, residentStatusOptions } from "@/lib/resident-status";
 
 const bulkStatusFormId = "resident-status-bulk-form";
@@ -32,9 +35,30 @@ type ResidentListItem = {
   firstName: string;
   lastName: string;
   room: string;
+  birthDate: string | null;
+  unitId: string | null;
   unitName: string | null;
   status: ResidentStatusValue;
+  bestTimesOfDay: string;
+  notes: string;
   attendanceCount: number;
+};
+
+type UnitOption = {
+  id: string;
+  name: string;
+};
+
+type EditResidentState = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  room: string;
+  birthDate: string;
+  unitId: string;
+  status: ResidentStatusValue;
+  bestTimesOfDay: string;
+  notes: string;
 };
 
 const residentStatusMeta: Record<
@@ -85,17 +109,23 @@ const residentStatusMeta: Record<
 
 export function ResidentsLiveTable({
   residents,
+  units,
   allowCreate,
   saveAllResidentStatuses,
+  updateResident,
   deleteResident
 }: {
   residents: ResidentListItem[];
+  units: UnitOption[];
   allowCreate: boolean;
   saveAllResidentStatuses: (formData: FormData) => void | Promise<void>;
+  updateResident: (formData: FormData) => void | Promise<void>;
   deleteResident: (formData: FormData) => void | Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, ResidentStatusValue>>({});
+  const [editResident, setEditResident] = useState<EditResidentState | null>(null);
+  const [isEditPending, startEditTransition] = useTransition();
 
   useEffect(() => {
     setStatusDrafts(Object.fromEntries(residents.map((resident) => [resident.id, resident.status])));
@@ -110,12 +140,14 @@ export function ResidentsLiveTable({
       const fullName = `${resident.firstName} ${resident.lastName}`.toLowerCase();
       const reverseName = `${resident.lastName}, ${resident.firstName}`.toLowerCase();
       const statusLabel = formatResidentStatusLabel(resident.status).toLowerCase();
+      const birthdayLabel = resident.birthDate ? new Date(resident.birthDate).toLocaleDateString().toLowerCase() : "";
       return (
         fullName.includes(normalizedQuery) ||
         reverseName.includes(normalizedQuery) ||
         resident.room.toLowerCase().includes(normalizedQuery) ||
         (resident.unitName ?? "").toLowerCase().includes(normalizedQuery) ||
-        statusLabel.includes(normalizedQuery)
+        statusLabel.includes(normalizedQuery) ||
+        birthdayLabel.includes(normalizedQuery)
       );
     });
   }, [normalizedQuery, residents]);
@@ -147,6 +179,27 @@ export function ResidentsLiveTable({
     () => residents.reduce((sum, resident) => sum + resident.attendanceCount, 0),
     [residents]
   );
+
+  function openEditResident(resident: ResidentListItem) {
+    setEditResident({
+      id: resident.id,
+      firstName: resident.firstName,
+      lastName: resident.lastName,
+      room: resident.room,
+      birthDate: resident.birthDate ? resident.birthDate.slice(0, 10) : "",
+      unitId: resident.unitId ?? "",
+      status: resident.status,
+      bestTimesOfDay: resident.bestTimesOfDay,
+      notes: resident.notes
+    });
+  }
+
+  function submitResidentEdit(formData: FormData) {
+    startEditTransition(async () => {
+      await updateResident(formData);
+      setEditResident(null);
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -246,6 +299,7 @@ export function ResidentsLiveTable({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Room</TableHead>
+                <TableHead>Birthday</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead>Attendance</TableHead>
                 <TableHead>Status</TableHead>
@@ -263,6 +317,7 @@ export function ResidentsLiveTable({
                   <TableRow key={resident.id}>
                     <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                     <TableCell>{resident.room}</TableCell>
+                    <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
                     <TableCell>{resident.unitName ?? "-"}</TableCell>
                     <TableCell>{resident.attendanceCount}</TableCell>
                     <TableCell>
@@ -296,6 +351,12 @@ export function ResidentsLiveTable({
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
+                        {allowCreate ? (
+                          <Button type="button" size="sm" variant="outline" onClick={() => openEditResident(resident)}>
+                            <Pencil className="mr-1 h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                        ) : null}
                         <Button asChild size="sm" variant="ghost">
                           <Link href={`/app/residents/${resident.id}`}>Open</Link>
                         </Button>
@@ -312,7 +373,7 @@ export function ResidentsLiveTable({
               })}
               {currentResidents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="text-sm text-muted-foreground">
                     No current residents match your search.
                   </TableCell>
                 </TableRow>
@@ -333,6 +394,7 @@ export function ResidentsLiveTable({
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Room</TableHead>
+                  <TableHead>Birthday</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Attendance</TableHead>
                   <TableHead>Status</TableHead>
@@ -350,6 +412,7 @@ export function ResidentsLiveTable({
                     <TableRow key={`discharged-${resident.id}`}>
                       <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                       <TableCell>{resident.room}</TableCell>
+                      <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
                       <TableCell>{resident.unitName ?? "-"}</TableCell>
                       <TableCell>{resident.attendanceCount}</TableCell>
                       <TableCell>
@@ -383,6 +446,12 @@ export function ResidentsLiveTable({
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
+                          {allowCreate ? (
+                            <Button type="button" size="sm" variant="outline" onClick={() => openEditResident(resident)}>
+                              <Pencil className="mr-1 h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                          ) : null}
                           <Button asChild size="sm" variant="ghost">
                             <Link href={`/app/residents/${resident.id}`}>Open</Link>
                           </Button>
@@ -399,7 +468,7 @@ export function ResidentsLiveTable({
                 })}
                 {dischargedResidents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="text-sm text-muted-foreground">
                       No discharged residents match your search.
                     </TableCell>
                   </TableRow>
@@ -409,6 +478,95 @@ export function ResidentsLiveTable({
           </div>
         </div>
       </details>
+
+      <Dialog open={Boolean(editResident)} onOpenChange={(open) => !open && setEditResident(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit resident</DialogTitle>
+          </DialogHeader>
+          {editResident ? (
+            <form action={submitResidentEdit} className="space-y-3">
+              <input type="hidden" name="residentId" value={editResident.id} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  name="firstName"
+                  defaultValue={editResident.firstName}
+                  placeholder="First name"
+                  required
+                  disabled={isEditPending}
+                />
+                <Input
+                  name="lastName"
+                  defaultValue={editResident.lastName}
+                  placeholder="Last name"
+                  required
+                  disabled={isEditPending}
+                />
+                <Input
+                  name="room"
+                  defaultValue={editResident.room}
+                  placeholder="Room"
+                  required
+                  disabled={isEditPending}
+                />
+                <Input
+                  name="birthDate"
+                  type="date"
+                  defaultValue={editResident.birthDate}
+                  placeholder="Birthday"
+                  disabled={isEditPending}
+                />
+                <select
+                  name="unitId"
+                  defaultValue={editResident.unitId}
+                  className="h-10 rounded-md border border-white/70 bg-white/90 px-3 text-sm"
+                  disabled={isEditPending}
+                >
+                  <option value="">No unit</option>
+                  {units.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <select
+                name="status"
+                defaultValue={editResident.status}
+                className="h-10 w-full rounded-md border border-white/70 bg-white/90 px-3 text-sm"
+                disabled={isEditPending}
+              >
+                {residentStatusOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatResidentStatusLabel(option)}
+                  </option>
+                ))}
+              </select>
+              <Input
+                name="bestTimesOfDay"
+                defaultValue={editResident.bestTimesOfDay}
+                placeholder="Best times of day"
+                disabled={isEditPending}
+              />
+              <Textarea
+                name="notes"
+                defaultValue={editResident.notes}
+                placeholder="Resident notes"
+                rows={3}
+                disabled={isEditPending}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditResident(null)} disabled={isEditPending}>
+                  Cancel
+                </Button>
+                <GlassButton type="submit" size="sm" disabled={isEditPending}>
+                  Save resident
+                </GlassButton>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {allowCreate ? (
         <div className="flex justify-end">

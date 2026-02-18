@@ -1,13 +1,17 @@
 "use server";
 
-import { type Prisma } from "@prisma/client";
+import { FontScale, Role, type Prisma } from "@prisma/client";
+import { headers } from "next/headers";
 
 import { logAudit } from "@/lib/audit";
 import { requireFacilityContext } from "@/lib/auth";
+import { asModuleFlags } from "@/lib/module-flags";
 import { assertAdmin, assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   asRolePermissionMatrix,
+  asRoleSettingsConfig,
+  buildPermissionsJsonEnvelope,
   parseFacilitySettingsRow
 } from "@/lib/settings/defaults";
 import { ensureFacilitySettingsRecord, ensureUserSettingsRecord } from "@/lib/settings/ensure";
@@ -17,6 +21,44 @@ import {
   updateUserRoleSchema,
   userSettingsPayloadSchema
 } from "@/lib/settings/schemas";
+
+const adminOnlySections = new Set(["roles", "modules", "compliance", "docs"]);
+const directorSections = new Set(["facility", "calendar", "careplan", "reports", "inventory", "notifications"]);
+
+function getRequestMetadata() {
+  const headerStore = headers();
+  return {
+    ip: headerStore.get("x-forwarded-for") ?? null,
+    userAgent: headerStore.get("user-agent") ?? null
+  };
+}
+
+function assertSectionAccess(role: Role, section: string) {
+  if (adminOnlySections.has(section)) {
+    assertAdmin(role);
+    return;
+  }
+
+  if (directorSections.has(section) && role !== Role.ADMIN && role !== Role.AD) {
+    throw new Error("Only Admin or Activities Director can edit this settings section.");
+  }
+}
+
+function noteRequiredFieldsFromDocsFlags(flags: {
+  mood: boolean;
+  participationLevel: boolean;
+  cues: boolean;
+  responseType: boolean;
+  followUp: boolean;
+}) {
+  const fields: Array<"participationLevel" | "moodAffect" | "cuesRequired" | "response" | "followUp"> = [];
+  if (flags.participationLevel) fields.push("participationLevel");
+  if (flags.mood) fields.push("moodAffect");
+  if (flags.cues) fields.push("cuesRequired");
+  if (flags.responseType) fields.push("response");
+  if (flags.followUp) fields.push("followUp");
+  return fields;
+}
 
 export async function upsertFacilitySettings(payload: unknown) {
   const context = await requireFacilityContext();
@@ -28,59 +70,48 @@ export async function upsertFacilitySettings(payload: unknown) {
     moduleFlags: context.facility.moduleFlags
   });
 
-  const permissions = asRolePermissionMatrix(settings.permissionsJson);
-  const canEditSettings = permissions[context.role]?.settingsEdit;
-  if (!canEditSettings) {
-    throw new Error("You do not have permission to edit facility settings.");
-  }
-
   const parsed = facilitySettingsPayloadSchema.parse(payload);
-
-  if (parsed.section === "compliance") {
-    assertAdmin(context.role);
-  }
+  assertSectionAccess(context.role, parsed.section);
 
   const current = parseFacilitySettingsRow(settings);
+  const metadata = getRequestMetadata();
 
   let updateData: Prisma.FacilitySettingsUpdateInput = {};
   let facilityUpdateData: Prisma.FacilityUpdateInput | undefined;
 
   if (parsed.section === "facility") {
-    const nextBusinessHours = {
-      start: parsed.values.businessHoursStart,
-      end: parsed.values.businessHoursEnd,
-      days: parsed.values.businessDays
-    };
-    const nextPolicy = {
-      ...current.policyFlags,
-      allowSmokingTracking: parsed.values.allowSmokingTracking,
-      hideTriggersInPrint: parsed.values.hideTriggersInPrint,
-      maskSensitiveFieldsInPrint: parsed.values.maskSensitiveFieldsInPrint,
-      maskFamilyContactInPrint: parsed.values.maskFamilyContactInPrint
-    };
-
     updateData = {
-      timezone: parsed.values.timezone,
-      roomFormatRule: parsed.values.roomFormatRule,
-      roomFormatHint: parsed.values.roomFormatHint?.trim() || null,
-      businessHoursJson: nextBusinessHours,
-      policyFlagsJson: nextPolicy,
-      attendanceRulesJson: {
-        ...current.attendanceRules,
-        useBusinessHoursDefaults: parsed.values.useBusinessHoursDefaults
+      timezone: parsed.values.facility.timezone,
+      roomFormatRule: parsed.values.facility.roomFormatRule,
+      roomFormatHint: parsed.values.facility.roomFormatHint?.trim() || null,
+      businessHoursJson: parsed.values.facility.businessHours,
+      policyFlagsJson: {
+        ...current.policyFlags,
+        ...parsed.values.policyFlags,
+        allowSmokingTracking: parsed.values.facility.smoking.enabled,
+        facilityProfile: parsed.values.facility
       }
     };
     facilityUpdateData = {
-      name: parsed.values.facilityName,
-      timezone: parsed.values.timezone
+      name: parsed.values.facility.name,
+      timezone: parsed.values.facility.timezone
+    };
+  }
+
+  if (parsed.section === "roles") {
+    const matrix = asRolePermissionMatrix(parsed.values.permissionsJson);
+    const roleConfig = asRoleSettingsConfig(parsed.values.roles);
+    updateData = {
+      permissionsJson: buildPermissionsJsonEnvelope(matrix, roleConfig)
     };
   }
 
   if (parsed.section === "modules") {
-    const nextModuleFlags = {
+    const nextModuleFlags = asModuleFlags({
       mode: parsed.values.mode,
-      modules: parsed.values.modules
-    };
+      modules: parsed.values.modules,
+      widgets: parsed.values.widgets
+    });
 
     updateData = {
       moduleFlagsJson: nextModuleFlags
@@ -94,43 +125,72 @@ export async function upsertFacilitySettings(payload: unknown) {
     updateData = {
       attendanceRulesJson: {
         ...current.attendanceRules,
-        groupMinutes: parsed.values.groupMinutes,
-        oneToOneMinutes: parsed.values.oneToOneMinutes,
-        locations: parsed.values.locations,
-        warnTherapyOverlap: parsed.values.warnTherapyOverlap,
-        warnOutsideBusinessHours: parsed.values.warnOutsideBusinessHours
+        groupMinutes: parsed.values.defaults.groupMinutes,
+        oneToOneMinutes: parsed.values.defaults.oneToOneMinutes,
+        locations: parsed.values.defaults.locations,
+        warnTherapyOverlap: parsed.values.defaults.warnTherapyOverlap,
+        warnOutsideBusinessHours: parsed.values.defaults.warnOutsideBusinessHours,
+        useBusinessHoursDefaults: parsed.values.defaults.useBusinessHoursDefaults,
+        calendarSettings: {
+          ...current.attendanceRules.calendarSettings,
+          ...parsed.values.calendar,
+          setupBufferMinutes: Number(parsed.values.calendar.setupBufferMinutes)
+        }
       }
     };
   }
 
   if (parsed.section === "docs") {
+    const noteRequiredFields = noteRequiredFieldsFromDocsFlags(parsed.values.docs.requiredFields);
     updateData = {
       attendanceRulesJson: {
         ...current.attendanceRules,
         engagementWeights: {
-          present: parsed.values.presentWeight,
-          active: parsed.values.activeWeight,
-          leading: parsed.values.leadingWeight
+          present: parsed.values.scoring.presentWeight,
+          active: parsed.values.scoring.activeWeight,
+          leading: parsed.values.scoring.leadingWeight
         },
-        requireBarrierNoteFor: parsed.values.requireNoteForBarriers
+        requireBarrierNoteFor: parsed.values.scoring.requireNoteForBarriers
       },
       documentationRulesJson: {
         ...current.documentationRules,
-        noteRequiredFields: parsed.values.noteRequiredFields,
-        minNarrativeLen: parsed.values.minNarrativeLen,
-        requireGoalLinkForOneToOne: parsed.values.requireGoalLinkForOneToOne
+        noteRequiredFields,
+        minNarrativeLen: parsed.values.scoring.minNarrativeLen,
+        requireGoalLinkForOneToOne: parsed.values.scoring.requireGoalLinkForOneToOne,
+        onlyAllowTemplateNotes: parsed.values.docs.onlyAllowTemplateNotes,
+        lockNotesAfterDays:
+          parsed.values.docs.lockNotesAfterDays === "OFF" ? "OFF" : Number(parsed.values.docs.lockNotesAfterDays),
+        signature: parsed.values.docs.signature,
+        autoAddStandardLine: parsed.values.docs.autoAddStandardLine,
+        terminologyWarnings: parsed.values.docs.terminologyWarnings,
+        attachments: parsed.values.docs.attachments,
+        lateEntryMode: parsed.values.docs.lateEntryMode,
+        retentionYears: parsed.values.docs.retentionYears
       }
     };
   }
 
   if (parsed.section === "careplan") {
-    const cadenceDays = parsed.values.cadencePreset === "CUSTOM" ? parsed.values.customCadenceDays ?? 30 : Number(parsed.values.cadencePreset);
+    const cadenceDays =
+      parsed.values.carePlan.reviewCadence.preset === "CUSTOM"
+        ? parsed.values.carePlan.reviewCadence.customDays ?? 30
+        : Number(parsed.values.carePlan.reviewCadence.preset);
     updateData = {
       carePlanRulesJson: {
         ...current.carePlanRules,
         reviewCadenceDays: cadenceDays,
-        requirePersonalization: parsed.values.requirePersonalization,
-        blockReviewCompletionIfGeneric: parsed.values.blockReviewCompletionIfGeneric
+        requirePersonalization: parsed.values.carePlan.requirePersonalization,
+        blockReviewCompletionIfGeneric: parsed.values.carePlan.blockReviewCompletionIfGeneric,
+        interventionsLibraryEnabled: parsed.values.carePlan.interventionsLibraryEnabled,
+        defaultInterventions: parsed.values.carePlan.defaultInterventions,
+        goalMappingEnabled: parsed.values.carePlan.goalMappingEnabled,
+        defaultFrequencies: parsed.values.carePlan.defaultFrequencies,
+        autoSuggestByTagsEnabled: parsed.values.carePlan.autoSuggestByTagsEnabled,
+        reviewReminders: {
+          enabled: parsed.values.carePlan.reviewReminders.enabled,
+          days: Number(parsed.values.carePlan.reviewReminders.days)
+        },
+        export: parsed.values.carePlan.export
       }
     };
   }
@@ -139,15 +199,11 @@ export async function upsertFacilitySettings(payload: unknown) {
     updateData = {
       reportSettingsJson: {
         ...current.reportSettings,
-        theme: parsed.values.theme,
-        accent: parsed.values.accent,
-        includeSections: parsed.values.includeSections
+        ...parsed.values.reports
       },
       printDefaultsJson: {
         ...current.printDefaults,
-        paperSize: parsed.values.paperSize,
-        margins: parsed.values.margins,
-        includeFooterMeta: parsed.values.includeFooterMeta
+        ...parsed.values.printDefaults
       }
     };
   }
@@ -156,54 +212,82 @@ export async function upsertFacilitySettings(payload: unknown) {
     updateData = {
       inventoryDefaultsJson: {
         ...current.inventoryDefaults,
-        reorderThresholdMultiplier: parsed.values.reorderThresholdMultiplier,
-        showLowStockBanner: parsed.values.showLowStockBanner
+        ...parsed.values.inventory
       },
       prizeCartDefaultsJson: {
         ...current.prizeCartDefaults,
-        presets: parsed.values.presets,
-        enableRestockSuggestions: parsed.values.enableRestockSuggestions,
-        restockAggressiveness: parsed.values.restockAggressiveness
+        ...parsed.values.prizeCart
       }
     };
   }
 
   if (parsed.section === "notifications") {
+    const digestMode = parsed.values.notifications.digest.mode;
     updateData = {
       notificationDefaultsJson: {
         ...current.notificationDefaults,
-        dailyDigestEnabled: parsed.values.dailyDigestEnabled,
-        dailyDigestTime: parsed.values.dailyDigestTime || current.notificationDefaults.dailyDigestTime,
-        weeklyDigestEnabled: parsed.values.weeklyDigestEnabled,
-        weeklyDigestDay: parsed.values.weeklyDigestDay,
-        taskReminders: parsed.values.taskReminders,
-        reminderLeadTimeMinutes: Number(parsed.values.reminderLeadTimeMinutes)
+        ...parsed.values.notifications,
+        dailyDigestEnabled: digestMode === "DAILY",
+        dailyDigestTime: parsed.values.notifications.digest.time || current.notificationDefaults.dailyDigestTime,
+        weeklyDigestEnabled: digestMode === "WEEKLY",
+        taskReminders: parsed.values.notifications.triggers.oneToOneDueToday,
+        reminderLeadTimeMinutes: current.notificationDefaults.reminderLeadTimeMinutes,
+        weeklyDigestDay: current.notificationDefaults.weeklyDigestDay
       }
     };
   }
 
   if (parsed.section === "compliance") {
-    const nextPolicy = {
-      ...current.policyFlags,
-      hideTriggersInPrint: parsed.values.hideTriggersInPrint,
-      maskFamilyContactInPrint: parsed.values.maskFamilyContactInPrint
-    };
-
     updateData = {
       complianceJson: {
         ...current.compliance,
-        auditRetentionDays: parsed.values.auditRetentionDays,
-        exportRetentionDays: parsed.values.exportRetentionDays,
-        hideTriggersInPrint: parsed.values.hideTriggersInPrint,
-        maskFamilyContactInPrint: parsed.values.maskFamilyContactInPrint
+        ...parsed.values.compliance,
+        hipaaMode: {
+          ...parsed.values.compliance.hipaaMode,
+          autoLogoutMinutes: Number(parsed.values.compliance.hipaaMode.autoLogoutMinutes)
+        }
       },
-      policyFlagsJson: nextPolicy
+      policyFlagsJson: {
+        ...current.policyFlags,
+        hideTriggersInPrint: parsed.values.compliance.hideTriggersInPrint,
+        maskFamilyContactInPrint: parsed.values.compliance.maskFamilyContactInPrint
+      }
     };
   }
 
-  const before = {
-    section: parsed.section,
-    values: parsed.section === "facility" ? current : undefined
+  const beforeBySection: Record<string, unknown> = {
+    facility: {
+      facility: current.facilityProfile,
+      policyFlags: current.policyFlags
+    },
+    roles: {
+      roles: current.roleSettings,
+      permissionsJson: current.permissions
+    },
+    modules: current.moduleFlags,
+    calendar: {
+      calendar: current.attendanceRules.calendarSettings,
+      defaults: {
+        groupMinutes: current.attendanceRules.groupMinutes,
+        oneToOneMinutes: current.attendanceRules.oneToOneMinutes,
+        locations: current.attendanceRules.locations,
+        warnTherapyOverlap: current.attendanceRules.warnTherapyOverlap,
+        warnOutsideBusinessHours: current.attendanceRules.warnOutsideBusinessHours,
+        useBusinessHoursDefaults: current.attendanceRules.useBusinessHoursDefaults
+      }
+    },
+    docs: current.documentationRules,
+    careplan: current.carePlanRules,
+    reports: {
+      reports: current.reportSettings,
+      printDefaults: current.printDefaults
+    },
+    inventory: {
+      inventory: current.inventoryDefaults,
+      prizeCart: current.prizeCartDefaults
+    },
+    notifications: current.notificationDefaults,
+    compliance: current.compliance
   };
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -223,13 +307,13 @@ export async function upsertFacilitySettings(payload: unknown) {
   await logAudit({
     facilityId: context.facilityId,
     actorUserId: context.user.id,
-    action: "UPDATE",
-    entityType: "FacilitySettings",
+    action: "SETTINGS_UPDATE",
+    entityType: `Settings.${parsed.section}`,
     entityId: updated.id,
-    before,
+    before: beforeBySection[parsed.section],
     after: {
-      section: parsed.section,
-      updatedAt: updated.updatedAt
+      values: parsed.values,
+      metadata
     }
   });
 
@@ -244,22 +328,33 @@ export async function upsertUserSettings(payload: unknown) {
   const parsed = userSettingsPayloadSchema.parse(payload);
 
   const existing = await ensureUserSettingsRecord(context.user.id);
+  const metadata = getRequestMetadata();
 
-  const quickPhrases = parsed.values.quickPhrases.map((phrase) => phrase.trim()).filter(Boolean).slice(0, 100);
+  const quickPhrases = parsed.values.account.quickPhrases.map((phrase) => phrase.trim()).filter(Boolean).slice(0, 100);
+
+  const fontFromAccessibility =
+    parsed.values.personal.accessibility.fontSize === "SM" ||
+    parsed.values.personal.accessibility.fontSize === "MD" ||
+    parsed.values.personal.accessibility.fontSize === "LG"
+      ? parsed.values.personal.accessibility.fontSize
+      : "LG";
+
+  const nextFontScale = FontScale[fontFromAccessibility as keyof typeof FontScale] ?? FontScale.MD;
 
   const updated = await prisma.userSettings.update({
     where: { userId: context.user.id },
     data: {
-      defaultLanding: parsed.values.defaultLanding,
-      reduceMotion: parsed.values.reduceMotion,
-      highContrast: parsed.values.highContrast,
-      fontScale: parsed.values.fontScale,
+      defaultLanding: parsed.values.account.defaultLanding,
+      reduceMotion: parsed.values.account.reduceMotion,
+      highContrast: parsed.values.account.highContrast,
+      fontScale: nextFontScale,
       myQuickPhrasesJson: quickPhrases,
-      shortcutsEnabled: parsed.values.shortcutsEnabled,
+      shortcutsEnabled: parsed.values.account.shortcutsEnabled,
       printPrefsJson: {
         ...(existing.printPrefsJson as Record<string, unknown>),
         paperSize: "LETTER",
-        includeFooterMeta: true
+        includeFooterMeta: true,
+        personal: parsed.values.personal
       }
     }
   });
@@ -267,8 +362,8 @@ export async function upsertUserSettings(payload: unknown) {
   await logAudit({
     facilityId: context.facilityId,
     actorUserId: context.user.id,
-    action: "UPDATE",
-    entityType: "UserSettings",
+    action: "SETTINGS_UPDATE",
+    entityType: "Settings.personal",
     entityId: updated.id,
     before: {
       defaultLanding: existing.defaultLanding,
@@ -278,11 +373,8 @@ export async function upsertUserSettings(payload: unknown) {
       shortcutsEnabled: existing.shortcutsEnabled
     },
     after: {
-      defaultLanding: updated.defaultLanding,
-      reduceMotion: updated.reduceMotion,
-      highContrast: updated.highContrast,
-      fontScale: updated.fontScale,
-      shortcutsEnabled: updated.shortcutsEnabled
+      values: parsed.values,
+      metadata
     }
   });
 
@@ -297,27 +389,27 @@ export async function updatePermissionsMatrix(payload: unknown) {
   assertAdmin(context.role);
 
   const parsed = updatePermissionsMatrixSchema.parse(payload);
-
-  const matrix = asRolePermissionMatrix(parsed.permissionsJson);
-
   const settings = await ensureFacilitySettingsRecord({
     facilityId: context.facilityId,
     timezone: context.facility.timezone,
     moduleFlags: context.facility.moduleFlags
   });
 
+  const matrix = asRolePermissionMatrix(parsed.permissionsJson);
+  const existingRoles = asRoleSettingsConfig(settings.permissionsJson);
+
   const updated = await prisma.facilitySettings.update({
     where: { facilityId: context.facilityId },
     data: {
-      permissionsJson: matrix
+      permissionsJson: buildPermissionsJsonEnvelope(matrix, existingRoles)
     }
   });
 
   await logAudit({
     facilityId: context.facilityId,
     actorUserId: context.user.id,
-    action: "UPDATE",
-    entityType: "FacilitySettings.permissionsJson",
+    action: "ROLE_UPDATE",
+    entityType: "Settings.roles.permissions",
     entityId: settings.id,
     before: settings.permissionsJson,
     after: updated.permissionsJson
@@ -358,11 +450,11 @@ export async function updateUserRole(payload: unknown) {
   await logAudit({
     facilityId: context.facilityId,
     actorUserId: context.user.id,
-    action: "UPDATE",
+    action: "ROLE_UPDATE",
     entityType: "User.role",
     entityId: updated.id,
     before: { role: targetUser.role },
-    after: { role: updated.role }
+    after: { role: updated.role, metadata: getRequestMetadata() }
   });
 
   return {

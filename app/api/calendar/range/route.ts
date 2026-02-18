@@ -60,7 +60,6 @@ export async function GET(request: Request) {
         occurrenceKey: activity.occurrenceKey,
         isOverride: activity.isOverride,
         conflictOverride: activity.conflictOverride,
-        attendanceCount: activity._count.attendance,
         checklist: activity.checklist,
         adaptationsEnabled: activity.adaptationsEnabled
       }))
@@ -69,4 +68,3 @@ export async function GET(request: Request) {
     return asCalendarApiErrorResponse(error);
   }
 }
-
