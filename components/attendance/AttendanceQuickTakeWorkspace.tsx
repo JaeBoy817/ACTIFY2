@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, MoonStar, UserRoundX, UsersRound } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
 import { AttendanceResidentListVirtual } from "@/components/attendance/AttendanceResidentListVirtual";
@@ -46,6 +47,7 @@ export function AttendanceQuickTakeWorkspace({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const { getToken } = useAuth();
   const { toast } = useToast();
 
   const [dateKey, setDateKey] = useState(initialData.dateKey);
@@ -104,6 +106,20 @@ export function AttendanceQuickTakeWorkspace({
     return Array.from(new Set(sessions.map((session) => session.location).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [sessions]);
 
+  async function authorizedFetch(input: string, init: RequestInit = {}) {
+    const token = await getToken().catch(() => null);
+    const headers = new Headers(init.headers ?? {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    return fetch(input, {
+      ...init,
+      headers,
+      credentials: "include"
+    });
+  }
+
   async function loadQuickTake(nextDate: string, nextSessionId?: string | null) {
     setLoading(true);
     try {
@@ -112,7 +128,7 @@ export function AttendanceQuickTakeWorkspace({
       if (nextSessionId) {
         url.searchParams.set("sessionId", nextSessionId);
       }
-      const response = await fetch(url.toString(), {
+      const response = await authorizedFetch(url.toString(), {
         method: "GET",
         cache: "no-store"
       });
@@ -150,7 +166,7 @@ export function AttendanceQuickTakeWorkspace({
           notes: entriesByResidentId[resident.id]?.notes ?? null
         }))
       };
-      const response = await fetch("/api/attendance/quick-take", {
+      const response = await authorizedFetch("/api/attendance/quick-take", {
         method: "POST",
         headers: {
           "content-type": "application/json"
@@ -159,6 +175,11 @@ export function AttendanceQuickTakeWorkspace({
       });
       const body = await response.json();
       if (!response.ok) {
+        if (response.status === 401) {
+          const redirectUrl = `${window.location.pathname}${window.location.search}`;
+          window.location.href = `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`;
+          return;
+        }
         throw new Error(body?.error ?? "Could not save attendance.");
       }
       setLastSavedAt(new Date().toLocaleTimeString());

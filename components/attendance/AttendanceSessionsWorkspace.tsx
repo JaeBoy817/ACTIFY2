@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Save } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 import { AttendanceFilters, type AttendanceSessionFiltersState } from "@/components/attendance/AttendanceFilters";
 import { AttendanceResidentListVirtual } from "@/components/attendance/AttendanceResidentListVirtual";
@@ -31,6 +32,7 @@ export function AttendanceSessionsWorkspace({
   initialFilters: AttendanceSessionFiltersState;
   canEdit: boolean;
 }) {
+  const { getToken } = useAuth();
   const { toast } = useToast();
   const [filters, setFilters] = useState<AttendanceSessionFiltersState>(initialFilters);
   const [sessions, setSessions] = useState<AttendanceSessionSummary[]>(initialSessions);
@@ -49,6 +51,19 @@ export function AttendanceSessionsWorkspace({
     [entriesByResidentId]
   );
 
+  async function authorizedFetch(input: string, init: RequestInit = {}) {
+    const token = await getToken().catch(() => null);
+    const headers = new Headers(init.headers ?? {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return fetch(input, {
+      ...init,
+      headers,
+      credentials: "include"
+    });
+  }
+
   async function loadFilters() {
     setLoadingList(true);
     try {
@@ -59,7 +74,7 @@ export function AttendanceSessionsWorkspace({
       if (filters.location !== "all") url.searchParams.set("location", filters.location);
       if (filters.hasNotes !== "all") url.searchParams.set("hasNotes", filters.hasNotes);
 
-      const response = await fetch(url.toString(), { cache: "no-store" });
+      const response = await authorizedFetch(url.toString(), { cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body?.error ?? "Could not load sessions.");
       setSessions(body.sessions as AttendanceSessionSummary[]);
@@ -85,7 +100,7 @@ export function AttendanceSessionsWorkspace({
   async function loadSessionDetail(sessionId: string) {
     setLoadingDetail(true);
     try {
-      const response = await fetch(`/api/attendance/sessions/${encodeURIComponent(sessionId)}`, {
+      const response = await authorizedFetch(`/api/attendance/sessions/${encodeURIComponent(sessionId)}`, {
         cache: "no-store"
       });
       const body = await response.json();
@@ -109,7 +124,7 @@ export function AttendanceSessionsWorkspace({
     if (!selectedSessionId || !selectedDetail || !canEdit) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/attendance/quick-take", {
+      const response = await authorizedFetch("/api/attendance/quick-take", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -122,7 +137,14 @@ export function AttendanceSessionsWorkspace({
         })
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body?.error ?? "Could not save session.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          const redirectUrl = `${window.location.pathname}${window.location.search}`;
+          window.location.href = `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`;
+          return;
+        }
+        throw new Error(body?.error ?? "Could not save session.");
+      }
 
       toast({
         title: "Session saved",
@@ -213,4 +235,3 @@ export function AttendanceSessionsWorkspace({
     </div>
   );
 }
-

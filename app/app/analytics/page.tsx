@@ -1,293 +1,120 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EngagementTrendChartLazy } from "@/components/app/engagement-trend-chart-lazy";
-import { TopAttendeesBarChartLazy } from "@/components/app/top-attendees-bar-chart-lazy";
-import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
+import { AlertTriangle, BarChart3, Users } from "lucide-react";
+
+import { AnalyticsHubTiles } from "@/components/analytics/AnalyticsHubTiles";
+import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
+import { ChartCardGlass } from "@/components/analytics/ChartCardGlass";
+import { DrilldownListCard } from "@/components/analytics/DrilldownListCard";
+import { InsightChip } from "@/components/analytics/InsightChip";
+import { AnalyticsLineChartLazy } from "@/components/analytics/charts/AnalyticsLineChartLazy";
+import { parseAnalyticsFiltersFromSearch, getAnalyticsSnapshot } from "@/lib/analytics/service";
 import { requireModulePage } from "@/lib/page-guards";
-import { prisma } from "@/lib/prisma";
-import { asAttendanceRules } from "@/lib/settings/defaults";
-import {
-  endOfZonedDay,
-  formatInTimeZone,
-  startOfZonedMonthShift,
-  startOfZonedWeek,
-  subtractDays
-} from "@/lib/timezone";
 
-export default async function AnalyticsPage() {
+type AnalyticsSearchParams = Record<string, string | string[] | undefined>;
+
+export default async function AnalyticsHubPage({
+  searchParams
+}: {
+  searchParams?: AnalyticsSearchParams;
+}) {
   const context = await requireModulePage("analyticsHeatmaps");
-  const timeZone = context.facility.timezone;
-
-  const now = new Date();
-  const todayEnd = endOfZonedDay(now, timeZone);
-  const last60 = subtractDays(now, 60);
-  const last30 = subtractDays(now, 30);
-  const presenceWindowStart = startOfZonedMonthShift(now, timeZone, -1);
-  const presenceWindowEnd = todayEnd;
-  const residents = await prisma.resident.findMany({
-    where: {
-      facilityId: context.facilityId,
-      OR: [
-        { isActive: true },
-        { status: { in: ["ACTIVE", "BED_BOUND"] } }
-      ],
-      NOT: {
-        status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
-      }
-    },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      room: true
-    },
-    orderBy: [{ unit: { name: "asc" } }, { room: "asc" }]
-  });
-  const activeResidentIds = residents.map((resident) => resident.id);
-  const residentIdFilter = activeResidentIds.length > 0 ? { in: activeResidentIds } : { in: ["__none__"] };
-
-  const [attendanceRows, presenceRows, settings] = await Promise.all([
-    prisma.attendance.findMany({
-      where: {
-        residentId: residentIdFilter,
-        activityInstance: {
-          facilityId: context.facilityId,
-          startAt: { gte: last60, lte: now }
-        }
-      },
-      select: {
-        residentId: true,
-        status: true,
-        barrierReason: true,
-        activityInstance: {
-          select: {
-            startAt: true
-          }
-        }
-      },
-      orderBy: { createdAt: "asc" }
-    }),
-    prisma.attendance.findMany({
-      where: {
-        residentId: residentIdFilter,
-        activityInstance: {
-          facilityId: context.facilityId,
-          startAt: {
-            gte: presenceWindowStart,
-            lte: presenceWindowEnd
-          }
-        }
-      },
-      select: {
-        residentId: true,
-        status: true,
-        activityInstance: {
-          select: {
-            startAt: true
-          }
-        }
-      }
-    }),
-    prisma.facilitySettings.findUnique({
-      where: { facilityId: context.facilityId },
-      select: { attendanceRulesJson: true }
-    })
-  ]);
-
-  const weights = asAttendanceRules(settings?.attendanceRulesJson).engagementWeights;
-  const scoreMap: Record<string, number> = {
-    PRESENT: weights.present,
-    ACTIVE: weights.active,
-    LEADING: weights.leading,
-    REFUSED: 0,
-    NO_SHOW: 0
-  };
-
-  const last30Rows = attendanceRows.filter((row) => row.activityInstance.startAt >= last30);
-  const previous30Rows = attendanceRows.filter((row) => row.activityInstance.startAt < last30);
-
-  const residentCounts = new Map<string, number>();
-  last30Rows.forEach((row) => {
-    if (row.status !== "PRESENT" && row.status !== "ACTIVE" && row.status !== "LEADING") return;
-    residentCounts.set(row.residentId, (residentCounts.get(row.residentId) ?? 0) + 1);
+  const filters = parseAnalyticsFiltersFromSearch(searchParams);
+  const snapshot = await getAnalyticsSnapshot({
+    facilityId: context.facilityId,
+    timeZone: context.facility.timezone,
+    filters
   });
 
-  const topAttendeesData = residents
-    .map((resident) => ({
-      label: `${resident.lastName}, ${resident.firstName} (Rm ${resident.room})`,
-      count: residentCounts.get(resident.id) ?? 0
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 20);
-
-  const barrierCounts = new Map<string, number>();
-  const prevBarrierCounts = new Map<string, number>();
-
-  last30Rows.forEach((row) => {
-    if (!row.barrierReason) return;
-    barrierCounts.set(row.barrierReason, (barrierCounts.get(row.barrierReason) ?? 0) + 1);
-  });
-
-  previous30Rows.forEach((row) => {
-    if (!row.barrierReason) return;
-    prevBarrierCounts.set(row.barrierReason, (prevBarrierCounts.get(row.barrierReason) ?? 0) + 1);
-  });
-
-  const topBarriers = Array.from(barrierCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([barrier, count]) => {
-      const previous = prevBarrierCounts.get(barrier) ?? 0;
-      const delta = count - previous;
-      return {
-        barrier,
-        count,
-        note: delta > 0 ? `Up ${delta} from prior 30 days` : delta < 0 ? `Down ${Math.abs(delta)} from prior 30 days` : "No change"
-      };
-    });
-
-  const weeklyScores = new Map<string, { sum: number; count: number }>();
-  attendanceRows.forEach((row) => {
-    const week = formatInTimeZone(startOfZonedWeek(row.activityInstance.startAt, timeZone, 1), timeZone, {
-      month: "short",
-      day: "numeric"
-    });
-    const current = weeklyScores.get(week) ?? { sum: 0, count: 0 };
-    const score = scoreMap[row.status] ?? 0;
-    weeklyScores.set(week, { sum: current.sum + score, count: current.count + 1 });
-  });
-
-  const engagementData = Array.from(weeklyScores.entries()).map(([label, value]) => ({
-    label,
-    score: Number((value.sum / Math.max(value.count, 1)).toFixed(2))
+  const dailySeries = snapshot.attendance.dailyParticipation.map((row) => ({
+    label: row.label,
+    value: row.participationPercent
   }));
 
-  const facilityPresence = computeFacilityPresenceMetrics({
-    rows: presenceRows.map((row) => ({
-      residentId: row.residentId,
-      status: row.status,
-      occurredAt: row.activityInstance.startAt
-    })),
-    activeResidentIds,
-    activeResidentCount: residents.length,
-    now,
-    timeZone
-  });
-
-  const monthDeltaLabel = facilityPresence.monthOverMonthDelta === null
-    ? "No last-month attendance data yet"
-    : facilityPresence.monthOverMonthDelta > 0
-      ? `+${facilityPresence.monthOverMonthDelta.toFixed(1)} pts vs last month`
-      : facilityPresence.monthOverMonthDelta < 0
-        ? `${facilityPresence.monthOverMonthDelta.toFixed(1)} pts vs last month`
-        : "No change vs last month";
-
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Total Attended Residents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <p className="text-3xl font-semibold">{facilityPresence.currentMonthTotalResidentsAttended}</p>
-            <p className="text-sm text-muted-foreground">
-              {facilityPresence.activeResidentCount} active residents in facility.
-            </p>
-          </CardContent>
-        </Card>
+    <AnalyticsShell
+      activeSection="hub"
+      title="Analytics"
+      subtitle="One clear analytics hub with fast drilldowns by attendance, engagement, 1:1, care plans, and programs."
+      rangeLabel={snapshot.range.label}
+      filters={filters}
+      options={snapshot.options}
+      kpis={snapshot.kpis}
+      showDailyMotivation
+    >
+      <AnalyticsHubTiles />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Residents Participated</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <p className="text-3xl font-semibold">{facilityPresence.currentMonthResidentsParticipated}</p>
-            <p className="text-sm text-muted-foreground">
-              Unique residents with Present/Active/Leading this month.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <ChartCardGlass
+          title="Participation Trend"
+          description="Daily unique participation percentage in selected range."
+          icon={BarChart3}
+          iconClassName="from-indigo-500/35 to-sky-500/10 text-indigo-700"
+        >
+          <AnalyticsLineChartLazy data={dailySeries} lineColor="#5C7CFA" />
+        </ChartCardGlass>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Participation %</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{facilityPresence.currentMonthParticipationPercent.toFixed(1)}%</p>
-            <p className="text-sm text-muted-foreground">
-              {facilityPresence.currentMonthResidentsParticipated} of {facilityPresence.activeResidentCount} active residents.
-            </p>
-            <Badge variant="outline">{monthDeltaLabel}</Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Average Daily %</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">
-              {facilityPresence.currentMonthAverageDailyPercent.toFixed(1)}%
-            </p>
-            <p className="text-sm text-muted-foreground">Average daily resident participation in current month.</p>
-            <Badge variant="outline">
-              Last month: {facilityPresence.previousMonthPresentPercent.toFixed(1)}%
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Top attendees (last 30 days)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <TopAttendeesBarChartLazy data={topAttendeesData} />
-          <p className="text-xs text-muted-foreground">
-            Showing the top {topAttendeesData.length} residents by attended activity count (Present, Active, Leading).
-          </p>
+        <ChartCardGlass
+          title="Barrier Highlights"
+          description="Highest documented barriers compared to previous period."
+          icon={AlertTriangle}
+          iconClassName="from-rose-500/35 to-orange-500/10 text-rose-700"
+        >
           <div className="flex flex-wrap gap-2">
-            {topAttendeesData.slice(0, 3).map((item) => (
-              <Badge key={item.label} variant="outline">
-                {item.label.split(" (")[0]}: {item.count}
-              </Badge>
+            {snapshot.engagement.topBarriers.slice(0, 6).map((barrier) => (
+              <InsightChip
+                key={barrier.barrier}
+                tone={barrier.delta > 0 ? "rose" : barrier.delta < 0 ? "emerald" : "amber"}
+                label={`${barrier.barrier.replaceAll("_", " ")} · ${barrier.count}`}
+              />
+            ))}
+            {snapshot.engagement.topBarriers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No barrier activity found in this range.</p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {snapshot.engagement.insightChips.map((chip) => (
+              <InsightChip key={chip.label} tone={chip.tone} label={chip.label} />
             ))}
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top barriers (last 30 days)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {topBarriers.length === 0 && <p className="text-sm text-muted-foreground">No barriers documented yet.</p>}
-            {topBarriers.map((item) => (
-              <div key={item.barrier} className="rounded-md border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{item.barrier.replaceAll("_", " ")}</p>
-                  <Badge variant="outline">{item.count}</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">{item.note}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Engagement score trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EngagementTrendChartLazy data={engagementData} />
-            <p className="text-xs text-muted-foreground">
-              Scoring: PRESENT={weights.present}, ACTIVE={weights.active}, LEADING={weights.leading}.
-            </p>
-          </CardContent>
-        </Card>
+        </ChartCardGlass>
       </div>
-    </div>
+
+      <DrilldownListCard
+        title="Top Attendees"
+        description="Residents with the highest supportive attendance counts."
+        rows={snapshot.attendance.topAttendees.slice(0, 200).map((resident) => ({
+          id: resident.residentId,
+          title: resident.residentName,
+          subtitle: `Room ${resident.room}`,
+          metric: String(resident.attendedCount),
+          metricLabel: "Attended",
+          details: [
+            { label: "Resident", value: resident.residentName },
+            { label: "Room", value: resident.room },
+            { label: "Supportive attendance", value: String(resident.supportiveCount) },
+            { label: "Total attended entries", value: String(resident.attendedCount) }
+          ]
+        }))}
+        emptyLabel="No attendance rows found for this range."
+      />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartCardGlass
+          title="Coverage Snapshot"
+          description="Current placement of analytics data across focused subsections."
+          icon={Users}
+          iconClassName="from-emerald-500/35 to-sky-500/10 text-emerald-700"
+        >
+          <ul className="space-y-2 text-sm text-foreground/80">
+            <li>Attendance: status counts, top attendees, barriers, daily participation, engagement trend.</li>
+            <li>Engagement: scoring averages, barrier deltas, category mix, weekly scoring.</li>
+            <li>1:1: note volume, follow-up rate, response/mood mix, resident breakdown.</li>
+            <li>Care Plan: no-plan coverage, due-soon/overdue, review result trends, focus-area mix.</li>
+            <li>Programs: top program attendance, category and location performance.</li>
+            <li>Staff + Volunteers: note contribution and visit-hours distribution.</li>
+          </ul>
+        </ChartCardGlass>
+      </div>
+    </AnalyticsShell>
   );
 }

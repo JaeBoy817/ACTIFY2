@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Download, FileBarChart2 } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,16 +26,30 @@ export function AttendanceReportsWorkspace({
   initialMonth: string;
   initialData: MonthlyAttendanceReportPayload;
 }) {
+  const { getToken } = useAuth();
   const { toast } = useToast();
   const [month, setMonth] = useState(initialMonth);
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(false);
   const [generatingCsv, setGeneratingCsv] = useState(false);
 
+  async function authorizedFetch(input: string, init: RequestInit = {}) {
+    const token = await getToken().catch(() => null);
+    const headers = new Headers(init.headers ?? {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return fetch(input, {
+      ...init,
+      headers,
+      credentials: "include"
+    });
+  }
+
   async function loadMonth(nextMonth: string) {
     setLoading(true);
     try {
-      const response = await fetch(`/api/attendance/reports/monthly?month=${encodeURIComponent(nextMonth)}`, {
+      const response = await authorizedFetch(`/api/attendance/reports/monthly?month=${encodeURIComponent(nextMonth)}`, {
         cache: "no-store"
       });
       const body = await response.json();
@@ -55,7 +70,7 @@ export function AttendanceReportsWorkspace({
   async function downloadCsv() {
     setGeneratingCsv(true);
     try {
-      const response = await fetch(`/api/attendance/reports/monthly?month=${encodeURIComponent(month)}&format=csv`, {
+      const response = await authorizedFetch(`/api/attendance/reports/monthly?month=${encodeURIComponent(month)}&format=csv`, {
         cache: "no-store"
       });
       if (!response.ok) {

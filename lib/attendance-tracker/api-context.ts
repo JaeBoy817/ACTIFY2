@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
 import { asModuleFlags } from "@/lib/module-flags";
@@ -40,7 +40,15 @@ export function asAttendanceTrackerApiErrorResponse(error: unknown) {
 }
 
 export async function requireAttendanceTrackerApiContext(options: { writable?: boolean } = {}) {
-  const { userId } = await auth();
+  const authState = await auth();
+  let userId = authState.userId;
+
+  // Fallback: in rare proxy/cookie edge cases, resolve the user from Clerk directly.
+  if (!userId) {
+    const fallbackUser = await currentUser().catch(() => null);
+    userId = fallbackUser?.id ?? null;
+  }
+
   if (!userId) {
     throw new AttendanceTrackerApiError("Unauthorized", 401);
   }
@@ -76,4 +84,3 @@ export async function requireAttendanceTrackerApiContext(options: { writable?: b
     timeZone: resolveTimeZone(user.facility.timezone)
   };
 }
-

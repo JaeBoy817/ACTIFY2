@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, TrendingUp, UserRound } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function AttendanceResidentsWorkspace({
   initialResidentId: string | null;
   initialSummary: ResidentAttendanceSummaryPayload | null;
 }) {
+  const { getToken } = useAuth();
   const { toast } = useToast();
   const [selectedResidentId, setSelectedResidentId] = useState<string>(initialResidentId ?? residents[0]?.id ?? "");
   const [summary, setSummary] = useState<ResidentAttendanceSummaryPayload | null>(initialSummary);
@@ -47,13 +49,29 @@ export function AttendanceResidentsWorkspace({
     [residents, selectedResidentId]
   );
 
+  const authorizedFetch = useCallback(
+    async (input: string, init: RequestInit = {}) => {
+      const token = await getToken().catch(() => null);
+      const headers = new Headers(init.headers ?? {});
+      if (token && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+      return fetch(input, {
+        ...init,
+        headers,
+        credentials: "include"
+      });
+    },
+    [getToken]
+  );
+
   useEffect(() => {
     if (!selectedResidentId) return;
     if (initialSummary && initialSummary.resident.id === selectedResidentId) return;
 
     let canceled = false;
     setLoading(true);
-    fetch(`/api/attendance/residents/${encodeURIComponent(selectedResidentId)}/summary`, {
+    authorizedFetch(`/api/attendance/residents/${encodeURIComponent(selectedResidentId)}/summary`, {
       cache: "no-store"
     })
       .then(async (response) => {
@@ -81,7 +99,7 @@ export function AttendanceResidentsWorkspace({
     return () => {
       canceled = true;
     };
-  }, [initialSummary, selectedResidentId, toast]);
+  }, [authorizedFetch, initialSummary, selectedResidentId, toast]);
 
   return (
     <div className="space-y-4">
@@ -195,4 +213,3 @@ export function AttendanceResidentsWorkspace({
     </div>
   );
 }
-
