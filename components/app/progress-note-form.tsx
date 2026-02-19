@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ type ProgressNoteFormProps = {
   showIntro?: boolean;
   minNarrativeLen?: number;
   followUpRequired?: boolean;
+  initialTemplateId?: string;
 };
 
 const participationMap = {
@@ -60,24 +61,39 @@ export function ProgressNoteForm({
   action,
   showIntro = true,
   minNarrativeLen = 10,
-  followUpRequired = false
+  followUpRequired = false,
+  initialTemplateId
 }: ProgressNoteFormProps) {
   const [residentId, setResidentId] = useState(residents[0]?.id ?? "");
   const [residentSearch, setResidentSearch] = useState("");
   const [activityId, setActivityId] = useState("");
-  const [templateId, setTemplateId] = useState("");
+  const [templateId, setTemplateId] = useState(
+    initialTemplateId && templates.some((item) => item.id === initialTemplateId) ? initialTemplateId : ""
+  );
   const [type, setType] = useState("GROUP");
   const [participationLevel, setParticipationLevel] = useState("MODERATE");
   const [moodAffect, setMoodAffect] = useState("CALM");
   const [cuesRequired, setCuesRequired] = useState("VERBAL");
   const [response, setResponse] = useState("POSITIVE");
   const [followUp, setFollowUp] = useState("");
-  const [narrative, setNarrative] = useState("");
+  const [narrative, setNarrative] = useState(() => {
+    if (!initialTemplateId) return "";
+    const template = templates.find((item) => item.id === initialTemplateId);
+    return template?.bodyTemplate ?? "";
+  });
   const [selectedPhrases, setSelectedPhrases] = useState<string[]>([]);
 
   const resident = useMemo(() => residents.find((item) => item.id === residentId), [residents, residentId]);
   const template = useMemo(() => templates.find((item) => item.id === templateId), [templates, templateId]);
   const selectedActivity = useMemo(() => activities.find((activity) => activity.id === activityId), [activities, activityId]);
+
+  useEffect(() => {
+    if (!initialTemplateId) return;
+    const matched = templates.find((item) => item.id === initialTemplateId);
+    if (!matched) return;
+    setTemplateId(matched.id);
+    setNarrative(matched.bodyTemplate || "");
+  }, [initialTemplateId, templates]);
 
   const filteredResidents = useMemo(() => {
     const q = residentSearch.trim().toLowerCase();

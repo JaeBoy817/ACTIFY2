@@ -1,7 +1,7 @@
-import { EngagementTrendChart } from "@/components/app/engagement-trend-chart";
-import { TopAttendeesBarChart } from "@/components/app/top-attendees-bar-chart";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EngagementTrendChartLazy } from "@/components/app/engagement-trend-chart-lazy";
+import { TopAttendeesBarChartLazy } from "@/components/app/top-attendees-bar-chart-lazy";
 import { computeFacilityPresenceMetrics } from "@/lib/facility-presence";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
@@ -35,7 +35,12 @@ export default async function AnalyticsPage() {
         status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
       }
     },
-    include: { unit: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      room: true
+    },
     orderBy: [{ unit: { name: "asc" } }, { room: "asc" }]
   });
   const activeResidentIds = residents.map((resident) => resident.id);
@@ -50,9 +55,15 @@ export default async function AnalyticsPage() {
           startAt: { gte: last60, lte: now }
         }
       },
-      include: {
-        resident: { include: { unit: true } },
-        activityInstance: true
+      select: {
+        residentId: true,
+        status: true,
+        barrierReason: true,
+        activityInstance: {
+          select: {
+            startAt: true
+          }
+        }
       },
       orderBy: { createdAt: "asc" }
     }),
@@ -232,7 +243,7 @@ export default async function AnalyticsPage() {
           <CardTitle>Top attendees (last 30 days)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <TopAttendeesBarChart data={topAttendeesData} />
+          <TopAttendeesBarChartLazy data={topAttendeesData} />
           <p className="text-xs text-muted-foreground">
             Showing the top {topAttendeesData.length} residents by attended activity count (Present, Active, Leading).
           </p>
@@ -270,7 +281,7 @@ export default async function AnalyticsPage() {
             <CardTitle>Engagement score trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <EngagementTrendChart data={engagementData} />
+            <EngagementTrendChartLazy data={engagementData} />
             <p className="text-xs text-muted-foreground">
               Scoring: PRESENT={weights.present}, ACTIVE={weights.active}, LEADING={weights.leading}.
             </p>

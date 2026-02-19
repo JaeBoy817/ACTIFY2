@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatInTimeZone, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
 import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
+import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
 
 type CalendarTemplateLite = {
   id: string;
@@ -340,28 +341,25 @@ export function CalendarWeekWorkspace({
       options?: {
         signal?: AbortSignal;
         silent?: boolean;
+        force?: boolean;
       }
     ) => {
       const rangeStart = startOfDay(targetWeekStart);
       const rangeEnd = endOfDay(addDays(rangeStart, 6));
       const silent = Boolean(options?.silent);
+      const rangeUrl = `/api/calendar/range?start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}&view=week`;
+      const cacheKey = `calendar-range:${rangeStart.toISOString()}:${rangeEnd.toISOString()}`;
 
       if (!silent) {
         setLoading(true);
       }
       try {
-        const response = await fetch(
-          `/api/calendar/range?start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}&view=week`,
-          {
-            cache: "no-store",
-            signal: options?.signal
-          }
-        );
+        const payload = await cachedFetchJson<{ activities?: CalendarEventLite[] }>(cacheKey, rangeUrl, {
+          signal: options?.signal,
+          ttlMs: 20_000,
+          force: options?.force
+        });
         if (options?.signal?.aborted) return;
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(parseApiErrorMessage(payload, "Could not load week schedule."));
-        }
         setEvents(Array.isArray(payload.activities) ? payload.activities : []);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -699,7 +697,8 @@ export function CalendarWeekWorkspace({
     toast({
       title: params.successMessage
     });
-    await loadWeekEvents(weekStart, { silent: true });
+    invalidateClientCache("calendar-range:");
+    await loadWeekEvents(weekStart, { silent: true, force: true });
     return true;
   }
 
@@ -822,7 +821,8 @@ export function CalendarWeekWorkspace({
       return;
     }
     toast({ title: "Event deleted" });
-    await loadWeekEvents(weekStart, { silent: true });
+    invalidateClientCache("calendar-range:");
+    await loadWeekEvents(weekStart, { silent: true, force: true });
   }
 
   async function skipOccurrence() {
@@ -850,7 +850,8 @@ export function CalendarWeekWorkspace({
     }
     toast({ title: "Occurrence skipped" });
     setEditOpen(false);
-    await loadWeekEvents(weekStart, { silent: true });
+    invalidateClientCache("calendar-range:");
+    await loadWeekEvents(weekStart, { silent: true, force: true });
   }
 
   async function moveEvent(eventId: string, targetDateKey: string, targetStartMinutes: number) {
@@ -917,7 +918,8 @@ export function CalendarWeekWorkspace({
     }
 
     toast({ title: "Activity moved" });
-    await loadWeekEvents(weekStart, { silent: true });
+    invalidateClientCache("calendar-range:");
+    await loadWeekEvents(weekStart, { silent: true, force: true });
   }
 
   function clampGridMinute(minute: number) {

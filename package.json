@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "build:netlify": "prisma generate && prisma db push && next build",
     "start": "next start",
     "lint": "next lint",
@@ -16,6 +17,7 @@
     "templates:import:text-pack": "node --import tsx scripts/import-activity-templates-from-text-pack.ts",
     "residents:import:custom": "node --import tsx scripts/import-residents-custom-json.ts",
     "residents:import:jason": "node --import tsx scripts/importResidentsJasonAddington.ts",
+    "residents:birthdates:jason": "node --import tsx scripts/importResidentBirthdatesJasonAddington.ts",
     "import:1to1:jason": "node --import tsx scripts/importOneOnOneNotesJasonAddington.ts",
     "calendar:import:feb-2026": "node --import tsx scripts/import-calendar-feb-2026.ts",
     "migrate:budget-stock": "node --import tsx scripts/migrateBudgetStock.ts",
@@ -38,6 +40,7 @@
     "@radix-ui/react-toast": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@react-pdf/renderer": "^4.1.6",
+    "@tanstack/react-virtual": "^3.13.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -55,6 +58,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.1.6",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.16",
     "@types/react-dom": "^18.3.5",

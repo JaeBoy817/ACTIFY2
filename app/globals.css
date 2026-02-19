@@ -32,10 +32,13 @@
   --gradient-dashboard: radial-gradient(900px circle at 20% 10%, rgba(45, 212, 191, 0.20), transparent 60%),
     radial-gradient(900px circle at 80% 20%, rgba(37, 99, 235, 0.18), transparent 55%),
     rgba(255, 247, 237, 0.72);
+  --actify-grad-primary: linear-gradient(135deg, #63E6BE 0%, #4DABF7 55%, #748FFC 100%);
+  --actify-grad-wash: linear-gradient(135deg, #E6FCF5 0%, #E7F5FF 55%, #EDF2FF 100%);
+  --actify-accent: #4DABF7;
   /* Ambient drift knobs */
-  --ambient-opacity: 0.42;
+  --ambient-opacity: 0.28;
   --ambient-intensity: 1;
-  --ambient-blur: 56px;
+  --ambient-blur: 44px;
   --ambient-speed-a: 46s;
   --ambient-speed-b: 54s;
   --ambient-speed-c: 60s;
@@ -70,45 +73,156 @@ body {
   @apply bg-background text-foreground antialiased;
 }
 
+.actify-page-shell {
+  position: relative;
+  min-height: 100%;
+}
+
+.actify-page-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--actify-grad-wash);
+  opacity: 0.12;
+  pointer-events: none;
+  filter: blur(0px);
+  z-index: 0;
+  background-size: 170% 170%;
+  animation: actify-wash-drift 22s ease-in-out infinite alternate;
+}
+
+body[data-perf-mode="low-power"] .actify-page-shell::before {
+  animation: none;
+  opacity: 0.09;
+}
+
+.actify-page-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.actify-header-highlight {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.actify-header-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--actify-grad-primary);
+  opacity: 0.24;
+  pointer-events: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 0;
+}
+
+.actify-header-highlight > * {
+  position: relative;
+  z-index: 1;
+}
+
+.actify-nav-item {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  transition:
+    color var(--motion-quick) var(--ease-standard),
+    border-color var(--motion-quick) var(--ease-standard),
+    box-shadow var(--motion-quick) var(--ease-standard);
+}
+
+.actify-nav-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--actify-grad-wash);
+  opacity: 0;
+  transition: opacity var(--motion-quick) var(--ease-standard);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.actify-nav-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+.actify-nav-item:hover::before,
+.actify-nav-item:focus-visible::before {
+  opacity: 0.1;
+}
+
+.actify-nav-active {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.actify-nav-active::before {
+  background: var(--actify-grad-primary);
+  opacity: 0.14;
+}
+
+.actify-nav-active .actify-nav-icon {
+  color: var(--actify-accent);
+}
+
+.actify-accent-badge {
+  border-color: var(--actify-accent);
+  color: var(--actify-accent);
+  background: color-mix(in srgb, var(--actify-accent) 8%, transparent);
+}
+
 section {
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 
 button {
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.11);
   transition: box-shadow var(--motion-quick) var(--ease-gentle);
 }
 
 button:hover {
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.13);
 }
 
 button:disabled {
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 
 select {
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
 }
 
 input,
 textarea {
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.11);
   transition: box-shadow var(--motion-quick) var(--ease-gentle);
 }
 
 input:hover,
 textarea:hover {
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.13);
 }
 
 input:disabled,
 textarea:disabled {
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+body[data-perf-mode="low-power"] section,
+body[data-perf-mode="low-power"] button,
+body[data-perf-mode="low-power"] select,
+body[data-perf-mode="low-power"] input,
+body[data-perf-mode="low-power"] textarea {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  transition: none !important;
 }
 
 body[data-ambient="default"] {
-  --ambient-opacity: 0.42;
+  --ambient-opacity: 0.28;
   --ambient-intensity: 1;
   --ambient-blob-1: 37 99 235;
   --ambient-blob-2: 45 212 191;
@@ -117,7 +231,7 @@ body[data-ambient="default"] {
 }
 
 body:has([data-ambient="dashboard"]) {
-  --ambient-opacity: 0.44;
+  --ambient-opacity: 0.3;
   --ambient-intensity: 1;
   --ambient-blob-1: 29 78 216;
   --ambient-blob-2: 20 184 166;
@@ -126,7 +240,7 @@ body:has([data-ambient="dashboard"]) {
 }
 
 body:has([data-ambient="marketing"]) {
-  --ambient-opacity: 0.4;
+  --ambient-opacity: 0.28;
   --ambient-intensity: 0.96;
   --ambient-blob-1: 59 130 246;
   --ambient-blob-2: 45 212 191;
@@ -135,7 +249,7 @@ body:has([data-ambient="marketing"]) {
 }
 
 body:has([data-ambient="auth"]) {
-  --ambient-opacity: 0.36;
+  --ambient-opacity: 0.24;
   --ambient-intensity: 0.92;
   --ambient-blob-1: 37 99 235;
   --ambient-blob-2: 34 211 238;
@@ -154,6 +268,10 @@ body:has([data-ambient="auth"]) {
   isolation: isolate;
 }
 
+body[data-perf-mode="low-power"] .ambient-bg {
+  opacity: calc(var(--ambient-opacity) * 0.7);
+}
+
 .ambient-blob {
   position: absolute;
   border-radius: 9999px;
@@ -161,6 +279,11 @@ body:has([data-ambient="auth"]) {
   will-change: transform, opacity;
   transform: translate3d(0, 0, 0);
   filter: blur(var(--ambient-blur));
+}
+
+body[data-perf-mode="low-power"] .ambient-blob {
+  animation-duration: 90s !important;
+  filter: blur(calc(var(--ambient-blur) * 0.7));
 }
 
 .ambient-blob-a {
@@ -675,6 +798,16 @@ h6 {
   }
 }
 
+@keyframes actify-wash-drift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
 @keyframes drift1 {
   0% {
     transform: translate3d(-1.5%, -2.5%, 0) scale(1);
@@ -1033,6 +1166,7 @@ h6 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .actify-page-shell::before,
   .ambient-blob,
   .actify-orb-blue,
   .actify-orb-mint,
@@ -1080,6 +1214,25 @@ h6 {
 
   .calendar-day-cell::before {
     opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-warm,
+  .glass-dense,
+  .glass-panel,
+  .glass-panel-strong,
+  .glass-chip,
+  .actify-header-highlight::before {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .glass-panel,
+  .glass-panel-strong,
+  .glass-chip {
+    background: rgba(255, 255, 255, 0.94) !important;
   }
 }
 

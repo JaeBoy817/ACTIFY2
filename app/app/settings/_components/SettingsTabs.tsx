@@ -1088,7 +1088,7 @@ export function SettingsTabs({
               </Select>
             </div>
 
-            <TabsContent value="facility" forceMount hidden={activeTab !== "facility"}>
+            <TabsContent value="facility" hidden={activeTab !== "facility"}>
               <form onSubmit={onSubmitFacility} className="space-y-4">
                 {!canEditByTab.facility ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.facility} className="space-y-4">
@@ -1321,7 +1321,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="roles" forceMount hidden={activeTab !== "roles"}>
+            <TabsContent value="roles" hidden={activeTab !== "roles"}>
               {!isAdmin ? (
                 <GlassCard>
                   <GlassSectionHeader title="Admin only" description="Only admins can manage roles and permissions." icon={ShieldCheck} />
@@ -1588,7 +1588,7 @@ export function SettingsTabs({
               )}
             </TabsContent>
 
-            <TabsContent value="modules" forceMount hidden={activeTab !== "modules"}>
+            <TabsContent value="modules" hidden={activeTab !== "modules"}>
               <form onSubmit={onSubmitModules} className="space-y-4">
                 {!canEditByTab.modules ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.modules} className="space-y-4">
@@ -1636,7 +1636,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="calendar" forceMount hidden={activeTab !== "calendar"}>
+            <TabsContent value="calendar" hidden={activeTab !== "calendar"}>
               <form onSubmit={onSubmitCalendar} className="space-y-4">
                 {!canEditByTab.calendar ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.calendar} className="space-y-4">
@@ -1726,7 +1726,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="docs" forceMount hidden={activeTab !== "docs"}>
+            <TabsContent value="docs" hidden={activeTab !== "docs"}>
               {!isAdmin ? (
                 <GlassCard>
                   <GlassSectionHeader title="Admin only" description="Only admins can edit documentation enforcement rules." icon={ShieldCheck} />
@@ -1798,7 +1798,7 @@ export function SettingsTabs({
               )}
             </TabsContent>
 
-            <TabsContent value="careplan" forceMount hidden={activeTab !== "careplan"}>
+            <TabsContent value="careplan" hidden={activeTab !== "careplan"}>
               <form onSubmit={onSubmitCarePlan} className="space-y-4">
                 {!canEditByTab.careplan ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.careplan} className="space-y-4">
@@ -1977,7 +1977,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="reports" forceMount hidden={activeTab !== "reports"}>
+            <TabsContent value="reports" hidden={activeTab !== "reports"}>
               <form onSubmit={onSubmitReports} className="space-y-4">
                 {!canEditByTab.reports ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.reports} className="space-y-4">
@@ -2093,7 +2093,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="inventory" forceMount hidden={activeTab !== "inventory"}>
+            <TabsContent value="inventory" hidden={activeTab !== "inventory"}>
               <form onSubmit={onSubmitInventory} className="space-y-4">
                 {!canEditByTab.inventory ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.inventory} className="space-y-4">
@@ -2196,7 +2196,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="notifications" forceMount hidden={activeTab !== "notifications"}>
+            <TabsContent value="notifications" hidden={activeTab !== "notifications"}>
               <form onSubmit={onSubmitNotifications} className="space-y-4">
                 {!canEditByTab.notifications ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.notifications} className="space-y-4">
@@ -2260,7 +2260,7 @@ export function SettingsTabs({
               </form>
             </TabsContent>
 
-            <TabsContent value="compliance" forceMount hidden={activeTab !== "compliance"}>
+            <TabsContent value="compliance" hidden={activeTab !== "compliance"}>
               {!isAdmin ? (
                 <GlassCard>
                   <GlassSectionHeader title="Admin only" description="Only admins can modify compliance and security settings." icon={ShieldCheck} />
@@ -2306,7 +2306,7 @@ export function SettingsTabs({
               )}
             </TabsContent>
 
-            <TabsContent value="personal" forceMount hidden={activeTab !== "personal"}>
+            <TabsContent value="personal" hidden={activeTab !== "personal"}>
               <form onSubmit={onSubmitPersonal} className="space-y-4">
                 {!canEditByTab.personal ? <ReadOnlyNotice /> : null}
                 <fieldset disabled={!canEditByTab.personal} className="space-y-4">

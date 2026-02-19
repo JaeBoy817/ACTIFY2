@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Playfair_Display } from "next/font/google";
 import { Quote } from "lucide-react";
 
 import { GlassCard } from "@/components/glass/GlassCard";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  display: "swap"
-});
+const quoteFontClassName = "font-['DM_Serif_Display','Playfair_Display','Cormorant_Garamond','Times_New_Roman',serif]";
 
 const BOOST_QUOTES = [
   "You’re not “just doing activities” you’re building quality of life.",
@@ -156,7 +151,7 @@ export function DailyBoostQuote({ className }: DailyBoostQuoteProps) {
               >
                 <Quote className="h-3.5 w-3.5" />
               </span>
-              <blockquote className={cn(playfair.className, "text-lg leading-relaxed text-foreground/95")}>
+              <blockquote className={cn(quoteFontClassName, "text-lg leading-relaxed text-foreground/95")}>
                 “{quote}”
               </blockquote>
             </div>

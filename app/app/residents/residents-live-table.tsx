@@ -107,6 +107,24 @@ const residentStatusMeta: Record<
   }
 };
 
+function calculateAgeFromBirthDate(birthDateIso: string | null, todayKey: string) {
+  if (!birthDateIso) return null;
+
+  const birthDate = new Date(birthDateIso);
+  if (Number.isNaN(birthDate.getTime())) return null;
+
+  const today = new Date(`${todayKey}T12:00:00.000Z`);
+  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+  const monthDelta = today.getUTCMonth() - birthDate.getUTCMonth();
+  const dayDelta = today.getUTCDate() - birthDate.getUTCDate();
+
+  if (monthDelta < 0 || (monthDelta === 0 && dayDelta < 0)) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
 export function ResidentsLiveTable({
   residents,
   units,
@@ -125,11 +143,23 @@ export function ResidentsLiveTable({
   const [query, setQuery] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, ResidentStatusValue>>({});
   const [editResident, setEditResident] = useState<EditResidentState | null>(null);
+  const [todayKey, setTodayKey] = useState(() => new Date().toISOString().slice(0, 10));
   const [isEditPending, startEditTransition] = useTransition();
 
   useEffect(() => {
     setStatusDrafts(Object.fromEntries(residents.map((resident) => [resident.id, resident.status])));
   }, [residents]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const nextTodayKey = new Date().toISOString().slice(0, 10);
+      setTodayKey((current) => (current === nextTodayKey ? current : nextTodayKey));
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -141,16 +171,19 @@ export function ResidentsLiveTable({
       const reverseName = `${resident.lastName}, ${resident.firstName}`.toLowerCase();
       const statusLabel = formatResidentStatusLabel(resident.status).toLowerCase();
       const birthdayLabel = resident.birthDate ? new Date(resident.birthDate).toLocaleDateString().toLowerCase() : "";
+      const age = calculateAgeFromBirthDate(resident.birthDate, todayKey);
+      const ageLabel = age != null ? String(age) : "";
       return (
         fullName.includes(normalizedQuery) ||
         reverseName.includes(normalizedQuery) ||
         resident.room.toLowerCase().includes(normalizedQuery) ||
         (resident.unitName ?? "").toLowerCase().includes(normalizedQuery) ||
         statusLabel.includes(normalizedQuery) ||
-        birthdayLabel.includes(normalizedQuery)
+        birthdayLabel.includes(normalizedQuery) ||
+        ageLabel.includes(normalizedQuery)
       );
     });
-  }, [normalizedQuery, residents]);
+  }, [normalizedQuery, residents, todayKey]);
 
   const currentResidents = useMemo(
     () => filteredResidents.filter((resident) => resident.status !== "DISCHARGED"),
@@ -300,6 +333,7 @@ export function ResidentsLiveTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Room</TableHead>
                 <TableHead>Birthday</TableHead>
+                <TableHead>Age</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead>Attendance</TableHead>
                 <TableHead>Status</TableHead>
@@ -312,12 +346,14 @@ export function ResidentsLiveTable({
                 const status = statusDrafts[resident.id] ?? resident.status;
                 const meta = residentStatusMeta[status];
                 const StatusIcon = meta.icon;
+                const age = calculateAgeFromBirthDate(resident.birthDate, todayKey);
 
                 return (
                   <TableRow key={resident.id}>
                     <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                     <TableCell>{resident.room}</TableCell>
                     <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell>{age ?? "—"}</TableCell>
                     <TableCell>{resident.unitName ?? "-"}</TableCell>
                     <TableCell>{resident.attendanceCount}</TableCell>
                     <TableCell>
@@ -373,7 +409,7 @@ export function ResidentsLiveTable({
               })}
               {currentResidents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="text-sm text-muted-foreground">
                     No current residents match your search.
                   </TableCell>
                 </TableRow>
@@ -395,6 +431,7 @@ export function ResidentsLiveTable({
                   <TableHead>Name</TableHead>
                   <TableHead>Room</TableHead>
                   <TableHead>Birthday</TableHead>
+                  <TableHead>Age</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Attendance</TableHead>
                   <TableHead>Status</TableHead>
@@ -407,12 +444,14 @@ export function ResidentsLiveTable({
                   const status = statusDrafts[resident.id] ?? resident.status;
                   const meta = residentStatusMeta[status];
                   const StatusIcon = meta.icon;
+                  const age = calculateAgeFromBirthDate(resident.birthDate, todayKey);
 
                   return (
                     <TableRow key={`discharged-${resident.id}`}>
                       <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                       <TableCell>{resident.room}</TableCell>
                       <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell>{age ?? "—"}</TableCell>
                       <TableCell>{resident.unitName ?? "-"}</TableCell>
                       <TableCell>{resident.attendanceCount}</TableCell>
                       <TableCell>
@@ -468,7 +507,7 @@ export function ResidentsLiveTable({
                 })}
                 {dischargedResidents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="text-sm text-muted-foreground">
                       No discharged residents match your search.
                     </TableCell>
                   </TableRow>

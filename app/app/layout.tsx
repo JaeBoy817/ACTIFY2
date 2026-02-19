@@ -1,9 +1,11 @@
 import { UserButton } from "@clerk/nextjs";
-import { Bell } from "lucide-react";
 import Link from "next/link";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyThemeShell } from "@/components/app/ActifyThemeShell";
 import { IdleComplianceGuard } from "@/components/app/IdleComplianceGuard";
+import { NotificationBellDropdown } from "@/components/app/NotificationBellDropdown";
+import { PerformanceReporter } from "@/components/app/PerformanceReporter";
 import { RoutePrefetcher } from "@/components/app/RoutePrefetcher";
 import { AppSidebar } from "@/components/app/sidebar";
 import { GlassNavbar } from "@/components/glass/GlassNavbar";
@@ -13,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ensureUserAndFacility } from "@/lib/auth";
 import { actifyUserButtonAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
-import { getUnreadNotificationCount } from "@/lib/notifications/service";
+import { getUnreadNotificationCount, listUserNotifications } from "@/lib/notifications/service";
 import { prisma } from "@/lib/prisma";
 import { asComplianceDefaults } from "@/lib/settings/defaults";
 
@@ -22,17 +24,18 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
 
-  const [settings, unreadNotificationCount] = await Promise.all([
+  const [settings, unreadNotificationCount, notificationItems] = await Promise.all([
     prisma.facilitySettings.findUnique({
       where: { facilityId: user.facilityId },
       select: { complianceJson: true }
     }),
-    getUnreadNotificationCount(user.id)
+    getUnreadNotificationCount(user.id),
+    listUserNotifications(user.id, 10)
   ]);
   const compliance = asComplianceDefaults(settings?.complianceJson);
 
   return (
-    <div data-ambient="dashboard" className="min-h-screen bg-actify-dashboard bg-actify-orbs md:flex">
+    <ActifyThemeShell className="min-h-screen bg-actify-orbs md:flex">
       <LiquidOrbs />
       <div className="w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
@@ -45,8 +48,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           />
         ) : null}
         <div className="px-4 pt-4">
-          <GlassNavbar variant="dense" className="liquid-enter !p-0 overflow-hidden">
-            <div className="h-1.5 bg-actify-brand" />
+          <GlassNavbar variant="dense" className="actify-header-highlight liquid-enter !p-0 overflow-hidden">
+            <div className="h-1.5" style={{ background: "var(--actify-grad-primary)" }} />
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="flex items-center gap-3">
                 <Link href="/app" className="inline-flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -58,20 +61,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant="secondary">Workspace</Badge>
+                <Badge variant="secondary" className="actify-accent-badge">
+                  Workspace
+                </Badge>
                 <Badge variant="outline">{user.role}</Badge>
-                <Link
-                  href="/app/notifications"
-                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-foreground transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Open notifications"
-                >
-                  <Bell className="h-4 w-4" />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-actifyBlue px-1 text-[10px] font-semibold text-white">
-                      {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                    </span>
-                  ) : null}
-                </Link>
+                <NotificationBellDropdown
+                  unreadCount={unreadNotificationCount}
+                  notifications={notificationItems.map((notification) => ({
+                    id: notification.id,
+                    title: notification.title,
+                    body: notification.body,
+                    actionUrl: notification.actionUrl,
+                    kind: notification.kind,
+                    createdAt: notification.createdAt.toISOString(),
+                    readAt: notification.readAt ? notification.readAt.toISOString() : null
+                  }))}
+                />
                 {isClerkConfigured ? (
                   <UserButton afterSignOutUrl="/" appearance={actifyUserButtonAppearance} />
                 ) : (
@@ -83,9 +88,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <main className="container py-6">
           <RoutePrefetcher />
+          <PerformanceReporter />
           <RouteTransition>{children}</RouteTransition>
         </main>
       </div>
-    </div>
+    </ActifyThemeShell>
   );
 }

@@ -388,10 +388,16 @@ model Resident {
   lastName                        String
   room                            String
   birthDate                       DateTime?
+  preferences                     String?
+  safetyNotes                     String?
+  tags                            String?
+  lastOneOnOneAt                  DateTime?
+  followUpFlag                    Boolean                          @default(false)
   bestTimesOfDay                  String?
   notes                           String?
   isActive                        Boolean                          @default(true)
   createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @default(now()) @updatedAt
   facility                        Facility                         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unit                            Unit?                            @relation(fields: [unitId], references: [id], onDelete: SetNull)
   assessments                     InterestAssessment[]
@@ -415,6 +421,8 @@ model Resident {
   @@index([facilityId, birthDate])
   @@index([unitId])
   @@index([status])
+  @@index([followUpFlag])
+  @@index([lastOneOnOneAt])
   @@index([lastName, firstName])
 }
 

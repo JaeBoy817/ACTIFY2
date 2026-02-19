@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
 import { AttendanceChecklistClient } from "@/app/app/calendar/[id]/attendance/attendance-checklist-client";
@@ -67,7 +66,8 @@ function compareRoomOrder(aRoom: string, bRoom: string) {
 }
 
 const checklistSchema = z.object({
-  residentIds: z.array(z.string().min(1)).default([])
+  residentIds: z.array(z.string().min(1)).default([]),
+  afterSave: z.enum(["stay", "return"]).optional()
 });
 
 const ATTENDANCE_WRITE_BATCH_SIZE = 20;
@@ -111,6 +111,7 @@ export default async function AttendancePage({
   });
 
   if (!activity) notFound();
+  const activityDayKey = activity.startAt.toISOString().slice(0, 10);
 
   const residents = await prisma.resident.findMany({
     where: {
@@ -151,7 +152,8 @@ export default async function AttendancePage({
     assertWritable(scoped.role);
 
     const parsed = checklistSchema.parse({
-      residentIds: formData.getAll("residentIds").map((value) => String(value))
+      residentIds: formData.getAll("residentIds").map((value) => String(value)),
+      afterSave: String(formData.get("afterSave") || "return") as "stay" | "return"
     });
 
     const residentIds = Array.from(new Set(parsed.residentIds));
@@ -218,7 +220,7 @@ export default async function AttendancePage({
         if (!existing) {
           createdCount += 1;
           writeTasks.push(async () => {
-            const created = await prisma.attendance.create({
+            await prisma.attendance.create({
               data: {
                 activityInstanceId: params.id,
                 residentId,
@@ -226,15 +228,6 @@ export default async function AttendancePage({
                 barrierReason: barrier,
                 notes
               }
-            });
-
-            fireAndForgetAudit({
-              facilityId: scoped.facilityId,
-              actorUserId: scoped.user.id,
-              action: "CREATE",
-              entityType: "Attendance",
-              entityId: created.id,
-              after: created
             });
           });
           continue;
@@ -251,7 +244,7 @@ export default async function AttendancePage({
 
         updatedCount += 1;
         writeTasks.push(async () => {
-          const updated = await prisma.attendance.update({
+          await prisma.attendance.update({
             where: { id: existing.id },
             data: {
               status,
@@ -259,35 +252,28 @@ export default async function AttendancePage({
               notes
             }
           });
-
-          fireAndForgetAudit({
-            facilityId: scoped.facilityId,
-            actorUserId: scoped.user.id,
-            action: "UPDATE",
-            entityType: "Attendance",
-            entityId: updated.id,
-            before: existing,
-            after: updated
-          });
         });
       }
 
       await runInBatches(writeTasks);
-      console.info("Attendance checklist saved", {
-        activityId: params.id,
-        createdCount,
-        updatedCount,
-        unchangedCount
+      fireAndForgetAudit({
+        facilityId: scoped.facilityId,
+        actorUserId: scoped.user.id,
+        action: "UPSERT_BATCH",
+        entityType: "Attendance",
+        entityId: params.id,
+        after: {
+          activityId: params.id,
+          createdCount,
+          updatedCount,
+          unchangedCount
+        }
       });
     }
 
-    revalidatePath(`/app/calendar/${params.id}/attendance`);
-    revalidatePath("/app/calendar");
-    revalidatePath(`/app/residents`);
-    revalidatePath(`/app/attendance`);
-    revalidatePath(`/app/analytics`);
-    revalidatePath("/app");
-    revalidatePath("/app/reports");
+    if (parsed.afterSave !== "stay") {
+      redirect(`/app/calendar?view=week&date=${activityDayKey}`);
+    }
   }
 
   return (

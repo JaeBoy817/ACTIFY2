@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
+import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,21 @@ type ExistingAttendanceRow = {
   barrierReason: BarrierReason | null;
   notes: string | null;
 };
+
+function AttendanceSubmitButtons({ compact = false }: { compact?: boolean }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <div className={cn("flex flex-wrap items-center gap-2", compact && "gap-1.5")}>
+      <Button type="submit" name="afterSave" value="return" disabled={pending}>
+        {pending ? "Saving..." : "Save & return to calendar"}
+      </Button>
+      <Button type="submit" variant="outline" name="afterSave" value="stay" disabled={pending}>
+        {pending ? "Saving..." : "Save & stay"}
+      </Button>
+    </div>
+  );
+}
 
 const statusOptions: Array<{ value: UiAttendanceStatus; label: string }> = [
   { value: "PRESENT_ACTIVE", label: "Present/Active" },
@@ -120,7 +136,7 @@ export function AttendanceChecklistClient({
   const visibleCount = matchingResidentIds.size;
 
   return (
-    <div className="space-y-4">
+    <form action={saveAction} className="space-y-4">
       <div className="sticky top-2 z-20 rounded-lg border border-white/70 bg-white/90 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[250px] flex-1">
@@ -143,9 +159,7 @@ export function AttendanceChecklistClient({
               </button>
             ) : null}
           </div>
-          <Button type="submit" form="attendance-checklist-form">
-            Save checklist attendance
-          </Button>
+          <AttendanceSubmitButtons compact />
           <Button asChild type="button" variant="ghost">
             <Link href={`/app/calendar/${activityId}/attendance`}>Clear</Link>
           </Button>
@@ -153,7 +167,7 @@ export function AttendanceChecklistClient({
         </div>
       </div>
 
-      <form id="attendance-checklist-form" action={saveAction} className="space-y-4">
+      <div className="space-y-4">
         <div className="space-y-2">
           {residents.length === 0 ? (
             <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
@@ -243,8 +257,8 @@ export function AttendanceChecklistClient({
             </p>
           ) : null}
         </div>
-        <Button type="submit">Save checklist attendance</Button>
-      </form>
-    </div>
+        <AttendanceSubmitButtons />
+      </div>
+    </form>
   );
 }
