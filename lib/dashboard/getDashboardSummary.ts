@@ -24,6 +24,10 @@ type DashboardChipIcon =
 
 type DashboardAlertTone = "default" | "warn" | "danger";
 
+export function getDashboardSummaryCacheTag(facilityId: string) {
+  return `dashboard-summary:${facilityId}`;
+}
+
 export type DashboardQuickChip = {
   key: string;
   label: string;
@@ -671,24 +675,27 @@ async function computeDashboardSummary(args: {
   };
 }
 
-const cachedDashboardSummary = unstable_cache(
-  async (facilityId: string, timeZone: string, showBirthdaysWidget: boolean, includeExtended: boolean) =>
-    computeDashboardSummary({
-      facilityId,
-      timeZone,
-      showBirthdaysWidget,
-      includeExtended
-    }),
-  ["dashboard-summary-v3"],
-  {
-    revalidate: 45
-  }
-);
+function getCachedDashboardSummaryForFacility(facilityId: string) {
+  return unstable_cache(
+    async (timeZone: string, showBirthdaysWidget: boolean, includeExtended: boolean) =>
+      computeDashboardSummary({
+        facilityId,
+        timeZone,
+        showBirthdaysWidget,
+        includeExtended
+      }),
+    ["dashboard-summary-v4", facilityId],
+    {
+      revalidate: 45,
+      tags: [getDashboardSummaryCacheTag(facilityId)]
+    }
+  );
+}
 
 export async function getDashboardSummary(options: GetDashboardSummaryOptions): Promise<DashboardSummary> {
   const timeZone = resolveTimeZone(options.timeZone);
-  return cachedDashboardSummary(
-    options.facilityId,
+  const cachedForFacility = getCachedDashboardSummaryForFacility(options.facilityId);
+  return cachedForFacility(
     timeZone,
     Boolean(options.showBirthdaysWidget),
     Boolean(options.includeExtended)

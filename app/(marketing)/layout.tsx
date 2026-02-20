@@ -7,10 +7,11 @@ import { GlassNavbar } from "@/components/glass/GlassNavbar";
 import { LiquidOrbs } from "@/components/glass/LiquidOrbs";
 import { MarketingMotionProvider } from "@/components/marketing/MarketingMotionProvider";
 import { RouteTransitionOverlay } from "@/components/marketing/animations/RouteTransitionOverlay";
+import { isClerkConfigured } from "@/lib/clerk-config";
 import { prisma } from "@/lib/prisma";
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
-  const { userId } = await auth();
+  const { userId } = isClerkConfigured ? await auth() : { userId: null };
   const userSettings = userId
     ? await prisma.user.findUnique({
         where: { clerkUserId: userId },

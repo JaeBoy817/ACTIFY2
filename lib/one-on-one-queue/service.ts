@@ -365,12 +365,23 @@ async function rebuildQueueTx(
     dateContext: DateContext;
     residentStats: ResidentQueueStats[];
     preservePinnedFromCurrentQueue: boolean;
+    missingThisMonthOnly: boolean;
+    includePinnedResidents: boolean;
   }
 ) {
-  const { facilityId, queueSize, dateContext, residentStats, preservePinnedFromCurrentQueue } = args;
+  const {
+    facilityId,
+    queueSize,
+    dateContext,
+    residentStats,
+    preservePinnedFromCurrentQueue,
+    missingThisMonthOnly,
+    includePinnedResidents
+  } = args;
 
   const existingRows = await getQueueRowsTx(tx, facilityId, dateContext);
-  const existingPinnedRows = preservePinnedFromCurrentQueue ? existingRows.filter((row) => row.isPinned) : [];
+  const existingPinnedRows =
+    preservePinnedFromCurrentQueue && includePinnedResidents ? existingRows.filter((row) => row.isPinned) : [];
   const existingPinnedMap = new Map(existingPinnedRows.map((row) => [row.residentId, row]));
 
   if (preservePinnedFromCurrentQueue) {
@@ -390,23 +401,25 @@ async function rebuildQueueTx(
     });
   }
 
-  const carryoverPinnedRows = await tx.dailyOneOnOneQueue.findMany({
-    where: {
-      facilityId,
-      pinnedForDate: dateContext.queueDate,
-      resident: {
-        status: { not: "DISCHARGED" }
-      }
-    },
-    orderBy: [{ pinnedAt: "asc" }, { createdAt: "asc" }],
-    include: {
-      resident: {
-        select: {
-          id: true
+  const carryoverPinnedRows = includePinnedResidents
+    ? await tx.dailyOneOnOneQueue.findMany({
+      where: {
+        facilityId,
+        pinnedForDate: dateContext.queueDate,
+        resident: {
+          status: { not: "DISCHARGED" }
+        }
+      },
+      orderBy: [{ pinnedAt: "asc" }, { createdAt: "asc" }],
+      include: {
+        resident: {
+          select: {
+            id: true
+          }
         }
       }
-    }
-  });
+    })
+    : [];
 
   const carryoverPinnedSet = new Set(carryoverPinnedRows.map((row) => row.residentId));
   const pinnedResidentSet = new Set<string>([...existingPinnedMap.keys(), ...carryoverPinnedSet]);
@@ -433,8 +446,11 @@ async function rebuildQueueTx(
     return compareResidentsByRoom(a, b);
   });
 
-  const nonPinnedResidents = residentStats
+  const candidateResidents = residentStats
     .filter((resident) => !pinnedResidentSet.has(resident.residentId))
+    .filter((resident) => (missingThisMonthOnly ? resident.monthNoteCount === 0 : true));
+
+  const nonPinnedResidents = candidateResidents
     .map((resident) => ({
       resident,
       score: scoreResidentForQueue(resident)
@@ -513,7 +529,9 @@ async function ensureQueueTx(
 
   return rebuildQueueTx(tx, {
     ...args,
-    preservePinnedFromCurrentQueue: true
+    preservePinnedFromCurrentQueue: true,
+    missingThisMonthOnly: false,
+    includePinnedResidents: true
   });
 }
 
@@ -593,6 +611,7 @@ async function buildSnapshotTx(
     queueSize: number;
     dateContext: DateContext;
     regenerate: boolean;
+    missingThisMonthOnly: boolean;
   }
 ) {
   const residentStats = await loadResidentQueueStats(tx, args.facilityId, args.dateContext);
@@ -604,7 +623,9 @@ async function buildSnapshotTx(
       queueSize: args.queueSize,
       dateContext: args.dateContext,
       residentStats,
-      preservePinnedFromCurrentQueue: true
+      preservePinnedFromCurrentQueue: !args.missingThisMonthOnly,
+      missingThisMonthOnly: args.missingThisMonthOnly,
+      includePinnedResidents: !args.missingThisMonthOnly
     });
   } else {
     queueRows = await ensureQueueTx(tx, {
@@ -635,7 +656,8 @@ export async function getOneOnOneSpotlightSnapshot(params: {
       facilityId: params.facilityId,
       queueSize,
       dateContext,
-      regenerate: false
+      regenerate: false,
+      missingThisMonthOnly: false
     })
   );
 }
@@ -644,6 +666,7 @@ export async function regenerateOneOnOneQueueSnapshot(params: {
   facilityId: string;
   date?: string;
   queueSize?: number;
+  missingThisMonthOnly?: boolean;
 }) {
   const dateContext = createDateContext(params.date);
   const queueSize = clampQueueSize(params.queueSize);
@@ -653,7 +676,8 @@ export async function regenerateOneOnOneQueueSnapshot(params: {
       facilityId: params.facilityId,
       queueSize,
       dateContext,
-      regenerate: true
+      regenerate: true,
+      missingThisMonthOnly: Boolean(params.missingThisMonthOnly)
     })
   );
 }
@@ -706,7 +730,8 @@ export async function completeOneOnOneQueueItem(params: {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
       dateContext: createDateContext(row.queueDateKey),
-      regenerate: false
+      regenerate: false,
+      missingThisMonthOnly: false
     });
   });
 }
@@ -736,7 +761,8 @@ export async function skipOneOnOneQueueItem(params: {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
       dateContext: createDateContext(row.queueDateKey),
-      regenerate: false
+      regenerate: false,
+      missingThisMonthOnly: false
     });
   });
 }
@@ -766,7 +792,8 @@ export async function pinOneOnOneQueueItemToTomorrow(params: {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
       dateContext: createDateContext(row.queueDateKey),
-      regenerate: false
+      regenerate: false,
+      missingThisMonthOnly: false
     });
   });
 }

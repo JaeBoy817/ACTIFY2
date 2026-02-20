@@ -5,7 +5,8 @@ import { regenerateOneOnOneQueueSnapshot, serializeOneOnOneSpotlightSnapshot } f
 
 const regeneratePayloadSchema = z.object({
   date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  queueSize: z.number().int().min(1).max(20).optional()
+  queueSize: z.number().int().min(1).max(20).optional(),
+  missingThisMonthOnly: z.boolean().optional()
 });
 
 export async function POST(request: Request) {
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
     const snapshot = await regenerateOneOnOneQueueSnapshot({
       facilityId: context.facilityId,
       date: parsed.data.date,
-      queueSize: parsed.data.queueSize
+      queueSize: parsed.data.queueSize,
+      missingThisMonthOnly: parsed.data.missingThisMonthOnly
     });
 
     return Response.json(serializeOneOnOneSpotlightSnapshot(snapshot));

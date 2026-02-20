@@ -10,6 +10,8 @@ import { isClerkConfigured } from "@/lib/clerk-config";
 import { prisma } from "@/lib/prisma";
 
 async function getUserReducedMotionPreference() {
+  if (!isClerkConfigured) return null;
+
   const { userId } = await auth();
   if (!userId) return null;
 

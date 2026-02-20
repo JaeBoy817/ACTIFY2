@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
+import { getDashboardSummaryCacheTag } from "@/lib/dashboard/getDashboardSummary";
 import { noteBuilderPayloadSchema } from "@/lib/notes/schema";
 import {
   mapTemplateForBuilder,
@@ -14,6 +16,7 @@ import {
   toNotesListRow
 } from "@/lib/notes/serializers";
 import { prisma } from "@/lib/prisma";
+import { zonedDateKey } from "@/lib/timezone";
 
 const listQuerySchema = z.object({
   from: z.string().trim().optional(),
@@ -160,45 +163,71 @@ export async function POST(request: Request) {
       .map((residentId) => residentMap.get(residentId))
       .filter((value): value is string => Boolean(value));
 
-    const created = await prisma.progressNote.create({
-      data: {
-        residentId: parsed.data.residentId,
-        type: toDbType(parsed.data.noteType),
-        participationLevel: toDbParticipation(parsed.data.participationLevel),
-        moodAffect: toDbMood(parsed.data.mood),
-        cuesRequired: toDbCues(parsed.data.cues),
-        response: toDbResponse(parsed.data.responseType),
-        narrative: serializeNarrative(parsed.data),
-        followUp: serializeFollowUp(parsed.data, linkedResidentNames),
-        createdByUserId: context.user.id,
-        createdAt: new Date(parsed.data.occurredAt),
-        activityInstanceId: null
-      },
-      include: {
-        resident: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            room: true
-          }
-        },
-        createdByUser: {
-          select: {
-            name: true
-          }
-        }
-      }
-    });
-
-    if (parsed.data.noteType === "1on1") {
-      await prisma.resident.update({
-        where: { id: parsed.data.residentId },
+    const occurredAt = new Date(parsed.data.occurredAt);
+    const created = await prisma.$transaction(async (tx) => {
+      const note = await tx.progressNote.create({
         data: {
-          lastOneOnOneAt: created.createdAt
+          residentId: parsed.data.residentId,
+          type: toDbType(parsed.data.noteType),
+          participationLevel: toDbParticipation(parsed.data.participationLevel),
+          moodAffect: toDbMood(parsed.data.mood),
+          cuesRequired: toDbCues(parsed.data.cues),
+          response: toDbResponse(parsed.data.responseType),
+          narrative: serializeNarrative(parsed.data),
+          followUp: serializeFollowUp(parsed.data, linkedResidentNames),
+          createdByUserId: context.user.id,
+          createdAt: occurredAt,
+          activityInstanceId: null
+        },
+        include: {
+          resident: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              room: true
+            }
+          },
+          createdByUser: {
+            select: {
+              name: true
+            }
+          }
         }
       });
-    }
+
+      if (parsed.data.noteType === "1on1") {
+        await tx.resident.update({
+          where: { id: parsed.data.residentId },
+          data: {
+            lastOneOnOneAt: note.createdAt
+          }
+        });
+
+        const queueDateKey = zonedDateKey(note.createdAt, "America/Chicago");
+        await tx.dailyOneOnOneQueue.updateMany({
+          where: {
+            facilityId: context.facilityId,
+            residentId: parsed.data.residentId,
+            queueDateKey,
+            completedAt: null
+          },
+          data: {
+            completedAt: note.createdAt,
+            skippedAt: null,
+            skipReason: null
+          }
+        });
+      }
+
+      return note;
+    });
+
+    revalidateTag(getDashboardSummaryCacheTag(context.facilityId));
+    revalidatePath("/app");
+    revalidatePath("/app/dashboard/activity-feed");
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${parsed.data.residentId}`);
 
     return Response.json(
       {
