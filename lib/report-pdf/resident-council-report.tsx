@@ -320,7 +320,7 @@ function residentCouncilDocument(args: {
   const residents = (parsed?.residentsInAttendance ?? []).slice(0, 10);
   const residentsTruncated = (parsed?.residentsInAttendance?.length ?? 0) > residents.length;
   const residentDisplayRows = Array.from({ length: 11 }, (_, index) => residents[index] ?? null);
-  const departmentDefaults = ["Activities", "Nursing", "Therapy", "Dietary", "Housekeeping", "Social Services", "Maintenance"];
+  const departmentDefaults = ["Activities", "Nursing", "Therapy", "Dietary", "Housekeeping", "Social Services", "Maintenance", "Administrator"];
   const parsedDepartmentRows = parsed?.departmentUpdates ?? [];
   const departmentMap = new Map(
     parsedDepartmentRows.map((department) => [department.label.trim().toLowerCase(), department.notes] as const)

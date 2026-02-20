@@ -1,24 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  BarChart3,
-  CalendarDays,
-  ClipboardCheck,
-  ClipboardList,
-  ClipboardPenLine,
-  FileText,
-  FolderKanban,
-  FolderOpen,
-  Handshake,
-  Landmark,
-  Layers,
-  LayoutDashboard,
-  Settings,
-  Users,
-  UsersRound,
-  type LucideIcon
-} from "lucide-react";
+import { Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -26,6 +9,7 @@ import { ActifyLogo } from "@/components/ActifyLogo";
 import { GlassSidebar } from "@/components/glass/GlassSidebar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { asModuleFlags, type ModuleFlags } from "@/lib/module-flags";
+import { getModuleRegistryItem, SIDEBAR_MODULE_GROUPS } from "@/lib/moduleRegistry";
 import { cn } from "@/lib/utils";
 
 type SidebarLink = {
@@ -42,41 +26,20 @@ type SidebarGroup = {
   links: SidebarLink[];
 };
 
-const groupedLinks: SidebarGroup[] = [
-  {
-    id: "daily-workflow",
-    label: "Daily Workflow",
-    icon: FolderOpen,
-    links: [
-      { href: "/app", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/app/calendar", label: "Calendar", icon: CalendarDays, moduleKey: "calendar" },
-      { href: "/app/templates", label: "Templates", icon: Layers, moduleKey: "templates" },
-      { href: "/app/attendance", label: "Attendance Tracker", icon: ClipboardCheck, moduleKey: "calendar" },
-      { href: "/app/notes", label: "Notes", icon: ClipboardPenLine, moduleKey: "notes" }
-    ]
-  },
-  {
-    id: "residents-outcomes",
-    label: "Residents & Outcomes",
-    icon: FolderKanban,
-    links: [
-      { href: "/app/residents", label: "Residents", icon: Users },
-      { href: "/app/care-plans", label: "Care Plans", icon: ClipboardList, moduleKey: "carePlan" },
-      { href: "/app/analytics", label: "Analytics", icon: BarChart3, moduleKey: "analyticsHeatmaps" }
-    ]
-  },
-  {
-    id: "operations",
-    label: "Operations",
-    icon: FolderOpen,
-    links: [
-      { href: "/app/volunteers", label: "Volunteers", icon: Handshake, moduleKey: "volunteers" },
-      { href: "/app/dashboard/budget-stock", label: "Budget + Stock", icon: Landmark, moduleKey: "inventory" },
-      { href: "/app/resident-council", label: "Resident Council", icon: UsersRound, moduleKey: "residentCouncil" },
-      { href: "/app/reports", label: "Reports", icon: FileText, moduleKey: "reports" }
-    ]
-  }
-];
+const groupedLinks: SidebarGroup[] = SIDEBAR_MODULE_GROUPS.map((group) => ({
+  id: group.id,
+  label: group.label,
+  icon: group.icon,
+  links: group.moduleKeys
+    .map((moduleKey) => getModuleRegistryItem(moduleKey))
+    .filter((module): module is NonNullable<typeof module> => Boolean(module))
+    .map((module) => ({
+      href: module.href,
+      label: module.title,
+      icon: module.icon,
+      moduleKey: module.moduleFlagKey
+    }))
+}));
 
 const settingsLink = { href: "/app/settings", label: "Settings", icon: Settings };
 

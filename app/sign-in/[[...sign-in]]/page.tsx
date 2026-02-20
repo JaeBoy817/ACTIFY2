@@ -1,55 +1,30 @@
-import { SignIn } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
+import { SignIn } from "@clerk/nextjs";
 
-import { AuthShell } from "@/components/auth/AuthShell";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthPageShell } from "@/components/marketing/AuthPageShell";
+import { GlassButton, GlassCard } from "@/components/marketing/Glass";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
-import { prisma } from "@/lib/prisma";
-
-async function getUserReducedMotionPreference() {
-  if (!isClerkConfigured) return null;
-
-  const { userId } = await auth();
-  if (!userId) return null;
-
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId: userId },
-    select: {
-      settings: {
-        select: {
-          reduceMotion: true
-        }
-      }
-    }
-  });
-
-  return user?.settings?.reduceMotion ?? null;
-}
 
 function ClerkUnavailable() {
   return (
-    <Card className="border-white/70 bg-white/75">
-      <CardHeader>
-        <CardTitle>Clerk keys required</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm text-muted-foreground">
-        <p>Add valid Clerk keys in your environment variables to enable sign-in.</p>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/sign-up">Create an account</Link>
-        </Button>
-      </CardContent>
-    </Card>
+    <GlassCard className="bg-gradient-to-br from-sky-200/22 via-white/14 to-violet-200/14 p-5">
+      <h2 className="text-lg font-semibold text-foreground">Clerk keys required</h2>
+      <p className="mt-2 text-sm text-foreground/72">
+        Add valid Clerk keys in your environment variables to enable sign-in.
+      </p>
+      <GlassButton asChild variant="secondary" className="mt-3">
+        <Link href="/sign-up" prefetch>
+          Create an account
+        </Link>
+      </GlassButton>
+    </GlassCard>
   );
 }
 
-export default async function SignInPage() {
-  const userReducedMotion = await getUserReducedMotionPreference();
-
+export default function SignInPage() {
   return (
-    <AuthShell mode="sign-in" variant="center" userReducedMotion={userReducedMotion}>
+    <AuthPageShell mode="sign-in">
       {isClerkConfigured ? (
         <SignIn
           path="/sign-in"
@@ -61,6 +36,6 @@ export default async function SignInPage() {
       ) : (
         <ClerkUnavailable />
       )}
-    </AuthShell>
+    </AuthPageShell>
   );
 }

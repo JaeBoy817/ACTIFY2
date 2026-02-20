@@ -96,6 +96,12 @@ body[data-perf-mode="low-power"] .actify-page-shell::before {
   opacity: 0.09;
 }
 
+body[data-perf-mode="low-power"] .marketing-ambient-blob {
+  animation: none;
+  opacity: 0.2;
+  filter: blur(28px);
+}
+
 .actify-page-shell > * {
   position: relative;
   z-index: 1;
@@ -173,6 +179,130 @@ body[data-perf-mode="low-power"] .actify-page-shell::before {
   border-color: var(--actify-accent);
   color: var(--actify-accent);
   background: color-mix(in srgb, var(--actify-accent) 8%, transparent);
+}
+
+.marketing-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.marketing-ambient-blob {
+  position: absolute;
+  width: 68vmax;
+  height: 68vmax;
+  border-radius: 9999px;
+  filter: blur(40px);
+  opacity: 0.28;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+}
+
+.marketing-ambient-blob-a {
+  left: -18vmax;
+  top: -24vmax;
+  background: radial-gradient(circle at 50% 50%, rgba(116, 143, 252, 0.36) 0%, rgba(116, 143, 252, 0) 68%);
+  animation: marketing-drift-a 42s ease-in-out infinite;
+}
+
+.marketing-ambient-blob-b {
+  right: -20vmax;
+  top: -16vmax;
+  background: radial-gradient(circle at 50% 50%, rgba(218, 119, 242, 0.28) 0%, rgba(218, 119, 242, 0) 70%);
+  animation: marketing-drift-b 50s ease-in-out infinite;
+}
+
+.marketing-ambient-blob-c {
+  left: 20%;
+  bottom: -30vmax;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 168, 168, 0.3) 0%, rgba(255, 168, 168, 0) 72%);
+  animation: marketing-drift-c 56s ease-in-out infinite;
+}
+
+.marketing-hero-float {
+  animation: marketing-hero-drift 24s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.marketing-hero-arc {
+  opacity: 0.28;
+  animation: marketing-hero-arc-pulse 16s ease-in-out infinite;
+}
+
+.marketing-hero-arc-delay {
+  animation-delay: 5s;
+}
+
+.marketing-faq-item {
+  transition:
+    transform var(--motion-quick) var(--ease-standard),
+    box-shadow var(--motion-quick) var(--ease-standard),
+    border-color var(--motion-quick) var(--ease-standard);
+}
+
+.marketing-faq-item[data-state="open"] {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 16px 26px -20px rgba(15, 23, 42, 0.35);
+}
+
+.marketing-faq-trigger svg {
+  transition:
+    transform var(--motion-quick) var(--ease-standard),
+    color var(--motion-quick) var(--ease-standard);
+}
+
+.marketing-faq-item[data-state="open"] .marketing-faq-trigger svg {
+  transform: rotate(180deg);
+  color: #5c7cfa;
+}
+
+.marketing-faq-content[data-state="open"] {
+  animation: marketing-faq-slide-down 220ms var(--ease-standard) both;
+}
+
+.marketing-faq-content[data-state="closed"] {
+  animation: marketing-faq-slide-up 180ms var(--ease-gentle) both;
+}
+
+.marketing-legal-details {
+  overflow: hidden;
+}
+
+.marketing-legal-summary {
+  list-style: none;
+  position: relative;
+  transition:
+    transform var(--motion-quick) var(--ease-standard),
+    box-shadow var(--motion-quick) var(--ease-standard),
+    border-color var(--motion-quick) var(--ease-standard);
+}
+
+.marketing-legal-summary::-webkit-details-marker {
+  display: none;
+}
+
+.marketing-legal-summary::after {
+  content: "⌄";
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  color: #5c7cfa;
+  transition: transform var(--motion-quick) var(--ease-standard);
+}
+
+.marketing-legal-details[open] .marketing-legal-summary {
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 20px -16px rgba(15, 23, 42, 0.35);
+}
+
+.marketing-legal-details[open] .marketing-legal-summary::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.marketing-legal-details-nav {
+  animation: marketing-legal-slide-down 220ms var(--ease-standard) both;
 }
 
 section {
@@ -1056,6 +1186,7 @@ h6 {
 
 .actify-auth-clerk .cl-headerTitle,
 .actify-auth-clerk .cl-headerSubtitle {
+  display: none !important;
   padding-inline: 0.5rem !important;
 }
 
@@ -1077,9 +1208,18 @@ h6 {
 }
 
 .actify-auth-clerk .cl-formButtonPrimary {
-  display: block !important;
+  display: flex !important;
   width: calc(100% - 0.75rem) !important;
   margin-inline: auto !important;
+  justify-content: center !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+
+.actify-auth-clerk .cl-formButtonPrimary span,
+.actify-auth-clerk .cl-formButtonPrimaryText {
+  width: 100% !important;
+  text-align: center !important;
 }
 
 .actify-auth-clerk input:-webkit-autofill,
@@ -1140,6 +1280,115 @@ h6 {
   }
 }
 
+@keyframes marketing-drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.06);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes marketing-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(-7%, 3%, 0) scale(1.05);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes marketing-drift-c {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(5%, -5%, 0) scale(1.04);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes marketing-hero-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -4px, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes marketing-hero-arc-pulse {
+  0% {
+    opacity: 0.2;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  50% {
+    opacity: 0.32;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+
+  100% {
+    opacity: 0.2;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes marketing-faq-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes marketing-faq-slide-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes marketing-legal-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .toast-root[data-state="open"] {
   animation: toast-in var(--motion-base) var(--ease-standard);
 }
@@ -1185,7 +1434,13 @@ h6 {
   .toast-icon-bounce,
   .toast-root[data-state="open"],
   .toast-root[data-state="closed"],
-  .toast-root[data-swipe="end"] {
+  .toast-root[data-swipe="end"],
+  .marketing-ambient-blob,
+  .marketing-hero-float,
+  .marketing-hero-arc,
+  .marketing-faq-content[data-state="open"],
+  .marketing-faq-content[data-state="closed"],
+  .marketing-legal-details-nav {
     animation: none !important;
   }
 
@@ -1195,6 +1450,7 @@ h6 {
   .glass::after,
   .glass-warm::after,
   .glass-dense::after,
+  .marketing-glass,
   .calendar-day-cell,
   .magnetic-button,
   .tilt-active {
@@ -1215,6 +1471,12 @@ h6 {
   .calendar-day-cell::before {
     opacity: 0.7;
   }
+
+  .marketing-glass {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(255, 255, 255, 0.88) !important;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -1224,6 +1486,7 @@ h6 {
   .glass-panel,
   .glass-panel-strong,
   .glass-chip,
+  .marketing-glass,
   .actify-header-highlight::before {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
@@ -1231,7 +1494,8 @@ h6 {
 
   .glass-panel,
   .glass-panel-strong,
-  .glass-chip {
+  .glass-chip,
+  .marketing-glass {
     background: rgba(255, 255, 255, 0.94) !important;
   }
 }
