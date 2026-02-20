@@ -24,6 +24,7 @@ import {
   MapPin,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
   Plus,
   SlidersHorizontal,
   Search,
@@ -68,6 +69,8 @@ import { cn } from "@/lib/utils";
 
 const SLOT_MINUTES = 30;
 const SLOT_HEIGHT = 34;
+const EVENT_VERTICAL_GAP_PX = 2;
+const EVENT_COLUMN_GAP_PCT = 1;
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 21;
 const DEFAULT_EVENT_DURATION_MIN = 60;
@@ -83,6 +86,7 @@ const ADAPTATION_FIELDS = [
 type CalendarViewMode = "week" | "day" | "month" | "agenda";
 type CalendarSubsection = "schedule" | "create" | "templates" | "settings";
 type DockTab = "templates" | "filters";
+type CalendarColorMode = "eventType" | "category" | "none";
 
 type AdaptationKey = (typeof ADAPTATION_FIELDS)[number]["key"];
 type AdaptationForm = Record<AdaptationKey, { enabled: boolean; override: string }>;
@@ -180,6 +184,27 @@ type EventTypeKey =
   | "facility-event"
   | "appointment"
   | "reminder";
+
+type EventColorMeta = {
+  chipClass: string;
+  badgeClass: string;
+  dotClass: string;
+  cardClass: string;
+};
+
+type WeekEventLayout = {
+  event: CalendarEventLite;
+  top: number;
+  height: number;
+  leftPct: number;
+  widthPct: number;
+  compactCard: boolean;
+  tightCard: boolean;
+  isConflict: boolean;
+  hasChecklist: boolean;
+  hasAdaptations: boolean;
+  timeRangeLabel: string;
+};
 
 type CalendarRange = {
   start: Date;
@@ -373,49 +398,220 @@ function inferEventType(event: CalendarEventLite, templateById: Map<string, Cale
   return "group-activity";
 }
 
+const NEUTRAL_EVENT_COLOR: EventColorMeta = {
+  chipClass: "bg-slate-100 text-slate-700 border-slate-300/80",
+  badgeClass: "bg-slate-100/85 text-slate-700 border-slate-300/80",
+  dotClass: "bg-slate-500",
+  cardClass: "border-slate-200/80 bg-gradient-to-br from-slate-100/65 via-white/88 to-slate-50/70"
+};
+
+const EVENT_TYPE_COLORS: Record<EventTypeKey, EventColorMeta> = {
+  "group-activity": {
+    chipClass: "bg-emerald-100 text-emerald-700 border-emerald-300/70",
+    badgeClass: "bg-emerald-100/85 text-emerald-800 border-emerald-300/70",
+    dotClass: "bg-emerald-500",
+    cardClass: "border-emerald-200/80 bg-gradient-to-br from-emerald-100/70 via-white/86 to-teal-100/65"
+  },
+  "one-to-one": {
+    chipClass: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300/70",
+    badgeClass: "bg-fuchsia-100/85 text-fuchsia-800 border-fuchsia-300/70",
+    dotClass: "bg-fuchsia-500",
+    cardClass: "border-fuchsia-200/80 bg-gradient-to-br from-fuchsia-100/70 via-white/86 to-violet-100/65"
+  },
+  outing: {
+    chipClass: "bg-amber-100 text-amber-800 border-amber-300/75",
+    badgeClass: "bg-amber-100/85 text-amber-900 border-amber-300/75",
+    dotClass: "bg-amber-500",
+    cardClass: "border-amber-200/80 bg-gradient-to-br from-amber-100/72 via-white/86 to-orange-100/66"
+  },
+  "facility-event": {
+    chipClass: "bg-cyan-100 text-cyan-800 border-cyan-300/75",
+    badgeClass: "bg-cyan-100/85 text-cyan-900 border-cyan-300/75",
+    dotClass: "bg-cyan-500",
+    cardClass: "border-cyan-200/80 bg-gradient-to-br from-cyan-100/70 via-white/86 to-sky-100/66"
+  },
+  appointment: {
+    chipClass: "bg-rose-100 text-rose-700 border-rose-300/75",
+    badgeClass: "bg-rose-100/85 text-rose-800 border-rose-300/75",
+    dotClass: "bg-rose-500",
+    cardClass: "border-rose-200/80 bg-gradient-to-br from-rose-100/70 via-white/86 to-pink-100/66"
+  },
+  reminder: {
+    chipClass: "bg-indigo-100 text-indigo-700 border-indigo-300/75",
+    badgeClass: "bg-indigo-100/85 text-indigo-800 border-indigo-300/75",
+    dotClass: "bg-indigo-500",
+    cardClass: "border-indigo-200/80 bg-gradient-to-br from-indigo-100/70 via-white/86 to-blue-100/66"
+  }
+};
+
+const CATEGORY_COLOR_LOOKUP: Record<string, EventColorMeta> = {
+  entertainment: {
+    chipClass: "bg-violet-100 text-violet-700 border-violet-300/75",
+    badgeClass: "bg-violet-100/85 text-violet-800 border-violet-300/75",
+    dotClass: "bg-violet-500",
+    cardClass: "border-violet-200/80 bg-gradient-to-br from-violet-100/70 via-white/86 to-purple-100/66"
+  },
+  fitness: {
+    chipClass: "bg-lime-100 text-lime-700 border-lime-300/75",
+    badgeClass: "bg-lime-100/85 text-lime-800 border-lime-300/75",
+    dotClass: "bg-lime-500",
+    cardClass: "border-lime-200/80 bg-gradient-to-br from-lime-100/72 via-white/86 to-emerald-100/66"
+  },
+  cognitive: {
+    chipClass: "bg-blue-100 text-blue-700 border-blue-300/75",
+    badgeClass: "bg-blue-100/85 text-blue-800 border-blue-300/75",
+    dotClass: "bg-blue-500",
+    cardClass: "border-blue-200/80 bg-gradient-to-br from-blue-100/70 via-white/86 to-cyan-100/66"
+  },
+  spiritual: {
+    chipClass: "bg-indigo-100 text-indigo-700 border-indigo-300/75",
+    badgeClass: "bg-indigo-100/85 text-indigo-800 border-indigo-300/75",
+    dotClass: "bg-indigo-500",
+    cardClass: "border-indigo-200/80 bg-gradient-to-br from-indigo-100/70 via-white/86 to-violet-100/66"
+  },
+  social: {
+    chipClass: "bg-pink-100 text-pink-700 border-pink-300/75",
+    badgeClass: "bg-pink-100/85 text-pink-800 border-pink-300/75",
+    dotClass: "bg-pink-500",
+    cardClass: "border-pink-200/80 bg-gradient-to-br from-pink-100/70 via-white/86 to-rose-100/66"
+  },
+  sensory: {
+    chipClass: "bg-orange-100 text-orange-700 border-orange-300/75",
+    badgeClass: "bg-orange-100/85 text-orange-800 border-orange-300/75",
+    dotClass: "bg-orange-500",
+    cardClass: "border-orange-200/80 bg-gradient-to-br from-orange-100/72 via-white/86 to-amber-100/66"
+  },
+  "resident-council": {
+    chipClass: "bg-teal-100 text-teal-700 border-teal-300/75",
+    badgeClass: "bg-teal-100/85 text-teal-800 border-teal-300/75",
+    dotClass: "bg-teal-500",
+    cardClass: "border-teal-200/80 bg-gradient-to-br from-teal-100/72 via-white/86 to-cyan-100/66"
+  },
+  "activity-supplies": {
+    chipClass: "bg-sky-100 text-sky-700 border-sky-300/75",
+    badgeClass: "bg-sky-100/85 text-sky-800 border-sky-300/75",
+    dotClass: "bg-sky-500",
+    cardClass: "border-sky-200/80 bg-gradient-to-br from-sky-100/72 via-white/86 to-blue-100/66"
+  },
+  decorations: {
+    chipClass: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300/75",
+    badgeClass: "bg-fuchsia-100/85 text-fuchsia-800 border-fuchsia-300/75",
+    dotClass: "bg-fuchsia-500",
+    cardClass: "border-fuchsia-200/80 bg-gradient-to-br from-fuchsia-100/70 via-white/86 to-pink-100/66"
+  },
+  outings: {
+    chipClass: "bg-amber-100 text-amber-800 border-amber-300/75",
+    badgeClass: "bg-amber-100/85 text-amber-900 border-amber-300/75",
+    dotClass: "bg-amber-500",
+    cardClass: "border-amber-200/80 bg-gradient-to-br from-amber-100/72 via-white/86 to-orange-100/66"
+  },
+  prizes: {
+    chipClass: "bg-purple-100 text-purple-700 border-purple-300/75",
+    badgeClass: "bg-purple-100/85 text-purple-800 border-purple-300/75",
+    dotClass: "bg-purple-500",
+    cardClass: "border-purple-200/80 bg-gradient-to-br from-purple-100/72 via-white/86 to-violet-100/66"
+  },
+  "snack-drink": {
+    chipClass: "bg-red-100 text-red-700 border-red-300/75",
+    badgeClass: "bg-red-100/85 text-red-800 border-red-300/75",
+    dotClass: "bg-red-500",
+    cardClass: "border-red-200/80 bg-gradient-to-br from-red-100/72 via-white/86 to-rose-100/66"
+  },
+  snacks: {
+    chipClass: "bg-red-100 text-red-700 border-red-300/75",
+    badgeClass: "bg-red-100/85 text-red-800 border-red-300/75",
+    dotClass: "bg-red-500",
+    cardClass: "border-red-200/80 bg-gradient-to-br from-red-100/72 via-white/86 to-rose-100/66"
+  },
+  "snacks-drinks": {
+    chipClass: "bg-red-100 text-red-700 border-red-300/75",
+    badgeClass: "bg-red-100/85 text-red-800 border-red-300/75",
+    dotClass: "bg-red-500",
+    cardClass: "border-red-200/80 bg-gradient-to-br from-red-100/72 via-white/86 to-rose-100/66"
+  },
+  other: NEUTRAL_EVENT_COLOR,
+  uncategorized: NEUTRAL_EVENT_COLOR
+};
+
+const CATEGORY_COLOR_FALLBACK: EventColorMeta[] = [
+  EVENT_TYPE_COLORS["group-activity"],
+  EVENT_TYPE_COLORS["one-to-one"],
+  EVENT_TYPE_COLORS.outing,
+  EVENT_TYPE_COLORS["facility-event"],
+  EVENT_TYPE_COLORS.appointment,
+  EVENT_TYPE_COLORS.reminder
+];
+
+function normalizeColorKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function categoryColorMeta(category: string): EventColorMeta {
+  const key = normalizeColorKey(category);
+  const direct = CATEGORY_COLOR_LOOKUP[key];
+  if (direct) return direct;
+
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  return CATEGORY_COLOR_FALLBACK[hash % CATEGORY_COLOR_FALLBACK.length] ?? NEUTRAL_EVENT_COLOR;
+}
+
+function eventColorMeta(params: {
+  event: CalendarEventLite;
+  templateById: Map<string, CalendarTemplateLite>;
+  colorMode: CalendarColorMode;
+}): EventColorMeta {
+  const { event, templateById, colorMode } = params;
+  if (colorMode === "none") return NEUTRAL_EVENT_COLOR;
+  if (colorMode === "category") {
+    return categoryColorMeta(eventCategory(event, templateById));
+  }
+  return EVENT_TYPE_COLORS[inferEventType(event, templateById)] ?? NEUTRAL_EVENT_COLOR;
+}
+
 function eventTypeMeta(type: EventTypeKey) {
+  const colors = EVENT_TYPE_COLORS[type] ?? NEUTRAL_EVENT_COLOR;
   switch (type) {
     case "one-to-one":
       return {
         label: "1:1",
         icon: UserRound,
-        chipClass: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
-        dotClass: "bg-fuchsia-500"
+        ...colors
       };
     case "outing":
       return {
         label: "Outing",
         icon: BusFront,
-        chipClass: "bg-amber-100 text-amber-800 border-amber-200",
-        dotClass: "bg-amber-500"
+        ...colors
       };
     case "facility-event":
       return {
         label: "Facility",
         icon: CalendarHeart,
-        chipClass: "bg-cyan-100 text-cyan-800 border-cyan-200",
-        dotClass: "bg-cyan-500"
+        ...colors
       };
     case "appointment":
       return {
         label: "Appointment",
         icon: Stethoscope,
-        chipClass: "bg-rose-100 text-rose-700 border-rose-200",
-        dotClass: "bg-rose-500"
+        ...colors
       };
     case "reminder":
       return {
         label: "Reminder",
         icon: BellRing,
-        chipClass: "bg-slate-100 text-slate-700 border-slate-200",
-        dotClass: "bg-slate-500"
+        ...colors
       };
     default:
       return {
         label: "Group",
         icon: Users,
-        chipClass: "bg-emerald-100 text-emerald-700 border-emerald-200",
-        dotClass: "bg-emerald-500"
+        ...colors
       };
   }
 }
@@ -448,6 +644,22 @@ function parseEventClock(event: CalendarEventLite, timeZone: string) {
     startTime,
     endTime
   };
+}
+
+function hasChecklistItems(value: unknown) {
+  return checklistToStrings(value).length > 0;
+}
+
+function hasAdaptationsEnabled(value: unknown) {
+  const parsed = parseAdaptations(value);
+  return ADAPTATION_FIELDS.some((field) => parsed.adaptations[field.key].enabled);
+}
+
+function eventsOverlap(
+  a: { startMinutes: number; endMinutes: number },
+  b: { startMinutes: number; endMinutes: number }
+) {
+  return a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
 }
 
 function buildSlots() {
@@ -557,6 +769,7 @@ export function CalendarUnifiedWorkspace({
     visibleStartHour: GRID_START_HOUR,
     visibleEndHour: GRID_END_HOUR,
     defaultLocation: DEFAULT_LOCATION,
+    colorMode: "eventType" as CalendarColorMode,
     pdfLayout: "WEEKLY",
     defaultCategory: "Social"
   });
@@ -583,7 +796,11 @@ export function CalendarUnifiedWorkspace({
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as Partial<typeof calendarSettings>;
-      setCalendarSettings((current) => ({ ...current, ...parsed }));
+      const colorMode =
+        parsed.colorMode === "eventType" || parsed.colorMode === "category" || parsed.colorMode === "none"
+          ? parsed.colorMode
+          : "eventType";
+      setCalendarSettings((current) => ({ ...current, ...parsed, colorMode }));
     } catch {
       // ignore invalid local preferences
     }
@@ -1553,6 +1770,83 @@ export function CalendarUnifiedWorkspace({
     return eventsByDay.get(dateKey) ?? [];
   }
 
+  function buildDayEventLayouts(dateKey: string): WeekEventLayout[] {
+    const dayEvents = buildDayEvents(dateKey);
+    if (dayEvents.length === 0) return [];
+
+    const normalized = dayEvents
+      .map((event) => {
+        const clock = parseEventClock(event, timeZone);
+        const previewEndMinutes =
+          resizePreview && resizePreview.eventId === event.id ? resizePreview.endMinutes : clock.endMinutes;
+        const startMinutes = clamp(clock.startMinutes, GRID_START_HOUR * 60, GRID_END_HOUR * 60 - SLOT_MINUTES);
+        const endMinutes = clamp(
+          Math.max(startMinutes + SLOT_MINUTES, previewEndMinutes),
+          startMinutes + SLOT_MINUTES,
+          GRID_END_HOUR * 60
+        );
+
+        return {
+          event,
+          startMinutes,
+          endMinutes,
+          timeRangeLabel: `${minutesToLabel(startMinutes)} - ${minutesToLabel(endMinutes)}`
+        };
+      })
+      .sort((a, b) => {
+        if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes;
+        if (a.endMinutes !== b.endMinutes) return a.endMinutes - b.endMinutes;
+        return a.event.title.localeCompare(b.event.title);
+      });
+
+    const laneEnds: number[] = [];
+    const withLanes = normalized.map((entry) => {
+      let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
+      if (laneIndex === -1) {
+        laneIndex = laneEnds.length;
+        laneEnds.push(entry.endMinutes);
+      } else {
+        laneEnds[laneIndex] = entry.endMinutes;
+      }
+
+      return {
+        ...entry,
+        laneIndex
+      };
+    });
+
+    return withLanes.map((entry) => {
+      const overlapping = withLanes.filter((candidate) => eventsOverlap(entry, candidate));
+      const laneIndexes = Array.from(new Set(overlapping.map((candidate) => candidate.laneIndex))).sort(
+        (a, b) => a - b
+      );
+      const lanePosition = Math.max(0, laneIndexes.indexOf(entry.laneIndex));
+      const laneCount = Math.max(1, laneIndexes.length);
+      const widthPct = Math.max(18, (100 - EVENT_COLUMN_GAP_PCT * (laneCount - 1)) / laneCount);
+      const rawLeft = lanePosition * (widthPct + EVENT_COLUMN_GAP_PCT);
+      const leftPct = clamp(rawLeft, 0, Math.max(0, 100 - widthPct));
+
+      const rawTop = ((entry.startMinutes - GRID_START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
+      const rawHeight = ((entry.endMinutes - entry.startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT;
+      const top = rawTop + EVENT_VERTICAL_GAP_PX / 2;
+      const height = Math.max(rawHeight - EVENT_VERTICAL_GAP_PX, 18);
+
+      return {
+        event: entry.event,
+        top,
+        height,
+        leftPct,
+        widthPct,
+        compactCard: height < 92,
+        tightCard: height < 68,
+        isConflict: conflictingEventIds.has(entry.event.id),
+        hasChecklist: hasChecklistItems(entry.event.checklist),
+        hasAdaptations: hasAdaptationsEnabled(entry.event.adaptationsEnabled),
+        timeRangeLabel: entry.timeRangeLabel
+      };
+    });
+  }
+
   const selectedDayEvents = selectedDayKey ? buildDayEvents(selectedDayKey) : [];
 
   async function applyConflictOverride() {
@@ -1575,26 +1869,31 @@ export function CalendarUnifiedWorkspace({
   }
 
   const drawerEvent = drawerState?.eventId ? eventsById.get(drawerState.eventId) ?? null : null;
-  const drawerTypeMeta = drawerState
-    ? eventTypeMeta(
-        inferEventType(
-          drawerEvent ?? {
-            id: "new",
-            title: drawerState.title,
-            startAt: toUtcIso(drawerState.dateKey, drawerState.startTime, timeZone) ?? new Date().toISOString(),
-            endAt: toUtcIso(drawerState.dateKey, drawerState.endTime, timeZone) ?? new Date().toISOString(),
-            location: drawerState.location,
-            templateId: drawerState.templateId,
-            seriesId: null,
-            occurrenceKey: null,
-            isOverride: false,
-            conflictOverride: false,
-            checklist: [],
-            adaptationsEnabled: {}
-          },
-          templateById
-        )
-      )
+  const drawerDisplayEvent = drawerState
+    ? drawerEvent ?? {
+        id: "new",
+        title: drawerState.title,
+        startAt: toUtcIso(drawerState.dateKey, drawerState.startTime, timeZone) ?? new Date().toISOString(),
+        endAt: toUtcIso(drawerState.dateKey, drawerState.endTime, timeZone) ?? new Date().toISOString(),
+        location: drawerState.location,
+        templateId: drawerState.templateId,
+        seriesId: null,
+        occurrenceKey: null,
+        isOverride: false,
+        conflictOverride: false,
+        checklist: [],
+        adaptationsEnabled: {}
+      }
+    : null;
+  const drawerTypeMeta = drawerDisplayEvent
+    ? eventTypeMeta(inferEventType(drawerDisplayEvent, templateById))
+    : null;
+  const drawerColorMeta = drawerDisplayEvent
+    ? eventColorMeta({
+        event: drawerDisplayEvent,
+        templateById,
+        colorMode: calendarSettings.colorMode
+      })
     : null;
   const drawerStatusLabel =
     drawerEvent && new Date(drawerEvent.endAt).getTime() < Date.now() ? "Completed" : "Scheduled";
@@ -1694,6 +1993,24 @@ export function CalendarUnifiedWorkspace({
                 aria-label="Search calendar"
               />
             </div>
+            <label className="inline-flex h-10 items-center gap-2 rounded-md border border-white/70 bg-white/85 px-2 text-sm text-foreground/80">
+              <Palette className="h-4 w-4 text-violet-600" />
+              <select
+                value={calendarSettings.colorMode}
+                onChange={(event) =>
+                  setCalendarSettings((current) => ({
+                    ...current,
+                    colorMode: event.target.value as CalendarColorMode
+                  }))
+                }
+                className="h-full border-none bg-transparent pr-6 text-sm focus:outline-none"
+                aria-label="Color coding mode"
+              >
+                <option value="eventType">Color: Type</option>
+                <option value="category">Color: Category</option>
+                <option value="none">Color: Neutral</option>
+              </select>
+            </label>
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger asChild>
                 <Button type="button" variant="outline">
@@ -2119,7 +2436,7 @@ export function CalendarUnifiedWorkspace({
 
                   {gridDays.map((day, dayIndex) => {
                     const dayKey = zonedDateKey(day, timeZone);
-                    const dayEvents = buildDayEvents(dayKey);
+                    const dayLayouts = buildDayEventLayouts(dayKey);
                     return (
                       <div
                         key={`col-${dayKey}`}
@@ -2164,129 +2481,149 @@ export function CalendarUnifiedWorkspace({
                           />
                         ))}
 
-                        {dayEvents.map((event) => {
-                          const clock = parseEventClock(event, timeZone);
-                          const previewEnd =
-                            resizePreview && resizePreview.eventId === event.id
-                              ? resizePreview.endMinutes
-                              : clock.endMinutes;
-                          const top = ((clock.startMinutes - GRID_START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
-                          const height = Math.max(((previewEnd - clock.startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT, 32);
+                        {dayLayouts.map(
+                          ({
+                            event,
+                            top,
+                            height,
+                            leftPct,
+                            widthPct,
+                            compactCard,
+                            tightCard,
+                            isConflict,
+                            hasChecklist,
+                            hasAdaptations,
+                            timeRangeLabel
+                          }) => {
+                            if (top > totalGridHeight) return null;
 
-                          if (top > totalGridHeight) return null;
+                            const clampedTop = clamp(top, 0, totalGridHeight - 24);
+                            const maxHeight = Math.max(18, totalGridHeight - clampedTop);
+                            const typeMeta = eventTypeMeta(inferEventType(event, templateById));
+                            const TypeIcon = typeMeta.icon;
+                            const colorMeta = eventColorMeta({
+                              event,
+                              templateById,
+                              colorMode: calendarSettings.colorMode
+                            });
 
-                          const hasChecklist = checklistToStrings(event.checklist).length > 0;
-                          const parsed = parseAdaptations(event.adaptationsEnabled);
-                          const hasAdaptations = ADAPTATION_FIELDS.some((field) => parsed.adaptations[field.key].enabled);
-                          const typeMeta = eventTypeMeta(inferEventType(event, templateById));
-                          const TypeIcon = typeMeta.icon;
-
-                          return (
-                            <div
-                              key={event.id}
-                              draggable
-                              onDragStart={(dragEvent) => {
-                                dragEvent.dataTransfer.effectAllowed = "move";
-                                dragEvent.dataTransfer.setData(
-                                  "application/x-actify-calendar",
-                                  JSON.stringify({ type: "event", id: event.id })
-                                );
-                                setDraggingEventId(event.id);
-                              }}
-                              onDragEnd={() => {
-                                setDraggingEventId(null);
-                                setHoveredDropDay(null);
-                              }}
-                              className={cn(
-                                "group absolute left-1 right-1 z-20 rounded-xl border p-2 text-xs shadow-md transition",
-                                conflictingEventIds.has(event.id)
-                                  ? "border-amber-300 bg-amber-50/95"
-                                  : "border-white/70 bg-white/92",
-                                draggingEventId === event.id && "opacity-60"
-                              )}
-                              data-event-type={typeMeta.label}
-                              style={{
-                                top: clamp(top, 0, totalGridHeight - 24),
-                                height: Math.min(height, totalGridHeight - top)
-                              }}
-                              onClick={() => openDrawerForEdit(event)}
-                            >
-                              <div className="mb-1 flex items-start justify-between gap-2">
+                            return (
+                              <div
+                                key={event.id}
+                                draggable
+                                onDragStart={(dragEvent) => {
+                                  dragEvent.dataTransfer.effectAllowed = "move";
+                                  dragEvent.dataTransfer.setData(
+                                    "application/x-actify-calendar",
+                                    JSON.stringify({ type: "event", id: event.id })
+                                  );
+                                  setDraggingEventId(event.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggingEventId(null);
+                                  setHoveredDropDay(null);
+                                }}
+                                className={cn(
+                                  "group absolute z-20 overflow-hidden rounded-xl border text-xs shadow-md transition",
+                                  tightCard ? "p-1.5" : compactCard ? "p-2" : "p-2.5",
+                                  isConflict ? "border-amber-300 bg-amber-50/95" : colorMeta.cardClass,
+                                  draggingEventId === event.id && "opacity-60"
+                                )}
+                                data-event-type={typeMeta.label}
+                                style={{
+                                  top: clampedTop,
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  height: Math.min(height, maxHeight)
+                                }}
+                                onClick={() => openDrawerForEdit(event)}
+                              >
+                              <div className={cn("flex items-start justify-between gap-2", tightCard ? "mb-0.5" : "mb-1")}>
                                 <div className="min-w-0">
                                   <p className="inline-flex max-w-full items-center gap-1 truncate font-semibold text-foreground">
-                                    <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", typeMeta.chipClass)}>
-                                      <TypeIcon className="h-3 w-3" />
+                                    <span className={cn("inline-flex shrink-0 items-center justify-center rounded-full border", tightCard ? "h-4 w-4" : "h-5 w-5", colorMeta.chipClass)}>
+                                      <TypeIcon className={cn(tightCard ? "h-2.5 w-2.5" : "h-3 w-3")} />
                                     </span>
                                     <span className="truncate">{event.title}</span>
                                   </p>
-                                  <p className="truncate text-[11px] text-foreground/70">
-                                    {formatEventTimeRange(event.startAt, event.endAt, timeZone)}
-                                  </p>
-                                  <p className="truncate text-[11px] text-foreground/65">{event.location}</p>
+                                  {!tightCard ? (
+                                    <p className="truncate text-[11px] text-foreground/70">{timeRangeLabel}</p>
+                                  ) : null}
+                                  {!compactCard ? (
+                                    <p className="truncate text-[11px] text-foreground/65">{event.location}</p>
+                                  ) : null}
                                 </div>
-                                <div className="hidden gap-1 group-hover:flex">
-                                  <button
-                                    type="button"
-                                    className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
-                                    onClick={(eventClick) => {
-                                      eventClick.stopPropagation();
-                                      openDrawerForEdit(event);
-                                    }}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
-                                    onClick={(eventClick) => {
-                                      eventClick.stopPropagation();
-                                      openDrawerDuplicate(event);
-                                    }}
-                                  >
-                                    Copy
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
-                                    onClick={(eventClick) => {
-                                      eventClick.stopPropagation();
-                                      void deleteActivity(event.id);
-                                    }}
-                                  >
-                                    Delete
-                                  </button>
-                                  <Link
-                                    href={`/app/calendar/${event.id}/attendance`}
-                                    className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
-                                    onClick={(eventClick) => eventClick.stopPropagation()}
-                                  >
-                                    Track
-                                  </Link>
-                                </div>
+                                {!tightCard ? (
+                                  <div className="hidden gap-1 group-hover:flex">
+                                    <button
+                                      type="button"
+                                      className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
+                                      onClick={(eventClick) => {
+                                        eventClick.stopPropagation();
+                                        openDrawerForEdit(event);
+                                      }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
+                                      onClick={(eventClick) => {
+                                        eventClick.stopPropagation();
+                                        openDrawerDuplicate(event);
+                                      }}
+                                    >
+                                      Copy
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
+                                      onClick={(eventClick) => {
+                                        eventClick.stopPropagation();
+                                        void deleteActivity(event.id);
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                    <Link
+                                      href={`/app/calendar/${event.id}/attendance`}
+                                      className="rounded border border-white/70 bg-white/90 px-1 text-[10px]"
+                                      onClick={(eventClick) => eventClick.stopPropagation()}
+                                    >
+                                      Track
+                                    </Link>
+                                  </div>
+                                ) : null}
                               </div>
 
-                              <div className="flex flex-wrap gap-1">
-                                <Badge className={cn("border text-[10px]", typeMeta.chipClass)}>
-                                  {typeMeta.label}
+                              {!tightCard ? (
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge className={cn("border text-[10px]", colorMeta.badgeClass)}>
+                                    {typeMeta.label}
+                                  </Badge>
+                                  {hasChecklist ? (
+                                    <Badge className="border border-white/60 bg-white/75 text-[10px] text-foreground">
+                                      <CheckSquare className="mr-1 h-3 w-3" />
+                                      Checklist
+                                    </Badge>
+                                  ) : null}
+                                  {hasAdaptations && !compactCard ? (
+                                    <Badge className="border border-white/60 bg-white/75 text-[10px] text-foreground">
+                                      <Settings2 className="mr-1 h-3 w-3" />
+                                      Adaptations
+                                    </Badge>
+                                  ) : null}
+                                  {isConflict ? (
+                                    <Badge className="border border-amber-200 bg-amber-100 text-[10px] text-amber-900">
+                                      Conflict
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                              ) : isConflict ? (
+                                <Badge className="border border-amber-200 bg-amber-100 text-[10px] text-amber-900">
+                                  Conflict
                                 </Badge>
-                                {hasChecklist ? (
-                                  <Badge className="border border-white/60 bg-white/75 text-[10px] text-foreground">
-                                    <CheckSquare className="mr-1 h-3 w-3" />
-                                    Checklist
-                                  </Badge>
-                                ) : null}
-                                {hasAdaptations ? (
-                                  <Badge className="border border-white/60 bg-white/75 text-[10px] text-foreground">
-                                    <Settings2 className="mr-1 h-3 w-3" />
-                                    Adaptations
-                                  </Badge>
-                                ) : null}
-                                {conflictingEventIds.has(event.id) ? (
-                                  <Badge className="border border-amber-200 bg-amber-100 text-[10px] text-amber-900">
-                                    Conflict
-                                  </Badge>
-                                ) : null}
-                              </div>
+                              ) : null}
 
                               <button
                                 type="button"
@@ -2295,9 +2632,10 @@ export function CalendarUnifiedWorkspace({
                                 onClick={(eventClick) => eventClick.stopPropagation()}
                                 aria-label={`Resize ${event.title}`}
                               />
-                            </div>
-                          );
-                        })}
+                              </div>
+                            );
+                        }
+                        )}
 
                         {nowIndicator && nowIndicator.dayIndex === dayIndex ? (
                           <div
@@ -2330,7 +2668,13 @@ export function CalendarUnifiedWorkspace({
                   const dayEvents = buildDayEvents(dayKey);
                   const dotMeta = dayEvents
                     .slice(0, 3)
-                    .map((event) => eventTypeMeta(inferEventType(event, templateById)));
+                    .map((event) =>
+                      eventColorMeta({
+                        event,
+                        templateById,
+                        colorMode: calendarSettings.colorMode
+                      })
+                    );
                   const overflow = dayEvents.length - dotMeta.length;
 
                   return (
@@ -2391,15 +2735,20 @@ export function CalendarUnifiedWorkspace({
                               dayEvents.map((event) => {
                                 const typeMeta = eventTypeMeta(inferEventType(event, templateById));
                                 const TypeIcon = typeMeta.icon;
+                                const colorMeta = eventColorMeta({
+                                  event,
+                                  templateById,
+                                  colorMode: calendarSettings.colorMode
+                                });
                                 return (
                                   <button
                                     key={`popover-${event.id}`}
                                     type="button"
-                                    className="w-full rounded-lg border border-white/70 bg-white/85 p-2 text-left"
+                                    className={cn("w-full rounded-lg border p-2 text-left", colorMeta.cardClass)}
                                     onClick={() => openDrawerForEdit(event)}
                                   >
                                     <p className="inline-flex max-w-full items-center gap-1.5 truncate text-sm font-medium text-foreground">
-                                      <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", typeMeta.chipClass)}>
+                                      <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", colorMeta.chipClass)}>
                                         <TypeIcon className="h-3 w-3" />
                                       </span>
                                       <span className="truncate">{event.title}</span>
@@ -2469,42 +2818,46 @@ export function CalendarUnifiedWorkspace({
                             <div className="sticky top-0 rounded-lg bg-white/75 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-foreground/70">
                               {row.label}
                             </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="w-full rounded-xl border border-white/65 bg-white/82 p-3 text-left"
-                              onClick={() => openDrawerForEdit(row.event)}
-                            >
-                              {(() => {
-                                const typeMeta = eventTypeMeta(inferEventType(row.event, templateById));
-                                const TypeIcon = typeMeta.icon;
-                                const statusLabel =
-                                  new Date(row.event.endAt).getTime() < Date.now() ? "Completed" : "Scheduled";
-                                return (
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                                      <span className={cn("inline-flex h-5 w-5 items-center justify-center rounded-full border", typeMeta.chipClass)}>
-                                        <TypeIcon className="h-3 w-3" />
-                                      </span>
-                                      {row.event.title}
-                                    </p>
-                                    <div className="flex items-center gap-1.5">
-                                      <Badge variant="outline" className="bg-white/75 text-xs">
-                                        {eventCategory(row.event, templateById)}
-                                      </Badge>
-                                      <Badge variant="outline" className="bg-white/75 text-xs">
-                                        {statusLabel}
-                                      </Badge>
-                                    </div>
+                          ) : (() => {
+                            const typeMeta = eventTypeMeta(inferEventType(row.event, templateById));
+                            const TypeIcon = typeMeta.icon;
+                            const colorMeta = eventColorMeta({
+                              event: row.event,
+                              templateById,
+                              colorMode: calendarSettings.colorMode
+                            });
+                            const statusLabel =
+                              new Date(row.event.endAt).getTime() < Date.now() ? "Completed" : "Scheduled";
+
+                            return (
+                              <button
+                                type="button"
+                                className={cn("w-full rounded-xl border p-3 text-left", colorMeta.cardClass)}
+                                onClick={() => openDrawerForEdit(row.event)}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                                    <span className={cn("inline-flex h-5 w-5 items-center justify-center rounded-full border", colorMeta.chipClass)}>
+                                      <TypeIcon className="h-3 w-3" />
+                                    </span>
+                                    {row.event.title}
+                                  </p>
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="outline" className={cn("text-xs", colorMeta.badgeClass)}>
+                                      {eventCategory(row.event, templateById)}
+                                    </Badge>
+                                    <Badge variant="outline" className="bg-white/75 text-xs">
+                                      {statusLabel}
+                                    </Badge>
                                   </div>
-                                );
-                              })()}
-                              <p className="mt-1 text-xs text-foreground/70">
-                                {formatEventTimeRange(row.event.startAt, row.event.endAt, timeZone)}
-                              </p>
-                              <p className="text-xs text-foreground/65">{row.event.location}</p>
-                            </button>
-                          )}
+                                </div>
+                                <p className="mt-1 text-xs text-foreground/70">
+                                  {formatEventTimeRange(row.event.startAt, row.event.endAt, timeZone)}
+                                </p>
+                                <p className="text-xs text-foreground/65">{row.event.location}</p>
+                              </button>
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -2558,17 +2911,22 @@ export function CalendarUnifiedWorkspace({
                 selectedDayEvents.map((event) => {
                   const typeMeta = eventTypeMeta(inferEventType(event, templateById));
                   const TypeIcon = typeMeta.icon;
+                  const colorMeta = eventColorMeta({
+                    event,
+                    templateById,
+                    colorMode: calendarSettings.colorMode
+                  });
                   const statusLabel = new Date(event.endAt).getTime() < Date.now() ? "Completed" : "Scheduled";
                   return (
                     <button
                       key={`agenda-drawer-${event.id}`}
                       type="button"
-                      className="w-full rounded-xl border border-white/70 bg-white/85 p-3 text-left"
+                      className={cn("w-full rounded-xl border p-3 text-left", colorMeta.cardClass)}
                       onClick={() => openDrawerForEdit(event)}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-foreground">
-                          <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", typeMeta.chipClass)}>
+                          <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", colorMeta.chipClass)}>
                             <TypeIcon className="h-3 w-3" />
                           </span>
                           <span className="truncate">{event.title}</span>
@@ -2860,6 +3218,23 @@ export function CalendarUnifiedWorkspace({
               />
             </label>
             <label className="space-y-1 text-sm">
+              Color coding mode
+              <select
+                value={calendarSettings.colorMode}
+                onChange={(event) =>
+                  setCalendarSettings((current) => ({
+                    ...current,
+                    colorMode: event.target.value as CalendarColorMode
+                  }))
+                }
+                className="h-10 w-full rounded-md border border-white/70 bg-white/90 px-3 text-sm"
+              >
+                <option value="eventType">By event type</option>
+                <option value="category">By template category</option>
+                <option value="none">Neutral glass</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
               Visible start hour
               <Input
                 type="number"
@@ -3038,7 +3413,9 @@ export function CalendarUnifiedWorkspace({
               <h3 className="text-lg font-semibold text-foreground">Calendar Activity</h3>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 {drawerTypeMeta ? (
-                  <Badge className={cn("border text-[11px]", drawerTypeMeta.chipClass)}>{drawerTypeMeta.label}</Badge>
+                  <Badge className={cn("border text-[11px]", drawerColorMeta?.badgeClass ?? drawerTypeMeta.badgeClass)}>
+                    {drawerTypeMeta.label}
+                  </Badge>
                 ) : null}
                 <Badge variant="outline" className="bg-white/75 text-[11px]">
                   {drawerStatusLabel}

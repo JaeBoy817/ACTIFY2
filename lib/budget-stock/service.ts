@@ -197,6 +197,80 @@ export async function ensureBudgetStockCategoryName(facilityId: string, name: st
   });
 }
 
+async function canonicalizeBudgetStockCategories(facilityId: string) {
+  const rows = await prisma.budgetStockCategory.findMany({
+    where: { facilityId },
+    select: { id: true, name: true, monthlyLimit: true, createdAt: true },
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }]
+  });
+
+  const groups = new Map<string, Array<{ id: string; name: string; monthlyLimit: number; createdAt: Date }>>();
+  for (const row of rows) {
+    const canonicalName = normalizeBudgetStockCategory(row.name);
+    const bucket = groups.get(canonicalName);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      groups.set(canonicalName, [row]);
+    }
+  }
+
+  for (const [canonicalName, group] of groups) {
+    const hasAliasRows = group.some((row) => row.name !== canonicalName);
+    if (group.length === 1 && !hasAliasRows) {
+      continue;
+    }
+
+    const keeper = group.find((row) => row.name === canonicalName) ?? group[0];
+    const aliasRows = group.filter((row) => row.id !== keeper.id);
+    const aliasIds = aliasRows.map((row) => row.id);
+    const aliasNames = aliasRows.map((row) => row.name);
+    const monthlyLimit = Number(group.reduce((sum, row) => sum + row.monthlyLimit, 0).toFixed(2));
+
+    await prisma.$transaction(async (tx) => {
+      await tx.budgetStockCategory.update({
+        where: { id: keeper.id },
+        data: {
+          name: canonicalName,
+          monthlyLimit
+        }
+      });
+
+      await tx.budgetStockExpense.updateMany({
+        where: {
+          facilityId,
+          category: { in: [canonicalName, ...aliasNames] }
+        },
+        data: {
+          category: canonicalName,
+          categoryId: keeper.id
+        }
+      });
+
+      if (aliasNames.length > 0) {
+        await tx.budgetStockItem.updateMany({
+          where: {
+            facilityId,
+            category: { in: aliasNames }
+          },
+          data: {
+            category: canonicalName
+          }
+        });
+      }
+
+      if (aliasIds.length > 0) {
+        await tx.budgetStockCategory.deleteMany({
+          where: {
+            id: { in: aliasIds },
+            facilityId
+          }
+        });
+      }
+    });
+  }
+}
+
 function computeCategoryCards(
   categories: Array<{ id: string; name: string; monthlyLimit: number }>,
   expenses: BudgetStockExpenseDTO[]
@@ -229,6 +303,7 @@ export async function getBudgetStockHubSnapshot(params: {
 }): Promise<BudgetStockHubSnapshot> {
   const range = parseMonthKey(params.monthKey, params.timeZone ?? "America/Chicago");
   await ensureBudgetStockCategories(params.facilityId);
+  await canonicalizeBudgetStockCategories(params.facilityId);
 
   const [items, categories, expenses, sales] = await Promise.all([
     prisma.budgetStockItem.findMany({
