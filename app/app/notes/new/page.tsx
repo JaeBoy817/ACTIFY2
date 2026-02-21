@@ -59,6 +59,7 @@ export default async function NotesBuilderPage({
     type?: string;
     residentId?: string;
     noteId?: string;
+    templateId?: string;
   };
 }) {
   const context = await requireModulePage("notes");
@@ -162,6 +163,20 @@ export default async function NotesBuilderPage({
         staffPresent: parsed.staffPresent
       };
       noteId = existing.id;
+    }
+  }
+
+  if (!noteId && searchParams?.templateId) {
+    const selectedTemplate = templates.find((template) => template.id === searchParams.templateId);
+    if (selectedTemplate) {
+      const mappedTemplate = mapTemplateForBuilder(selectedTemplate);
+      initialValues = {
+        ...initialValues,
+        title: initialValues.title || mappedTemplate.title,
+        narrative: initialValues.narrative || mappedTemplate.narrativeStarter || "",
+        tags: Array.from(new Set([...(initialValues.tags ?? []), ...(mappedTemplate.tags ?? [])])),
+        activityLabel: initialValues.activityLabel || mappedTemplate.category || mappedTemplate.title
+      };
     }
   }
 

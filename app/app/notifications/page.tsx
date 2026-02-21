@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Trash2 } from "lucide-react";
 
 import { GlassButton } from "@/components/glass/GlassButton";
 import { GlassCard } from "@/components/glass/GlassCard";
@@ -8,6 +8,7 @@ import { GlassPanel } from "@/components/glass/GlassPanel";
 import { Badge } from "@/components/ui/badge";
 import { requireFacilityContext } from "@/lib/auth";
 import {
+  clearAllNotifications,
   ensureUserNotificationFeed,
   listUserNotifications,
   markAllNotificationsRead,
@@ -31,6 +32,15 @@ export default async function NotificationsPage() {
 
     const scoped = await requireFacilityContext();
     await markAllNotificationsRead(scoped.user.id);
+    revalidatePath("/app/notifications");
+    revalidatePath("/app");
+  }
+
+  async function onClearAll() {
+    "use server";
+
+    const scoped = await requireFacilityContext();
+    await clearAllNotifications(scoped.user.id);
     revalidatePath("/app/notifications");
     revalidatePath("/app");
   }
@@ -61,12 +71,20 @@ export default async function NotificationsPage() {
               Daily digest and live operational alerts based on your settings.
             </p>
           </div>
-          <form action={onMarkAllRead}>
-            <GlassButton type="submit" size="sm" variant="dense">
-              <CheckCheck className="mr-1.5 h-4 w-4" />
-              Mark all read
-            </GlassButton>
-          </form>
+          <div className="flex items-center gap-2">
+            <form action={onMarkAllRead}>
+              <GlassButton type="submit" size="sm" variant="dense">
+                <CheckCheck className="mr-1.5 h-4 w-4" />
+                Mark all read
+              </GlassButton>
+            </form>
+            <form action={onClearAll}>
+              <GlassButton type="submit" size="sm" variant="dense" className="bg-white/65">
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Clear all
+              </GlassButton>
+            </form>
+          </div>
         </div>
       </GlassPanel>
 

@@ -73,16 +73,27 @@ function HeroConstellation({ modules }: { modules: readonly ModuleRegistryItem[]
         return (
           <span
             key={`${moduleItem.key}-${index}`}
-            className="absolute opacity-80"
-            style={{ left: point.left, top: point.top, animationDelay: `${index * 1.8}s` }}
+            className="marketing-hero-flow absolute opacity-25"
+            style={{
+              left: point.left,
+              top: point.top,
+              animationDelay: `${index * 1.6}s`,
+              animationDuration: `${46 + (index % 4) * 8}s`
+            }}
           >
             <span
               className={cn(
-                "marketing-hero-float inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-gradient-to-br shadow-[0_12px_24px_-16px_rgba(15,23,42,0.55)]",
+                "marketing-hero-glow absolute inset-[-24px] rounded-2xl bg-gradient-to-br opacity-80 blur-3xl",
+                moduleItem.accentGradientClasses
+              )}
+            />
+            <span
+              className={cn(
+                "marketing-hero-float relative inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br shadow-[0_14px_26px_-18px_rgba(15,23,42,0.4)] backdrop-blur-[8px]",
                 moduleItem.accentGradientClasses
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-6 w-6 opacity-20 blur-[4.2px]" />
             </span>
           </span>
         );

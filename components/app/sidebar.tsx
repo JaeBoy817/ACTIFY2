@@ -90,7 +90,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   }, []);
 
   return (
-    <GlassSidebar variant="dense" className="liquid-enter flex h-full w-full flex-col">
+    <GlassSidebar variant="dense" className="actify-shell-solid liquid-enter flex h-full w-full flex-col">
       <Link href="/app" className="mb-4 inline-flex items-center">
         <ActifyLogo variant="lockup" size={34} />
       </Link>

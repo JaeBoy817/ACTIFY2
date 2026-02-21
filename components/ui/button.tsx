@@ -5,15 +5,15 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium shadow-md shadow-black/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:shadow-lg hover:shadow-black/20 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-sm disabled:shadow-black/10",
+  "glass-button glass-button-hover liquid-shadow-float inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/45 bg-white/65 text-sm font-medium shadow-lg shadow-black/15 backdrop-blur-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:shadow-xl hover:shadow-black/20 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-sm disabled:shadow-black/10",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+        default: "border-blue-300/60 bg-gradient-to-r from-primary/80 to-secondary/70 text-primary-foreground hover:brightness-110",
+        destructive: "border-rose-300/60 bg-gradient-to-r from-destructive/80 to-rose-500/70 text-destructive-foreground hover:brightness-110",
+        outline: "border-white/55 bg-white/55 text-foreground hover:bg-white/75 hover:text-foreground",
+        secondary: "border-cyan-300/55 bg-gradient-to-r from-secondary/70 to-cyan-400/60 text-secondary-foreground hover:brightness-110",
+        ghost: "border-white/45 bg-white/45 text-foreground hover:bg-white/70 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline"
       },
       size: {

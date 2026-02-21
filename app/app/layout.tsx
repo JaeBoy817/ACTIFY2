@@ -37,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ActifyThemeShell className="min-h-screen bg-actify-orbs md:flex">
       <LiquidOrbs />
-      <div className="w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
+      <div className="relative z-30 w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
       <div className="flex-1 pb-8">
@@ -47,9 +47,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             autoLogoutMinutes={compliance.hipaaMode.autoLogoutMinutes}
           />
         ) : null}
-        <div className="px-4 pt-4">
-          <GlassNavbar variant="dense" className="actify-header-highlight liquid-enter !p-0 overflow-hidden">
-            <div className="h-1.5" style={{ background: "var(--actify-grad-primary)" }} />
+        <div className="relative z-30 px-4 pt-4">
+          <GlassNavbar variant="dense" className="actify-shell-solid actify-header-white liquid-enter !p-0 overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="flex items-center gap-3">
                 <Link href="/app" className="inline-flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

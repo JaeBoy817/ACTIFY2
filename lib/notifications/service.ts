@@ -393,6 +393,25 @@ export async function markAllNotificationsRead(userId: string) {
   });
 }
 
+export async function clearAllNotifications(userId: string) {
+  return prisma.appNotification.deleteMany({
+    where: {
+      userId
+    }
+  });
+}
+
+export async function clearReadNotifications(userId: string) {
+  return prisma.appNotification.deleteMany({
+    where: {
+      userId,
+      readAt: {
+        not: null
+      }
+    }
+  });
+}
+
 export type UserNotification = Pick<
   AppNotification,
   "id" | "kind" | "title" | "body" | "actionUrl" | "createdAt" | "readAt"
