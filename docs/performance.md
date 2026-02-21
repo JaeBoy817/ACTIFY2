@@ -1,169 +1,180 @@
 # ACTIFY Performance Audit
 
 ## Scope
-This pass focused on perceived speed and route responsiveness for:
-- Dashboard (`/app`)
-- Calendar (`/app/calendar`)
-- Attendance (`/app/attendance`)
-- Analytics (`/app/analytics`)
+This pass targeted interactive speed for:
+- Dashboard: `/app`
+- Calendar: `/app/calendar`
+- Attendance Tracker: `/app/attendance`
+- Analytics: `/app/analytics`
 
-## Measurement Workflow
-### Build metrics (before/after)
-1. `npm run build`
-2. Capture Next.js route output (`Size` and `First Load JS`)
-
-### Bundle analysis
-1. `npm run build:analyze`
-2. Open:
-   - `.next/analyze/client.html`
-   - `.next/analyze/nodejs.html`
-   - `.next/analyze/edge.html`
-
-### Lighthouse / Web Vitals
-- Lighthouse command attempted:
-  - `npx -y lighthouse http://localhost:3100/app --only-categories=performance --output=json --output-path=./.tmp-lh-app.json --quiet --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"`
-- In this sandbox, Lighthouse was not reliably executable (headless browser/runtime constraints + authenticated app routes).
-- Added runtime Web Vitals instrumentation in-app (LCP/INP/CLS + nav timing), so production/dev browser sessions now emit metrics for real user flows.
+## Environment + Workflow
+- Framework: Next.js App Router + React + TypeScript + Tailwind
+- Build command: `npm run build`
+- Bundle analyzer: `npm run build:analyze`
+- Route bundle inspection: `.next/static/chunks` + Next build route table
 
 ## Baseline (Before)
-Source: initial build snapshot at task start.
+Baseline captured from the first production build at start of this pass.
 
+### Route First Load JS (before)
 | Route | First Load JS (Before) |
 |---|---:|
-| `/app` | 151 kB |
-| `/app/calendar` | 162 kB |
-| `/app/attendance` | 106 kB |
-| `/app/analytics` | 189 kB |
+| `/app` | 130 kB |
+| `/app/calendar` | 165 kB |
+| `/app/attendance` | 140 kB |
+| `/app/analytics` | 134 kB |
 
-Largest bundle offenders (before):
-- `recharts` chunk (analytics): ~381.6 kB parsed / ~97.9 kB gzip
-- Clerk chunk: ~136 kB parsed / ~38.8 kB gzip
-- Framer Motion chunk: ~120 kB parsed / ~39.4 kB gzip
+### Lighthouse / Web Vitals baseline
+Attempted local Lighthouse run with:
+- `npx -y lighthouse http://localhost:3010/app --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance --output=json --output-path=docs/perf-lighthouse/baseline/app.json`
 
-## After
-Source: final `npm run build` + `npm run build:analyze` after changes.
+Result in this environment:
+- **Blocked** (`No Chrome installations found`), so Lighthouse before/after numeric scores could not be captured here.
+- Existing in-app web-vitals instrumentation (`PerformanceReporter`) remains enabled for live browser sessions.
 
+## Largest Client Bundles (After Analyze)
+From `.next/static/chunks` after optimization pass:
+
+1. `6766.bb6df759b1e6b7b9.js` (~364 kB) – chart/math stack (not initial on core routes)
+2. `fd9d1056-ebdfd632f8986610.js` (~172 kB) – shared runtime/vendor
+3. `framework-56dfd39ab9a08705.js` (~140 kB)
+4. `2117-28a06a7790c60f0f.js` (~124 kB)
+5. `main-388ed2e93ae17fd2.js` (~120 kB)
+6. `app/app/settings/page-*.js` (~116 kB) – settings page remains heavy
+7. `app/app/residents/[id]/page-*.js` (~59 kB)
+8. `app/app/dashboard/budget-stock/page-*.js` (~51 kB)
+9. `app/app/residents/page-*.js` (~43 kB)
+10. `app/app/resident-council/page-*.js` (~41 kB)
+
+## Optimizations Implemented
+
+### 1) Reduced global paint + animation cost
+Heavy global animations were running on all sections/buttons/selects/dropdowns, causing continuous repaint pressure.
+
+Changes:
+- Removed global perpetual animation from `section`, `article`, `button`, `select`, and dropdown popper wrappers.
+- Removed global backdrop blur on all buttons.
+- Reduced dashboard ambient blur/opacity and slowed animation cadence.
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/app/globals.css`
+
+### 2) Split heavy client islands (Calendar + Attendance)
+Calendar and Attendance main workspaces were bundled directly into route shells.
+
+Changes:
+- Added lazy wrappers using `next/dynamic` for:
+  - `CalendarUnifiedWorkspace`
+  - `AttendanceQuickTakeWorkspace`
+- Route shells now render quickly with lightweight skeletons while heavy workspace code streams in.
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/components/app/CalendarUnifiedWorkspaceLazy.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/app/app/calendar/page.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/components/attendance/AttendanceQuickTakeWorkspaceLazy.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/app/app/attendance/page.tsx`
+
+### 3) Reduced dashboard client payload via lazy client cards
+Dashboard client-heavy cards now load lazily.
+
+Changes:
+- Added lazy wrappers for:
+  - `AnalyticsCardClient`
+  - `OneToOneNotesCardClient`
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/components/dashboard/AnalyticsCardClientLazy.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/components/dashboard/OneToOneNotesCardClientLazy.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/components/dashboard/AnalyticsCard.tsx`
+- `/Users/jaeboy/Documents/Website Actify Project/components/dashboard/OneToOneNotesCard.tsx`
+
+### 4) Removed unnecessary post-save attendance refetch
+Saving attendance previously triggered a full quick-take reload immediately after save.
+
+Changes:
+- Kept optimistic UI state and removed forced post-save reload call.
+- Prefetch sessions route still retained.
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/components/attendance/AttendanceQuickTakeWorkspace.tsx`
+
+### 5) Added short-lived caching for hot attendance and calendar reads
+Changes:
+- Added cached quick-take payload path + cache tag helpers.
+- API GET now uses cached quick-take payload.
+- API POST invalidates quick-take cache tag.
+- Calendar templates query now cached per facility (60s).
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/lib/attendance-tracker/service.ts`
+- `/Users/jaeboy/Documents/Website Actify Project/app/api/attendance/quick-take/route.ts`
+- `/Users/jaeboy/Documents/Website Actify Project/app/app/calendar/page.tsx`
+
+### 6) Notification query pressure reduction
+Top app layout was repeatedly doing notification feed + unread/list work.
+
+Changes:
+- Added short TTL in-memory cache for unread count + notification list.
+- Added per-user invalidation on mutation paths.
+- Added ensure-feed throttle window to avoid rerunning full feed generation on every request.
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/lib/notifications/service.ts`
+
+### 7) Expanded proactive route prefetch
+Changes:
+- Expanded idle prefetch targets to include core tabs used in top-level navigation.
+
+Files:
+- `/Users/jaeboy/Documents/Website Actify Project/components/app/RoutePrefetcher.tsx`
+
+## After (Measured)
+From final `npm run build` / `npm run build:analyze` after changes.
+
+### Route First Load JS (after)
 | Route | First Load JS (After) | Delta |
 |---|---:|---:|
-| `/app` | 152 kB | +1 kB |
-| `/app/calendar` | 163 kB | +1 kB |
-| `/app/attendance` | 106 kB | 0 kB |
-| `/app/analytics` | 89.1 kB | **-99.9 kB** |
-
-Top parsed client chunks (after):
-1. `static/chunks/3617.*.js` — 379.2 kB parsed (mostly `recharts`) **not initial**
-2. `static/chunks/fd9d1056-*.js` — 172.8 kB parsed (shared runtime)
-3. `static/chunks/framework-*.js` — 140.0 kB parsed
-4. `static/chunks/2255-*.js` — 139.5 kB parsed (mostly Clerk, initial in app layout)
-5. `static/chunks/2117-*.js` — 124.7 kB parsed
-6. `static/chunks/1242-*.js` — 121.0 kB parsed (Framer Motion, mostly marketing/auth initial)
-7. `static/chunks/main-*.js` — 120.1 kB parsed
-8. `static/chunks/app/app/settings/page-*.js` — 118.5 kB parsed
-9. `static/chunks/app/app/calendar/page-*.js` — 71.3 kB parsed
-10. `static/chunks/7262-*.js` — 62.2 kB parsed
-
-## Slow Routes/Components Found + Fixes
-### 1) Analytics payload too heavy on first paint
-- Problem: `recharts` loaded as initial route JS for `/app/analytics`.
-- Fix:
-  - Moved chart rendering behind client-only lazy wrappers with `ssr: false`.
-  - File changes:
-    - `components/app/top-attendees-bar-chart-lazy.tsx`
-    - `components/app/engagement-trend-chart-lazy.tsx`
-    - `app/app/analytics/page.tsx`
-- Result: `/app/analytics` first-load JS reduced from 189 kB to 89.1 kB.
-
-### 2) Calendar repeated range fetch chatter
-- Problem: week range endpoint called repeatedly with no short-term dedupe.
-- Fix:
-  - Added TTL + inflight dedupe client cache utility.
-  - Added explicit cache invalidation after mutations.
-  - Added fetch timing performance marks.
-  - File changes:
-    - `lib/perf/client-cache.ts`
-    - `components/app/calendar-week-workspace.tsx`
-
-### 3) Residents list render cost on large datasets
-- Problem: long list rendering all rows produced avoidable render work and search lag.
-- Fix:
-  - Added virtualization (`@tanstack/react-virtual`) for resident list rows.
-  - Added `useDeferredValue` for search typing smoothness.
-  - Memoized row component.
-  - File changes:
-    - `components/residents/ResidentList.tsx`
-    - `components/residents/ResidentsWorkspace.tsx`
-    - `components/residents/ResidentListItem.tsx`
-
-### 4) Settings tab interaction cost
-- Problem: all tab panes mounted simultaneously (`forceMount`) causing unnecessary render workload.
-- Fix:
-  - Removed `forceMount` across settings tab contents so only active tab mounts.
-  - File changes:
-    - `app/app/settings/_components/SettingsTabs.tsx`
-
-### 5) Navigation transition perceived latency
-- Problem: route transitions had no explicit nav timing visibility and limited proactive prefetch.
-- Fix:
-  - Added hover/focus/touch prefetch for sidebar links.
-  - Added route prefetcher for hot destinations.
-  - Added route timing marks and web-vitals reporting utility.
-  - File changes:
-    - `components/app/sidebar.tsx`
-    - `components/app/RoutePrefetcher.tsx`
-    - `components/app/PerformanceReporter.tsx`
-    - `app/app/layout.tsx`
-
-### 6) CSS effect cost guardrails
-- Problem: heavy visual effects can cause low-end device jank.
-- Fix:
-  - Added low-power mode behavior based on `saveData`, `deviceMemory`, `hardwareConcurrency`.
-  - Reduced animation/blur/shadow intensity under low-power mode.
-  - File changes:
-    - `app/globals.css`
-    - `components/app/PerformanceReporter.tsx`
-
-### 7) Smaller server query improvements
-- Problem: avoidable overfetch and serial query timing.
-- Fix:
-  - Analytics queries switched to narrower `select` projections.
-  - Attendance page presence query moved into main `Promise.all` batch.
-  - File changes:
-    - `app/app/analytics/page.tsx`
-    - `app/app/attendance/page.tsx`
+| `/app` | 111 kB | **-19 kB** |
+| `/app/calendar` | 89.5 kB | **-75.5 kB** |
+| `/app/attendance` | 89.5 kB | **-50.5 kB** |
+| `/app/analytics` | 134 kB | 0 kB |
 
 ## Known Remaining Hotspots
-1. Settings route bundle remains large (`/app/settings` first-load JS ~205 kB) due very large monolithic tab component.
-2. Clerk runtime remains a major initial chunk in authenticated app layout.
-3. Calendar route chunk is still sizable (~71 kB parsed route chunk) due complex drag/drop and scheduler UI.
-4. Heavy global visual styling (shadows/backdrop effects) can still tax low-end devices despite low-power guardrails.
+1. `/app/settings` remains large (~207 kB first load JS).
+2. Residents and Resident Council page chunks are still substantial due feature breadth.
+3. Shared runtime/vendor chunks are still dominant in total first-load cost.
+4. Lighthouse cannot be produced in this environment until a Chrome binary is available.
 
-## How to Keep It Fast (Checklist)
-- Keep charting/PDF/drag-drop modules lazy and route-scoped.
-- Avoid broad `include` queries; always project only needed fields.
-- Use `Promise.all` for independent queries.
-- Cache hot read endpoints client-side with short TTL + inflight dedupe.
-- Virtualize lists once row count can exceed ~75–100.
-- Debounce/defer expensive filters (`useDeferredValue`, 150–250ms debounce).
-- Keep settings/admin screens split into smaller chunks; avoid mounting hidden tabs.
-- Track Web Vitals continuously (LCP/INP/CLS) and route nav timings in dev/staging.
-- Re-run `npm run build:analyze` before large UI merges and verify no accidental initial chunk regressions.
+## How To Run Performance Checks
 
-## Changed Files (Performance Pass)
-- `next.config.mjs`
-- `package.json`
-- `components/app/sidebar.tsx`
-- `components/app/RoutePrefetcher.tsx`
-- `components/app/PerformanceReporter.tsx`
-- `app/app/layout.tsx`
-- `app/globals.css`
-- `lib/perf/client-cache.ts`
-- `components/app/calendar-week-workspace.tsx`
-- `app/app/calendar/page.tsx`
-- `components/app/top-attendees-bar-chart-lazy.tsx`
-- `components/app/engagement-trend-chart-lazy.tsx`
-- `app/app/analytics/page.tsx`
-- `app/app/attendance/page.tsx`
-- `components/residents/ResidentList.tsx`
-- `components/residents/ResidentsWorkspace.tsx`
-- `components/residents/ResidentListItem.tsx`
-- `app/app/settings/_components/SettingsTabs.tsx`
+### 1) Build + route payloads
+```bash
+npm run build
+```
+Read route table output (`Size`, `First Load JS`).
+
+### 2) Bundle analyzer
+```bash
+npm run build:analyze
+open .next/analyze/client.html
+open .next/analyze/nodejs.html
+open .next/analyze/edge.html
+```
+
+### 3) Lighthouse (when Chrome is installed)
+```bash
+npm run start -- -p 3010
+npx -y lighthouse http://localhost:3010/app --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance --output=json --output-path=docs/perf-lighthouse/after/app.json
+npx -y lighthouse http://localhost:3010/app/calendar --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance --output=json --output-path=docs/perf-lighthouse/after/calendar.json
+npx -y lighthouse http://localhost:3010/app/attendance --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance --output=json --output-path=docs/perf-lighthouse/after/attendance.json
+npx -y lighthouse http://localhost:3010/app/analytics --quiet --chrome-flags='--headless --no-sandbox' --only-categories=performance --output=json --output-path=docs/perf-lighthouse/after/analytics.json
+```
+
+## How To Keep It Fast (Checklist)
+- Keep heavy interactive workspaces behind lazy client boundaries.
+- Avoid global perpetual CSS animations on high-frequency elements.
+- Cache hot read paths (10–60s) and invalidate on writes.
+- Keep route prefetch focused on high-probability next tabs.
+- Use virtualization for lists that can exceed ~100 rows.
+- Avoid full-list refetch after small mutations when optimistic state is already correct.
+- Re-run `npm run build` and `npm run build:analyze` before merging large UI refactors.

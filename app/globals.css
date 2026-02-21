@@ -373,20 +373,17 @@ body[data-perf-mode="low-power"] .marketing-hero-glow {
 
 section {
   box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.16);
-  animation: liquid-shadow-drift 11.4s ease-in-out infinite;
 }
 
 article {
-  animation: liquid-shadow-drift 12s ease-in-out infinite;
+  box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.12);
 }
 
 :is(section, article, div)[class*="rounded-2xl"][class*="border"],
 :is(section, article, div)[class*="rounded-3xl"][class*="border"] {
   border-color: color-mix(in srgb, rgba(255, 255, 255, 0.72) 58%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
   box-shadow:
-    0 18px 34px -22px rgba(15, 23, 42, 0.34),
+    0 12px 24px -18px rgba(15, 23, 42, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
@@ -412,16 +409,13 @@ article {
 button {
   border: 1px solid rgba(255, 255, 255, 0.45);
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.54));
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
   box-shadow:
-    0 14px 28px -16px rgba(15, 23, 42, 0.34),
+    0 12px 22px -16px rgba(15, 23, 42, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.52);
   transition:
     box-shadow var(--motion-quick) var(--ease-gentle),
     background-color var(--motion-quick) var(--ease-gentle),
     transform var(--motion-quick) var(--ease-gentle);
-  animation: liquid-shadow-drift 8.8s ease-in-out infinite;
 }
 
 button:hover {
@@ -436,16 +430,10 @@ button:disabled {
   box-shadow:
     0 8px 16px -14px rgba(15, 23, 42, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  animation-play-state: paused;
 }
 
 select {
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
-  animation: liquid-shadow-drift 9.6s ease-in-out infinite;
-}
-
-[data-radix-popper-content-wrapper] > div {
-  animation: liquid-shadow-drift 9.4s ease-in-out infinite;
 }
 
 input,
@@ -490,9 +478,9 @@ body[data-perf-mode="low-power"] textarea {
     radial-gradient(66% 52% at 92% 12%, rgba(167, 139, 250, 0.4) 0%, transparent 83%),
     radial-gradient(88% 62% at 50% 50%, rgba(45, 212, 191, 0.34) 0%, transparent 86%),
     radial-gradient(76% 52% at 50% 96%, rgba(236, 72, 153, 0.28) 0%, transparent 86%);
-  filter: blur(88px);
-  opacity: 0.98;
-  animation: dashboard-chroma-shift 12s ease-in-out infinite alternate;
+  filter: blur(64px);
+  opacity: 0.82;
+  animation: dashboard-chroma-shift 22s ease-in-out infinite alternate;
 }
 
 .dashboard-spectrum::after {
@@ -503,8 +491,8 @@ body[data-perf-mode="low-power"] textarea {
   z-index: 0;
   background:
     linear-gradient(128deg, rgba(14, 165, 233, 0.3) 0%, rgba(37, 99, 235, 0.22) 42%, rgba(168, 85, 247, 0.24) 74%, rgba(45, 212, 191, 0.22) 100%);
-  filter: blur(28px);
-  opacity: 0.76;
+  filter: blur(18px);
+  opacity: 0.62;
 }
 
 .dashboard-spectrum > :not(.pointer-events-none) {

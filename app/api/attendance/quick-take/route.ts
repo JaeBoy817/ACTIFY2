@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import {
@@ -6,7 +6,11 @@ import {
   AttendanceTrackerApiError,
   requireAttendanceTrackerApiContext
 } from "@/lib/attendance-tracker/api-context";
-import { getAttendanceQuickTakePayload, saveAttendanceBatch } from "@/lib/attendance-tracker/service";
+import {
+  getAttendanceQuickTakeCacheTag,
+  getAttendanceQuickTakePayloadCached,
+  saveAttendanceBatch
+} from "@/lib/attendance-tracker/service";
 import { QUICK_ATTENDANCE_CYCLE, type QuickAttendanceStatus } from "@/lib/attendance-tracker/status";
 
 const saveSchema = z.object({
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
     const date = url.searchParams.get("date");
     const sessionId = url.searchParams.get("sessionId");
 
-    const payload = await getAttendanceQuickTakePayload({
+    const payload = await getAttendanceQuickTakePayloadCached({
       facilityId: context.facilityId,
       timeZone: context.timeZone,
       dateKey: date,
@@ -66,6 +70,7 @@ export async function POST(request: Request) {
     revalidatePath("/app/attendance/sessions");
     revalidatePath("/app/attendance/residents");
     revalidatePath("/app/calendar");
+    revalidateTag(getAttendanceQuickTakeCacheTag(context.facilityId));
 
     return Response.json({
       ok: true,

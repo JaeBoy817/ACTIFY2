@@ -188,7 +188,6 @@ export function AttendanceQuickTakeWorkspace({
         description: "Entries were updated."
       });
       router.prefetch("/app/attendance/sessions");
-      await loadQuickTake(dateKey, selectedSessionId);
     } catch (error) {
       toast({
         title: "Save failed",

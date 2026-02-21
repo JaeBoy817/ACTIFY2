@@ -1,4 +1,6 @@
-import { CalendarUnifiedWorkspace } from "@/components/app/calendar-unified-workspace";
+import { unstable_cache } from "next/cache";
+
+import { CalendarUnifiedWorkspaceLazy } from "@/components/app/CalendarUnifiedWorkspaceLazy";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { zonedDateKey } from "@/lib/timezone";
@@ -29,6 +31,29 @@ function parseInitialDate(searchParams?: { date?: string; month?: string }, time
   return zonedDateKey(new Date(), timeZone);
 }
 
+function getCachedCalendarTemplatesByFacility(facilityId: string) {
+  return unstable_cache(
+    async () =>
+      prisma.activityTemplate.findMany({
+        where: { facilityId },
+        select: {
+          id: true,
+          title: true,
+          category: true,
+          difficulty: true,
+          defaultChecklist: true,
+          adaptations: true
+        },
+        orderBy: { title: "asc" }
+      }),
+    ["calendar-templates-v1", facilityId],
+    {
+      revalidate: 60,
+      tags: [`calendar:templates:${facilityId}`]
+    }
+  );
+}
+
 export default async function CalendarPage({
   searchParams
 }: {
@@ -40,21 +65,10 @@ export default async function CalendarPage({
   const initialSection = parseInitialSection(searchParams?.section);
   const initialDateKey = parseInitialDate(searchParams, timeZone);
 
-  const templates = await prisma.activityTemplate.findMany({
-    where: { facilityId: context.facilityId },
-    select: {
-      id: true,
-      title: true,
-      category: true,
-      difficulty: true,
-      defaultChecklist: true,
-      adaptations: true
-    },
-    orderBy: { title: "asc" }
-  });
+  const templates = await getCachedCalendarTemplatesByFacility(context.facilityId)();
 
   return (
-    <CalendarUnifiedWorkspace
+    <CalendarUnifiedWorkspaceLazy
       templates={templates.map((template) => ({
         id: template.id,
         title: template.title,

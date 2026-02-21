@@ -1,4 +1,4 @@
-import { AttendanceQuickTakeWorkspace } from "@/components/attendance/AttendanceQuickTakeWorkspace";
+import { AttendanceQuickTakeWorkspaceLazy } from "@/components/attendance/AttendanceQuickTakeWorkspaceLazy";
 import { getAttendanceQuickTakePayload } from "@/lib/attendance-tracker/service";
 import { requireModulePage } from "@/lib/page-guards";
 import { canWrite } from "@/lib/permissions";
@@ -22,7 +22,7 @@ export default async function AttendanceQuickTakePage({
 
   return (
     <div className="space-y-4">
-      <AttendanceQuickTakeWorkspace initialData={initialData} canEdit={canWrite(context.role)} />
+      <AttendanceQuickTakeWorkspaceLazy initialData={initialData} canEdit={canWrite(context.role)} />
     </div>
   );
 }

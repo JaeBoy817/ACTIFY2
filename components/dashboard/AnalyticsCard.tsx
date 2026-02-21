@@ -1,6 +1,6 @@
 import { LineChart } from "lucide-react";
 
-import { AnalyticsCardClient } from "@/components/dashboard/AnalyticsCardClient";
+import { AnalyticsCardClientLazy } from "@/components/dashboard/AnalyticsCardClientLazy";
 import { GlassCard } from "@/components/glass/GlassCard";
 import type { DashboardHomeSummary } from "@/lib/dashboard/getDashboardHomeSummary";
 
@@ -22,7 +22,7 @@ export async function AnalyticsCard({
         </div>
       </div>
       <div className="p-5">
-        <AnalyticsCardClient
+        <AnalyticsCardClientLazy
           analytics={summary.analytics}
         />
       </div>

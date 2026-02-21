@@ -1,6 +1,6 @@
 import { HeartHandshake } from "lucide-react";
 
-import { OneToOneNotesCardClient } from "@/components/dashboard/OneToOneNotesCardClient";
+import { OneToOneNotesCardClientLazy } from "@/components/dashboard/OneToOneNotesCardClientLazy";
 import { GlassCard } from "@/components/glass/GlassCard";
 import type { DashboardHomeSummary } from "@/lib/dashboard/getDashboardHomeSummary";
 
@@ -22,7 +22,7 @@ export async function OneToOneNotesCard({
         </div>
       </div>
       <div className="p-5">
-        <OneToOneNotesCardClient initialState={summary.oneToOne} recentNotes={summary.recentOneToOneNotes} />
+        <OneToOneNotesCardClientLazy initialState={summary.oneToOne} recentNotes={summary.recentOneToOneNotes} />
       </div>
     </GlassCard>
   );

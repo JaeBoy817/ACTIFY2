@@ -1,4 +1,5 @@
 import { AttendanceStatus, BarrierReason, Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { compareResidentsByRoom } from "@/lib/resident-status";
@@ -272,6 +273,54 @@ export async function getAttendanceQuickTakePayload(params: {
     residents,
     entriesByResidentId: detail?.entriesByResidentId ?? {}
   };
+}
+
+function getAttendanceQuickTakeCacheKey(params: {
+  facilityId: string;
+  timeZone: string;
+  dateKey?: string | null;
+  sessionId?: string | null;
+}) {
+  const parsed = parseDateKey(params.dateKey, params.timeZone);
+  const normalizedDateKey = zonedDateKey(parsed, params.timeZone);
+  return {
+    normalizedDateKey,
+    cacheSessionId: params.sessionId ?? "default"
+  };
+}
+
+export function getAttendanceQuickTakeCacheTag(facilityId: string, dateKey?: string) {
+  if (dateKey) {
+    return `attendance:quick-take:${facilityId}:${dateKey}`;
+  }
+  return `attendance:quick-take:${facilityId}`;
+}
+
+export async function getAttendanceQuickTakePayloadCached(params: {
+  facilityId: string;
+  timeZone: string;
+  dateKey?: string | null;
+  sessionId?: string | null;
+}) {
+  const { normalizedDateKey, cacheSessionId } = getAttendanceQuickTakeCacheKey(params);
+  const loadCached = unstable_cache(
+    async () =>
+      getAttendanceQuickTakePayload({
+        facilityId: params.facilityId,
+        timeZone: params.timeZone,
+        dateKey: normalizedDateKey,
+        sessionId: params.sessionId
+      }),
+    ["attendance-quick-take-v1", params.facilityId, normalizedDateKey, cacheSessionId],
+    {
+      revalidate: 20,
+      tags: [
+        getAttendanceQuickTakeCacheTag(params.facilityId),
+        getAttendanceQuickTakeCacheTag(params.facilityId, normalizedDateKey)
+      ]
+    }
+  );
+  return loadCached();
 }
 
 export async function saveAttendanceBatch(params: {

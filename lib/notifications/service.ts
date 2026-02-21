@@ -1,4 +1,5 @@
 import { Prisma, ResidentStatus, type AppNotification } from "@prisma/client";
+import { revalidateTag } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { asNotificationDefaults, parseUserSettingsRow } from "@/lib/settings/defaults";
@@ -18,6 +19,67 @@ type EnsureNotificationFeedInput = {
   timezone: string;
   now?: Date;
 };
+
+const NOTIFICATION_CACHE_TTL_MS = 15_000;
+const NOTIFICATION_ENSURE_WINDOW_MS = 45_000;
+
+type NotificationsCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const globalForNotificationsCache = globalThis as unknown as {
+  __actifyNotificationListCache?: Map<string, NotificationsCacheEntry<AppNotification[]>>;
+  __actifyNotificationUnreadCache?: Map<string, NotificationsCacheEntry<number>>;
+  __actifyNotificationEnsureWindow?: Map<string, number>;
+};
+
+const notificationListCache =
+  globalForNotificationsCache.__actifyNotificationListCache ??
+  new Map<string, NotificationsCacheEntry<AppNotification[]>>();
+const notificationUnreadCache =
+  globalForNotificationsCache.__actifyNotificationUnreadCache ??
+  new Map<string, NotificationsCacheEntry<number>>();
+const notificationEnsureWindow =
+  globalForNotificationsCache.__actifyNotificationEnsureWindow ?? new Map<string, number>();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForNotificationsCache.__actifyNotificationListCache = notificationListCache;
+  globalForNotificationsCache.__actifyNotificationUnreadCache = notificationUnreadCache;
+  globalForNotificationsCache.__actifyNotificationEnsureWindow = notificationEnsureWindow;
+}
+
+function cleanupExpiredCacheEntries(now = Date.now()) {
+  for (const [key, entry] of notificationListCache.entries()) {
+    if (entry.expiresAt <= now) {
+      notificationListCache.delete(key);
+    }
+  }
+  for (const [key, entry] of notificationUnreadCache.entries()) {
+    if (entry.expiresAt <= now) {
+      notificationUnreadCache.delete(key);
+    }
+  }
+  for (const [key, timestamp] of notificationEnsureWindow.entries()) {
+    if (now - timestamp > NOTIFICATION_ENSURE_WINDOW_MS * 3) {
+      notificationEnsureWindow.delete(key);
+    }
+  }
+}
+
+function notificationCacheTag(userId: string) {
+  return `notifications:user:${userId}`;
+}
+
+export function invalidateNotificationCaches(userId: string) {
+  for (const key of notificationListCache.keys()) {
+    if (key.startsWith(`${userId}:`)) {
+      notificationListCache.delete(key);
+    }
+  }
+  notificationUnreadCache.delete(userId);
+  revalidateTag(notificationCacheTag(userId));
+}
 
 function parseTimeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{2}):(\d{2})$/);
@@ -136,6 +198,16 @@ async function getBirthdayCountForDate(args: { facilityId: string; timezone: str
 
 export async function ensureUserNotificationFeed(input: EnsureNotificationFeedInput) {
   const now = input.now ?? new Date();
+  const nowMs = now.getTime();
+  const ensureKey = `${input.userId}:${input.facilityId}`;
+  const lastEnsuredAt = notificationEnsureWindow.get(ensureKey);
+  if (typeof lastEnsuredAt === "number" && nowMs - lastEnsuredAt < NOTIFICATION_ENSURE_WINDOW_MS) {
+    return;
+  }
+
+  notificationEnsureWindow.set(ensureKey, nowMs);
+  cleanupExpiredCacheEntries(nowMs);
+
   const [facilitySettingsRow, userSettings] = await Promise.all([
     prisma.facilitySettings.findUnique({
       where: { facilityId: input.facilityId },
@@ -352,24 +424,53 @@ export async function ensureUserNotificationFeed(input: EnsureNotificationFeedIn
 }
 
 export async function listUserNotifications(userId: string, limit = 30) {
-  return prisma.appNotification.findMany({
+  const now = Date.now();
+  cleanupExpiredCacheEntries(now);
+  const cacheKey = `${userId}:${limit}`;
+  const hit = notificationListCache.get(cacheKey);
+  if (hit && hit.expiresAt > now) {
+    return hit.value;
+  }
+
+  const rows = await prisma.appNotification.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: limit
   });
+
+  notificationListCache.set(cacheKey, {
+    value: rows,
+    expiresAt: now + NOTIFICATION_CACHE_TTL_MS
+  });
+
+  return rows;
 }
 
 export async function getUnreadNotificationCount(userId: string) {
-  return prisma.appNotification.count({
+  const now = Date.now();
+  cleanupExpiredCacheEntries(now);
+  const hit = notificationUnreadCache.get(userId);
+  if (hit && hit.expiresAt > now) {
+    return hit.value;
+  }
+
+  const count = await prisma.appNotification.count({
     where: {
       userId,
       readAt: null
     }
   });
+
+  notificationUnreadCache.set(userId, {
+    value: count,
+    expiresAt: now + NOTIFICATION_CACHE_TTL_MS
+  });
+
+  return count;
 }
 
 export async function markNotificationRead(args: { userId: string; notificationId: string }) {
-  return prisma.appNotification.updateMany({
+  const result = await prisma.appNotification.updateMany({
     where: {
       id: args.notificationId,
       userId: args.userId,
@@ -379,10 +480,12 @@ export async function markNotificationRead(args: { userId: string; notificationI
       readAt: new Date()
     }
   });
+  invalidateNotificationCaches(args.userId);
+  return result;
 }
 
 export async function markAllNotificationsRead(userId: string) {
-  return prisma.appNotification.updateMany({
+  const result = await prisma.appNotification.updateMany({
     where: {
       userId,
       readAt: null
@@ -391,18 +494,22 @@ export async function markAllNotificationsRead(userId: string) {
       readAt: new Date()
     }
   });
+  invalidateNotificationCaches(userId);
+  return result;
 }
 
 export async function clearAllNotifications(userId: string) {
-  return prisma.appNotification.deleteMany({
+  const result = await prisma.appNotification.deleteMany({
     where: {
       userId
     }
   });
+  invalidateNotificationCaches(userId);
+  return result;
 }
 
 export async function clearReadNotifications(userId: string) {
-  return prisma.appNotification.deleteMany({
+  const result = await prisma.appNotification.deleteMany({
     where: {
       userId,
       readAt: {
@@ -410,6 +517,8 @@ export async function clearReadNotifications(userId: string) {
       }
     }
   });
+  invalidateNotificationCaches(userId);
+  return result;
 }
 
 export type UserNotification = Pick<
