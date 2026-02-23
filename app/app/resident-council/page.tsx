@@ -1,684 +1,556 @@
-import { revalidatePath, revalidateTag } from "next/cache";
-import dynamic from "next/dynamic";
-import { z } from "zod";
+import Link from "next/link";
+import { BarChart3, CalendarDays, Clock3, FileDown, ListTodo } from "lucide-react";
 
-import { MeetingDetail } from "@/components/resident-council/MeetingDetail";
-import { ResidentCouncilShell } from "@/components/resident-council/ResidentCouncilShell";
-import { logAudit } from "@/lib/audit";
-import { requireModulePage } from "@/lib/page-guards";
-import { assertWritable } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
 import {
-  buildMeetingSheetNotes,
-  getResidentCouncilCacheTag,
-  getResidentCouncilSnapshot,
-  mergeDueDateIntoFollowUp,
-  parseDueDate,
-  residentCouncilTopicTemplates,
-  withoutDueDateLine
-} from "@/lib/resident-council/service";
-import type { ResidentCouncilSection, ResidentCouncilView } from "@/lib/resident-council/types";
-import { compareResidentsByRoom } from "@/lib/resident-status";
+  createResidentCouncilMeetingAction,
+  deleteResidentCouncilActionItemAction,
+  updateResidentCouncilActionItemAction
+} from "@/app/app/resident-council/_actions";
+import { ActionItemsPanel } from "@/components/resident-council/ActionItemsPanel";
+import { MeetingList } from "@/components/resident-council/MeetingList";
+import { ResidentCouncilShell, type ResidentCouncilSectionKey } from "@/components/resident-council/ResidentCouncilShell";
+import { GlassCard } from "@/components/glass/GlassCard";
+import { requireModulePage } from "@/lib/page-guards";
+import { canWrite } from "@/lib/permissions";
+import {
+  getResidentCouncilActiveResidents,
+  getResidentCouncilMeetingDetail,
+  getResidentCouncilOverviewData,
+  getResidentCouncilOwners,
+  listResidentCouncilActionItems,
+  listResidentCouncilMeetings,
+  type ResidentCouncilActionSort,
+  type ResidentCouncilMeetingSort
+} from "@/lib/resident-council/queries";
+import { residentCouncilTopicTemplates } from "@/lib/resident-council/service";
 
-const viewSchema = z.enum(["meetings", "actions", "topics", "reports"]);
+type HubView = "overview" | "meetings" | "actions" | "analytics" | "settings";
 
-const panelFallback = (
-  <div className="glass-panel h-[520px] animate-pulse rounded-2xl border-white/20 bg-white/30" />
-);
+type SearchParams = Record<string, string | string[] | undefined>;
 
-const MeetingListLazy = dynamic(
-  () => import("@/components/resident-council/MeetingList").then((mod) => mod.MeetingList),
-  {
-    loading: () => (
-      <div className="glass-panel h-[540px] animate-pulse rounded-2xl border-white/20 bg-white/30" />
-    )
-  }
-);
-
-const ActionItemsPanelLazy = dynamic(
-  () => import("@/components/resident-council/ActionItemsPanel").then((mod) => mod.ActionItemsPanel),
-  { loading: () => panelFallback }
-);
-
-const TopicTemplatesPanelLazy = dynamic(
-  () => import("@/components/resident-council/TopicTemplatesPanel").then((mod) => mod.TopicTemplatesPanel),
-  { loading: () => panelFallback }
-);
-
-const ReportsPanelLazy = dynamic(
-  () => import("@/components/resident-council/ReportsPanel").then((mod) => mod.ReportsPanel),
-  { loading: () => panelFallback }
-);
-
-const optionalText = z.preprocess((value) => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? undefined : trimmed;
-}, z.string().max(3000).optional());
-
-const nullableText = z.preprocess((value) => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}, z.string().max(3000).nullable().optional());
-
-const optionalCount = z.preprocess((value) => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}, z.number().int().nonnegative().optional());
-
-const optionalIsoDate = z.preprocess((value) => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return trimmed;
-}, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
-
-const nullableIsoDate = z.preprocess((value) => {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed;
-}, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional());
-
-const meetingSheetSchema = z.object({
-  heldAt: z.string().min(1),
-  attendanceCountOverride: optionalCount,
-  residentsAttendedIds: z.array(z.string().min(1)).default([]),
-  summary: optionalText,
-  oldBusiness: optionalText,
-  newBusiness: optionalText,
-  additionalNotes: optionalText,
-  departmentActivities: optionalText,
-  departmentNursing: optionalText,
-  departmentTherapy: optionalText,
-  departmentDietary: optionalText,
-  departmentHousekeeping: optionalText,
-  departmentLaundry: optionalText,
-  departmentMaintenance: optionalText,
-  departmentSocialServices: optionalText,
-  departmentAdministrator: optionalText
-});
-
-const actionItemSchema = z.object({
-  meetingId: z.string().min(1),
-  section: z.enum(["OLD", "NEW"]).default("NEW"),
-  category: z.string().min(1),
-  concern: z.string().min(3),
-  owner: nullableText,
-  followUp: nullableText,
-  dueDate: nullableIsoDate,
-  status: z.enum(["UNRESOLVED", "RESOLVED"]).default("UNRESOLVED")
-});
-
-const updateItemSchema = z.object({
-  itemId: z.string().min(1),
-  section: z.enum(["OLD", "NEW"]).optional(),
-  status: z.enum(["UNRESOLVED", "RESOLVED"]).optional(),
-  owner: nullableText,
-  followUp: nullableText,
-  dueDate: nullableIsoDate,
-  category: optionalText,
-  concern: optionalText
-});
-
-const bulkUpdateSchema = z.object({
-  itemIds: z.array(z.string().min(1)).min(1),
-  status: z.enum(["UNRESOLVED", "RESOLVED"]).optional(),
-  owner: optionalText,
-  dueDate: optionalIsoDate
-});
-
-const deleteMeetingSchema = z.object({
-  meetingId: z.string().min(1)
-});
-
-const deleteItemSchema = z.object({
-  itemId: z.string().min(1)
-});
-
-const applyTemplateSchema = z.object({
-  meetingId: z.string().min(1),
-  templateId: z.string().min(1)
-});
-
-const createTopicSchema = z.object({
-  meetingId: z.string().min(1),
-  category: z.string().min(1),
-  section: z.enum(["OLD", "NEW"]),
-  text: z.string().min(3)
-});
-
-function asString(value?: string | string[]) {
+function first(value?: string | string[]) {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
 }
 
-function parseSectionLine(value?: string | null): ResidentCouncilSection | null {
-  if (!value) return null;
-  const lines = value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  for (const line of lines) {
-    if (!line.toLowerCase().startsWith("section:")) continue;
-    const section = line.slice("section:".length).trim().toUpperCase();
-    if (section === "OLD" || section === "NEW") return section;
+function parseView(value: string): HubView {
+  if (value === "topics") return "settings";
+  if (value === "reports") return "settings";
+  if (value === "overview" || value === "meetings" || value === "actions" || value === "analytics" || value === "settings") {
+    return value;
   }
-  return null;
+  return "overview";
 }
 
-function mergeFollowUpWithSection(section: ResidentCouncilSection, dueDate: string | null, followUp: string | null) {
-  const merged = mergeDueDateIntoFollowUp(dueDate, followUp);
-  return merged ? `Section: ${section}\n${merged}` : `Section: ${section}`;
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function invalidateResidentCouncil(facilityId: string) {
-  revalidateTag(getResidentCouncilCacheTag(facilityId));
-  revalidatePath("/app/resident-council");
+function parseMeetingSort(value: string): ResidentCouncilMeetingSort {
+  if (value === "oldest" || value === "most_action_items" || value === "most_departments") return value;
+  return "newest";
+}
+
+function parseActionSort(value: string): ResidentCouncilActionSort {
+  if (value === "oldest" || value === "due_soon") return value;
+  return "newest";
 }
 
 export default async function ResidentCouncilPage({
   searchParams
 }: {
-  searchParams?: {
-    view?: string | string[];
-    meetingId?: string | string[];
-  };
+  searchParams?: SearchParams;
 }) {
   const context = await requireModulePage("residentCouncil");
-  const writable = context.role !== "READ_ONLY";
-  const snapshot = await getResidentCouncilSnapshot(context.facilityId);
+  const writable = canWrite(context.role);
 
-  const requestedView = asString(searchParams?.view);
-  const currentView: ResidentCouncilView = viewSchema.safeParse(requestedView).success
-    ? (requestedView as ResidentCouncilView)
-    : "meetings";
+  const rawView = first(searchParams?.view);
+  const currentView = parseView(rawView);
+  const month = /^\d{4}-\d{2}$/.test(first(searchParams?.month)) ? first(searchParams?.month) : currentMonthKey();
+  const selectedMeetingId = first(searchParams?.meetingId);
 
-  const requestedMeetingId = asString(searchParams?.meetingId);
-  const selectedMeeting =
-    snapshot.meetings.find((meeting) => meeting.id === requestedMeetingId) ?? snapshot.meetings[0] ?? null;
-  const selectedMeetingId = selectedMeeting?.id ?? null;
+  const [overview, residentOptions] = await Promise.all([
+    getResidentCouncilOverviewData({
+      facilityId: context.facilityId,
+      month
+    }),
+    writable ? getResidentCouncilActiveResidents(context.facilityId) : Promise.resolve([])
+  ]);
 
-  async function createMeetingAction(formData: FormData) {
-    "use server";
+  const meetingFilters = {
+    search: first(searchParams?.q),
+    status: (first(searchParams?.status) as "ALL" | "DRAFT" | "FINAL") || "ALL",
+    hasOpenActionItems: first(searchParams?.hasOpen) === "1",
+    department: first(searchParams?.department) || "ALL",
+    from: first(searchParams?.from),
+    to: first(searchParams?.to),
+    sort: parseMeetingSort(first(searchParams?.sort)),
+    page: Number(first(searchParams?.page) || "1")
+  };
 
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
+  const actionFilters = {
+    search: first(searchParams?.actionQ),
+    status: (first(searchParams?.actionStatus) as "ALL" | "OPEN" | "DONE") || "ALL",
+    department: first(searchParams?.actionDepartment) || "ALL",
+    owner: first(searchParams?.actionOwner) || "ALL",
+    sort: parseActionSort(first(searchParams?.actionSort)),
+    page: Number(first(searchParams?.actionPage) || "1"),
+    meetingId: first(searchParams?.meetingId)
+  };
 
-    const parsed = meetingSheetSchema.parse({
-      heldAt: formData.get("heldAt"),
-      attendanceCountOverride: formData.get("attendanceCountOverride"),
-      residentsAttendedIds: formData.getAll("residentsAttendedIds").map((value) => String(value)),
-      summary: formData.get("summary"),
-      oldBusiness: formData.get("oldBusiness"),
-      newBusiness: formData.get("newBusiness"),
-      additionalNotes: formData.get("additionalNotes"),
-      departmentActivities: formData.get("departmentActivities"),
-      departmentNursing: formData.get("departmentNursing"),
-      departmentTherapy: formData.get("departmentTherapy"),
-      departmentDietary: formData.get("departmentDietary"),
-      departmentHousekeeping: formData.get("departmentHousekeeping"),
-      departmentLaundry: formData.get("departmentLaundry"),
-      departmentMaintenance: formData.get("departmentMaintenance"),
-      departmentSocialServices: formData.get("departmentSocialServices"),
-      departmentAdministrator: formData.get("departmentAdministrator")
-    });
-
-    const residentIds = Array.from(new Set(parsed.residentsAttendedIds));
-    const residentRows = residentIds.length
-      ? await prisma.resident.findMany({
-          where: {
-            facilityId: scoped.facilityId,
-            id: { in: residentIds }
-          },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            room: true
-          }
+  const [meetingsResult, actionsResult, owners] = await Promise.all([
+    currentView === "meetings" || currentView === "settings"
+      ? listResidentCouncilMeetings({
+          facilityId: context.facilityId,
+          page: Number.isFinite(meetingFilters.page) && meetingFilters.page > 0 ? meetingFilters.page : 1,
+          search: meetingFilters.search || undefined,
+          status: meetingFilters.status,
+          hasOpenActionItems: meetingFilters.hasOpenActionItems,
+          department: meetingFilters.department === "ALL" ? undefined : meetingFilters.department,
+          from: meetingFilters.from || undefined,
+          to: meetingFilters.to || undefined,
+          sort: meetingFilters.sort
         })
-      : [];
+      : Promise.resolve(null),
+    currentView === "actions"
+      ? listResidentCouncilActionItems({
+          facilityId: context.facilityId,
+          page: Number.isFinite(actionFilters.page) && actionFilters.page > 0 ? actionFilters.page : 1,
+          search: actionFilters.search || undefined,
+          status: actionFilters.status,
+          department: actionFilters.department === "ALL" ? undefined : actionFilters.department,
+          owner: actionFilters.owner === "ALL" ? undefined : actionFilters.owner,
+          meetingId: actionFilters.meetingId || undefined,
+          sort: actionFilters.sort
+        })
+      : Promise.resolve(null),
+    currentView === "actions" ? getResidentCouncilOwners(context.facilityId) : Promise.resolve([])
+  ]);
 
-    residentRows.sort(compareResidentsByRoom);
+  const selectedMeetingRow =
+    (meetingsResult?.rows.find((row) => row.id === selectedMeetingId) ??
+      overview.recentMeetings.find((row) => row.id === selectedMeetingId) ??
+      overview.recentMeetings[0]) ||
+    null;
 
-    const residentsInAttendance = residentRows.map(
-      (resident) => `${resident.lastName}, ${resident.firstName} (Room ${resident.room})`
-    );
-
-    const departmentUpdates = [
-      { label: "Activities", notes: parsed.departmentActivities },
-      { label: "Nursing", notes: parsed.departmentNursing },
-      { label: "Therapy", notes: parsed.departmentTherapy },
-      { label: "Dietary", notes: parsed.departmentDietary },
-      { label: "Housekeeping", notes: parsed.departmentHousekeeping },
-      { label: "Laundry", notes: parsed.departmentLaundry },
-      { label: "Maintenance", notes: parsed.departmentMaintenance },
-      { label: "Social Services", notes: parsed.departmentSocialServices },
-      { label: "Administrator", notes: parsed.departmentAdministrator }
-    ]
-      .filter((item): item is { label: string; notes: string } => Boolean(item.notes))
-      .map((item) => ({ label: item.label, notes: item.notes.trim() }));
-
-    const attendanceCount = parsed.attendanceCountOverride ?? residentsInAttendance.length;
-    const notes = buildMeetingSheetNotes({
-      summary: parsed.summary,
-      residentsInAttendance,
-      departmentUpdates,
-      oldBusiness: parsed.oldBusiness,
-      newBusiness: parsed.newBusiness,
-      additionalNotes: parsed.additionalNotes
-    });
-
-    const meeting = await prisma.residentCouncilMeeting.create({
-      data: {
-        facilityId: scoped.facilityId,
-        heldAt: new Date(parsed.heldAt),
-        attendanceCount,
-        notes
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "ResidentCouncilMeeting",
-      entityId: meeting.id,
-      after: {
-        ...meeting,
-        residentsCaptured: residentsInAttendance.length,
-        departmentUpdatesCaptured: departmentUpdates.length
-      }
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function createActionItemAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = actionItemSchema.parse({
-      meetingId: formData.get("meetingId"),
-      section: formData.get("section") || "NEW",
-      category: formData.get("category"),
-      concern: formData.get("concern"),
-      owner: formData.get("owner"),
-      followUp: formData.get("followUp"),
-      dueDate: formData.get("dueDate"),
-      status: formData.get("status") || "UNRESOLVED"
-    });
-
-    const meeting = await prisma.residentCouncilMeeting.findFirst({
-      where: {
-        id: parsed.meetingId,
-        facilityId: scoped.facilityId
-      },
-      select: { id: true }
-    });
-    if (!meeting) return;
-
-    const item = await prisma.residentCouncilItem.create({
-      data: {
-        meetingId: meeting.id,
-        category: parsed.category,
-        concern: parsed.concern,
-        owner: parsed.owner ?? null,
-        status: parsed.status,
-        followUp: mergeFollowUpWithSection(parsed.section, parsed.dueDate ?? null, parsed.followUp ?? null)
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "ResidentCouncilItem",
-      entityId: item.id,
-      after: item
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function updateActionItemAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = updateItemSchema.parse({
-      itemId: formData.get("itemId"),
-      section: formData.get("section"),
-      status: formData.get("status"),
-      owner: formData.get("owner"),
-      followUp: formData.get("followUp"),
-      dueDate: formData.get("dueDate"),
-      category: formData.get("category"),
-      concern: formData.get("concern")
-    });
-
-    const existing = await prisma.residentCouncilItem.findFirst({
-      where: {
-        id: parsed.itemId,
-        meeting: { facilityId: scoped.facilityId }
-      }
-    });
-    if (!existing) return;
-
-    const section = parsed.section ?? parseSectionLine(existing.followUp) ?? "NEW";
-    const dueDate = parsed.dueDate === undefined ? parseDueDate(existing.followUp) : parsed.dueDate;
-    const followUp = parsed.followUp === undefined ? withoutDueDateLine(existing.followUp) : parsed.followUp;
-
-    const updated = await prisma.residentCouncilItem.update({
-      where: { id: existing.id },
-      data: {
-        status: parsed.status ?? existing.status,
-        owner: parsed.owner === undefined ? existing.owner : parsed.owner,
-        category: parsed.category ?? existing.category,
-        concern: parsed.concern ?? existing.concern,
-        followUp: mergeFollowUpWithSection(section, dueDate ?? null, followUp ?? null)
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "UPDATE",
-      entityType: "ResidentCouncilItem",
-      entityId: updated.id,
-      before: existing,
-      after: updated
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function bulkUpdateActionItemsAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = bulkUpdateSchema.parse({
-      itemIds: formData.getAll("itemIds").map((value) => String(value)),
-      status: formData.get("status") || undefined,
-      owner: formData.get("owner") || undefined,
-      dueDate: formData.get("dueDate") || undefined
-    });
-
-    const existingItems = await prisma.residentCouncilItem.findMany({
-      where: {
-        id: { in: parsed.itemIds },
-        meeting: { facilityId: scoped.facilityId }
-      }
-    });
-
-    if (existingItems.length === 0) return;
-
-    await prisma.$transaction(
-      existingItems.map((item) => {
-        const section = parseSectionLine(item.followUp) ?? "NEW";
-        const dueDate = parsed.dueDate ?? parseDueDate(item.followUp);
-        const followUp = withoutDueDateLine(item.followUp);
-
-        return prisma.residentCouncilItem.update({
-          where: { id: item.id },
-          data: {
-            status: parsed.status ?? item.status,
-            owner: parsed.owner ?? item.owner,
-            followUp: mergeFollowUpWithSection(section, dueDate ?? null, followUp ?? null)
-          }
-        });
+  const detailForContext = selectedMeetingRow
+    ? await getResidentCouncilMeetingDetail({
+        facilityId: context.facilityId,
+        meetingId: selectedMeetingRow.id
       })
-    );
+    : null;
 
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "BULK_UPDATE",
-      entityType: "ResidentCouncilItem",
-      entityId: `bulk:${existingItems.length}`,
-      before: {
-        itemIds: existingItems.map((item) => item.id)
-      },
-      after: {
-        status: parsed.status,
-        owner: parsed.owner,
-        dueDate: parsed.dueDate
-      }
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function deleteActionItemAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = deleteItemSchema.parse({
-      itemId: formData.get("itemId")
-    });
-
-    const existing = await prisma.residentCouncilItem.findFirst({
-      where: {
-        id: parsed.itemId,
-        meeting: { facilityId: scoped.facilityId }
-      }
-    });
-    if (!existing) return;
-
-    await prisma.residentCouncilItem.delete({
-      where: { id: existing.id }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "DELETE",
-      entityType: "ResidentCouncilItem",
-      entityId: existing.id,
-      before: existing
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function deleteMeetingAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = deleteMeetingSchema.parse({
-      meetingId: formData.get("meetingId")
-    });
-
-    const existing = await prisma.residentCouncilMeeting.findFirst({
-      where: {
-        id: parsed.meetingId,
-        facilityId: scoped.facilityId
-      },
-      include: {
-        items: true
-      }
-    });
-    if (!existing) return;
-
-    await prisma.residentCouncilMeeting.delete({
-      where: { id: existing.id }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "DELETE",
-      entityType: "ResidentCouncilMeeting",
-      entityId: existing.id,
-      before: {
-        ...existing,
-        itemsDeleted: existing.items.length
-      }
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function applyTopicTemplateAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = applyTemplateSchema.parse({
-      meetingId: formData.get("meetingId"),
-      templateId: formData.get("templateId")
-    });
-
-    const template = residentCouncilTopicTemplates.find((candidate) => candidate.id === parsed.templateId);
-    if (!template) return;
-
-    const meeting = await prisma.residentCouncilMeeting.findFirst({
-      where: {
-        id: parsed.meetingId,
-        facilityId: scoped.facilityId
-      },
-      select: { id: true }
-    });
-    if (!meeting) return;
-
-    const created = await prisma.residentCouncilItem.create({
-      data: {
-        meetingId: meeting.id,
-        category: template.category,
-        concern: template.prompt,
-        status: "UNRESOLVED",
-        followUp: mergeFollowUpWithSection(template.section, null, `Template: ${template.title}`)
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "ResidentCouncilItem",
-      entityId: created.id,
-      after: {
-        source: "template",
-        templateId: template.id,
-        item: created
-      }
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
-
-  async function createTopicFromLibraryAction(formData: FormData) {
-    "use server";
-
-    const scoped = await requireModulePage("residentCouncil");
-    assertWritable(scoped.role);
-
-    const parsed = createTopicSchema.parse({
-      meetingId: formData.get("meetingId"),
-      category: formData.get("category"),
-      section: formData.get("section"),
-      text: formData.get("text")
-    });
-
-    const meeting = await prisma.residentCouncilMeeting.findFirst({
-      where: {
-        id: parsed.meetingId,
-        facilityId: scoped.facilityId
-      },
-      select: { id: true }
-    });
-    if (!meeting) return;
-
-    const created = await prisma.residentCouncilItem.create({
-      data: {
-        meetingId: meeting.id,
-        category: parsed.category,
-        concern: parsed.text,
-        status: "UNRESOLVED",
-        followUp: mergeFollowUpWithSection(parsed.section, null, null)
-      }
-    });
-
-    await logAudit({
-      facilityId: scoped.facilityId,
-      actorUserId: scoped.user.id,
-      action: "CREATE",
-      entityType: "ResidentCouncilItem",
-      entityId: created.id,
-      after: {
-        source: "topics-library",
-        section: parsed.section,
-        item: created
-      }
-    });
-
-    invalidateResidentCouncil(scoped.facilityId);
-  }
+  const currentSection: ResidentCouncilSectionKey =
+    currentView === "meetings"
+      ? "meetings"
+      : currentView === "actions"
+        ? "actions"
+        : currentView === "analytics"
+          ? "analytics"
+          : currentView === "settings"
+            ? "settings"
+            : "overview";
 
   return (
-    <div className="min-h-screen space-y-4 bg-gradient-to-br from-[#FFF4E6]/70 via-[#FFF0F0]/60 to-[#FFF0F6]/70">
+    <div className="space-y-4">
       <ResidentCouncilShell
         writable={writable}
         timeZone={context.facility.timezone}
-        currentView={currentView}
-        snapshot={snapshot}
+        currentSection={currentSection}
+        month={month}
+        monthFormAction="/app/resident-council"
+        monthFormView={currentView}
+        sectionStats={{
+          meetingsCount: overview.totalMeetings,
+          meetingsThisMonth: overview.meetingsThisMonth,
+          openItemsCount: overview.openActionItems,
+          resolvedItemsCount: overview.totalResolvedActionItems,
+          averageAttendance:
+            overview.trends.length > 0
+              ? Number(
+                  (
+                    overview.trends.reduce((sum, entry) => sum + entry.avgAttendance, 0) /
+                    Math.max(overview.trends.length, 1)
+                  ).toFixed(1)
+                )
+              : 0,
+          nextMeetingLabel: overview.nextMeeting ? formatDateTime(overview.nextMeeting.heldAt) : null
+        }}
+        selectedMeeting={selectedMeetingRow ? { id: selectedMeetingRow.id, label: selectedMeetingRow.title } : null}
+        meetingTemplates={residentCouncilTopicTemplates.map((template) => ({ id: template.id, title: template.title }))}
+        residentOptions={residentOptions}
+        createMeetingAction={createResidentCouncilMeetingAction}
+        contextPanel={
+          detailForContext ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-white/30 bg-white/60 p-3">
+                <p className="text-xs uppercase tracking-wide text-foreground/65">Focused Meeting</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{getMeetingLabel(detailForContext)}</p>
+                <p className="mt-1 text-xs text-foreground/68">
+                  {detailForContext.status} • {detailForContext.unresolvedCount} open actions
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Link
+                  href={`/app/resident-council/meetings/${detailForContext.id}`}
+                  className="block rounded-lg border border-white/30 bg-white/70 px-3 py-2 text-xs font-medium text-foreground hover:bg-white/90"
+                >
+                  Open Minutes Editor
+                </Link>
+                <Link
+                  href={`/app/resident-council?view=actions&meetingId=${encodeURIComponent(detailForContext.id)}`}
+                  className="block rounded-lg border border-white/30 bg-white/70 px-3 py-2 text-xs font-medium text-foreground hover:bg-white/90"
+                >
+                  Show linked action items
+                </Link>
+                <Link
+                  href={`/app/resident-council/pdf?meetingId=${encodeURIComponent(detailForContext.id)}&preview=1`}
+                  target="_blank"
+                  className="block rounded-lg border border-white/30 bg-white/70 px-3 py-2 text-xs font-medium text-foreground hover:bg-white/90"
+                >
+                  Preview PDF
+                </Link>
+              </div>
+            </div>
+          ) : undefined
+        }
       >
-        {currentView === "meetings" ? (
-          <section className="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
-            <MeetingListLazy meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
-            <MeetingDetail
-              meeting={selectedMeeting}
-              meetings={snapshot.meetings}
-              residents={snapshot.activeResidents}
-              canEdit={writable}
-              onCreateMeeting={createMeetingAction}
-              onCreateActionItem={createActionItemAction}
-              onUpdateActionItem={updateActionItemAction}
-              onDeleteActionItem={deleteActionItemAction}
-              onDeleteMeeting={deleteMeetingAction}
-            />
-          </section>
+        {currentView === "overview" ? (
+          <OverviewPanel overview={overview} />
         ) : null}
 
-        {currentView === "actions" ? (
-          <ActionItemsPanelLazy
-            items={snapshot.actionItems}
-            meetings={snapshot.meetings.map((meeting) => ({ id: meeting.id, heldAt: meeting.heldAt }))}
+        {currentView === "meetings" && meetingsResult ? (
+          <MeetingList result={meetingsResult} filters={meetingFilters} />
+        ) : null}
+
+        {currentView === "actions" && actionsResult ? (
+          <ActionItemsPanel
+            result={actionsResult}
+            filters={actionFilters}
+            owners={owners}
             canEdit={writable}
-            onUpdateActionItem={updateActionItemAction}
-            onDeleteActionItem={deleteActionItemAction}
-            onBulkUpdateActionItems={bulkUpdateActionItemsAction}
+            onUpdateActionItem={updateResidentCouncilActionItemAction}
+            onDeleteActionItem={deleteResidentCouncilActionItemAction}
           />
         ) : null}
 
-        {currentView === "topics" ? (
-          <TopicTemplatesPanelLazy
-            templates={snapshot.templates}
-            topicEntries={snapshot.topicEntries}
-            meetings={snapshot.meetings}
-            selectedMeetingId={selectedMeetingId}
-            canEdit={writable}
-            onApplyTemplate={applyTopicTemplateAction}
-            onCreateTopicFromLibrary={createTopicFromLibraryAction}
-          />
+        {currentView === "analytics" ? (
+          <AnalyticsPanel overview={overview} />
         ) : null}
 
-        {currentView === "reports" ? (
-          <ReportsPanelLazy meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
+        {currentView === "settings" ? (
+          <SettingsExportPanel
+            month={month}
+            overview={overview}
+            meetings={meetingsResult?.rows ?? overview.recentMeetings}
+            selectedMeetingId={selectedMeetingRow?.id ?? ""}
+          />
         ) : null}
       </ResidentCouncilShell>
     </div>
   );
+}
+
+function OverviewPanel({
+  overview
+}: {
+  overview: Awaited<ReturnType<typeof getResidentCouncilOverviewData>>;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <GlassCard variant="dense" className="space-y-3 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <CalendarDays className="h-4 w-4 text-actifyBlue" />
+              Recent Meetings
+            </p>
+            <Link
+              href="/app/resident-council?view=meetings"
+              className="text-xs text-actifyBlue underline-offset-2 hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+          {overview.recentMeetings.length === 0 ? (
+            <EmptyCard message="No meetings logged yet. Create your first meeting from the header action." />
+          ) : (
+            <div className="space-y-2">
+              {overview.recentMeetings.slice(0, 10).map((meeting) => (
+                <Link
+                  key={meeting.id}
+                  href={`/app/resident-council/meetings/${meeting.id}`}
+                  className="block rounded-xl border border-white/30 bg-white/70 px-3 py-3 shadow-sm transition hover:bg-white/85"
+                >
+                  <p className="text-sm font-semibold text-foreground">{meeting.title}</p>
+                  <p className="text-xs text-foreground/65">{formatDateTime(meeting.heldAt)}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-foreground/72">{meeting.snippet}</p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+
+        <GlassCard variant="dense" className="space-y-3 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <ListTodo className="h-4 w-4 text-actifyBlue" />
+              Open Action Items
+            </p>
+            <Link
+              href="/app/resident-council?view=actions&actionStatus=OPEN"
+              className="text-xs text-actifyBlue underline-offset-2 hover:underline"
+            >
+              Open board
+            </Link>
+          </div>
+          {overview.openItemsPreview.length === 0 ? (
+            <EmptyCard message="All clear. No open action items in this period." />
+          ) : (
+            <div className="space-y-2">
+              {overview.openItemsPreview.slice(0, 10).map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/app/resident-council/meetings/${item.meetingId}?tab=actions`}
+                  className="block rounded-xl border border-white/30 bg-white/70 px-3 py-3 shadow-sm transition hover:bg-white/85"
+                >
+                  <p className="text-sm font-semibold text-foreground">{item.concern}</p>
+                  <p className="mt-1 text-xs text-foreground/68">
+                    {item.category} • {item.owner ? `Owner ${item.owner}` : "No owner"} • Due {item.dueDate || "TBD"}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+      </div>
+
+      <GlassCard variant="dense" className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <BarChart3 className="h-4 w-4 text-actifyBlue" />
+            Trends
+          </p>
+          <Link href="/app/resident-council?view=analytics" className="text-xs text-actifyBlue underline-offset-2 hover:underline">
+            View analytics
+          </Link>
+        </div>
+        {overview.trends.length === 0 ? (
+          <EmptyCard message="No trend data available yet. Trends appear after at least one meeting is logged." />
+        ) : (
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {overview.trends.slice(-4).map((trend) => (
+              <div key={trend.month} className="rounded-xl border border-white/30 bg-white/70 px-3 py-3">
+                <p className="text-xs uppercase tracking-wide text-foreground/65">{trend.month}</p>
+                <p className="mt-1 text-lg font-semibold text-foreground">{trend.meetings} meetings</p>
+                <p className="text-xs text-foreground/70">Avg attendance {trend.avgAttendance}</p>
+                <p className="text-xs text-foreground/70">Open {trend.openItems} • Done {trend.resolvedItems}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+    </div>
+  );
+}
+
+function AnalyticsPanel({
+  overview
+}: {
+  overview: Awaited<ReturnType<typeof getResidentCouncilOverviewData>>;
+}) {
+  const latest = overview.trends[overview.trends.length - 1];
+  const previous = overview.trends[overview.trends.length - 2];
+
+  const attendanceDelta = latest && previous ? Number((latest.avgAttendance - previous.avgAttendance).toFixed(1)) : 0;
+  const openDelta = latest && previous ? latest.openItems - previous.openItems : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Current Avg Attendance"
+          value={latest ? `${latest.avgAttendance}` : "0"}
+          hint={attendanceDelta >= 0 ? `+${attendanceDelta} vs prior month` : `${attendanceDelta} vs prior month`}
+          tone={attendanceDelta >= 0 ? "text-emerald-700" : "text-rose-700"}
+        />
+        <MetricCard
+          label="Open Actions"
+          value={latest ? `${latest.openItems}` : "0"}
+          hint={openDelta >= 0 ? `+${openDelta} vs prior month` : `${openDelta} vs prior month`}
+          tone={openDelta <= 0 ? "text-emerald-700" : "text-amber-700"}
+        />
+        <MetricCard
+          label="Resolved Actions"
+          value={latest ? `${latest.resolvedItems}` : "0"}
+          hint="Closed follow-ups in latest month"
+          tone="text-indigo-700"
+        />
+        <MetricCard
+          label="Top Departments"
+          value={overview.topDepartments.length ? overview.topDepartments.map((entry) => entry.department).join(", ") : "N/A"}
+          hint={overview.topDepartments.length ? `${overview.topDepartments[0]?.count ?? 0} active issues` : "No open items"}
+          tone="text-foreground"
+        />
+      </div>
+
+      <GlassCard variant="dense" className="p-4">
+        <p className="text-sm font-semibold text-foreground">Six-Month Trend Table</p>
+        {overview.trends.length === 0 ? (
+          <EmptyCard message="No analytics trends yet." />
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-white/25 bg-white/65">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/25 text-left text-xs uppercase tracking-wide text-foreground/65">
+                  <th className="px-3 py-2">Month</th>
+                  <th className="px-3 py-2">Meetings</th>
+                  <th className="px-3 py-2">Avg Attendance</th>
+                  <th className="px-3 py-2">Open Items</th>
+                  <th className="px-3 py-2">Resolved</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.trends.map((row) => (
+                  <tr key={row.month} className="border-b border-white/20 last:border-0">
+                    <td className="px-3 py-2 font-medium text-foreground">{row.month}</td>
+                    <td className="px-3 py-2">{row.meetings}</td>
+                    <td className="px-3 py-2">{row.avgAttendance}</td>
+                    <td className="px-3 py-2">{row.openItems}</td>
+                    <td className="px-3 py-2">{row.resolvedItems}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </GlassCard>
+    </div>
+  );
+}
+
+function SettingsExportPanel({
+  month,
+  overview,
+  meetings,
+  selectedMeetingId
+}: {
+  month: string;
+  overview: Awaited<ReturnType<typeof getResidentCouncilOverviewData>>;
+  meetings: Array<{ id: string; heldAt: string; title: string }>;
+  selectedMeetingId: string;
+}) {
+  const fallbackMeetingId = selectedMeetingId || meetings[0]?.id || "";
+  return (
+    <div className="space-y-4">
+      <GlassCard variant="dense" className="space-y-3 p-4">
+        <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <FileDown className="h-4 w-4 text-actifyBlue" />
+          Export Settings
+        </p>
+        <p className="text-sm text-foreground/72">
+          Export resident council minutes in PDF format with optional sections. This month is set to {month}.
+        </p>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+          <select defaultValue={fallbackMeetingId} className="h-10 rounded-xl border border-white/35 bg-white/80 px-3 text-sm shadow-md shadow-black/10">
+            {meetings.map((meeting) => (
+              <option key={meeting.id} value={meeting.id}>
+                {formatDateTime(meeting.heldAt)}
+              </option>
+            ))}
+          </select>
+          {fallbackMeetingId ? (
+            <Link
+              href={`/app/resident-council/pdf?meetingId=${encodeURIComponent(fallbackMeetingId)}`}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-white/35 bg-white/80 px-3 text-sm font-medium text-foreground shadow-md shadow-black/10 hover:bg-white/95"
+            >
+              Download PDF
+            </Link>
+          ) : (
+            <div className="inline-flex h-10 items-center justify-center rounded-xl border border-white/25 bg-white/50 px-3 text-sm text-foreground/55">
+              No meeting selected
+            </div>
+          )}
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-xs text-foreground/75">
+            <input type="checkbox" defaultChecked className="h-4 w-4" />
+            Include attendance
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-xs text-foreground/75">
+            <input type="checkbox" className="h-4 w-4" />
+            Include history
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-xs text-foreground/75">
+            <input type="checkbox" className="h-4 w-4" />
+            New business only
+          </label>
+        </div>
+      </GlassCard>
+
+      <GlassCard variant="dense" className="p-4">
+        <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <Clock3 className="h-4 w-4 text-actifyBlue" />
+          Snapshot
+        </p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <div className="rounded-xl border border-white/30 bg-white/70 px-3 py-3">
+            <p className="text-xs uppercase tracking-wide text-foreground/65">Meetings this month</p>
+            <p className="text-2xl font-semibold text-foreground">{overview.meetingsThisMonth}</p>
+          </div>
+          <div className="rounded-xl border border-white/30 bg-white/70 px-3 py-3">
+            <p className="text-xs uppercase tracking-wide text-foreground/65">Open action items</p>
+            <p className="text-2xl font-semibold text-foreground">{overview.openActionItems}</p>
+          </div>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  tone
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: string;
+}) {
+  return (
+    <GlassCard variant="dense" className="p-4">
+      <p className="text-xs uppercase tracking-wide text-foreground/65">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${tone}`}>{value}</p>
+      <p className="mt-1 text-xs text-foreground/65">{hint}</p>
+    </GlassCard>
+  );
+}
+
+function EmptyCard({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-white/35 bg-white/65 px-3 py-8 text-center text-sm text-foreground/70">
+      {message}
+    </div>
+  );
+}
+
+function getMeetingLabel(meeting: Awaited<ReturnType<typeof getResidentCouncilMeetingDetail>>) {
+  if (!meeting) return "Unknown meeting";
+  const summaryLine = meeting.summary.split(/\n+/).map((entry) => entry.trim()).find(Boolean);
+  return summaryLine && summaryLine.length > 0 ? summaryLine : formatDateTime(meeting.heldAt);
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
