@@ -1,12 +1,9 @@
 import { revalidatePath, revalidateTag } from "next/cache";
+import dynamic from "next/dynamic";
 import { z } from "zod";
 
-import { ActionItemsPanel } from "@/components/resident-council/ActionItemsPanel";
 import { MeetingDetail } from "@/components/resident-council/MeetingDetail";
-import { MeetingList } from "@/components/resident-council/MeetingList";
-import { ReportsPanel } from "@/components/resident-council/ReportsPanel";
 import { ResidentCouncilShell } from "@/components/resident-council/ResidentCouncilShell";
-import { TopicTemplatesPanel } from "@/components/resident-council/TopicTemplatesPanel";
 import { logAudit } from "@/lib/audit";
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
@@ -24,6 +21,34 @@ import type { ResidentCouncilSection, ResidentCouncilView } from "@/lib/resident
 import { compareResidentsByRoom } from "@/lib/resident-status";
 
 const viewSchema = z.enum(["meetings", "actions", "topics", "reports"]);
+
+const panelFallback = (
+  <div className="glass-panel h-[520px] animate-pulse rounded-2xl border-white/20 bg-white/30" />
+);
+
+const MeetingListLazy = dynamic(
+  () => import("@/components/resident-council/MeetingList").then((mod) => mod.MeetingList),
+  {
+    loading: () => (
+      <div className="glass-panel h-[540px] animate-pulse rounded-2xl border-white/20 bg-white/30" />
+    )
+  }
+);
+
+const ActionItemsPanelLazy = dynamic(
+  () => import("@/components/resident-council/ActionItemsPanel").then((mod) => mod.ActionItemsPanel),
+  { loading: () => panelFallback }
+);
+
+const TopicTemplatesPanelLazy = dynamic(
+  () => import("@/components/resident-council/TopicTemplatesPanel").then((mod) => mod.TopicTemplatesPanel),
+  { loading: () => panelFallback }
+);
+
+const ReportsPanelLazy = dynamic(
+  () => import("@/components/resident-council/ReportsPanel").then((mod) => mod.ReportsPanel),
+  { loading: () => panelFallback }
+);
 
 const optionalText = z.preprocess((value) => {
   if (typeof value !== "string") return undefined;
@@ -612,7 +637,7 @@ export default async function ResidentCouncilPage({
       >
         {currentView === "meetings" ? (
           <section className="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
-            <MeetingList meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
+            <MeetingListLazy meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
             <MeetingDetail
               meeting={selectedMeeting}
               meetings={snapshot.meetings}
@@ -628,7 +653,7 @@ export default async function ResidentCouncilPage({
         ) : null}
 
         {currentView === "actions" ? (
-          <ActionItemsPanel
+          <ActionItemsPanelLazy
             items={snapshot.actionItems}
             meetings={snapshot.meetings.map((meeting) => ({ id: meeting.id, heldAt: meeting.heldAt }))}
             canEdit={writable}
@@ -639,7 +664,7 @@ export default async function ResidentCouncilPage({
         ) : null}
 
         {currentView === "topics" ? (
-          <TopicTemplatesPanel
+          <TopicTemplatesPanelLazy
             templates={snapshot.templates}
             topicEntries={snapshot.topicEntries}
             meetings={snapshot.meetings}
@@ -651,7 +676,7 @@ export default async function ResidentCouncilPage({
         ) : null}
 
         {currentView === "reports" ? (
-          <ReportsPanel meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
+          <ReportsPanelLazy meetings={snapshot.meetings} selectedMeetingId={selectedMeetingId} />
         ) : null}
       </ResidentCouncilShell>
     </div>

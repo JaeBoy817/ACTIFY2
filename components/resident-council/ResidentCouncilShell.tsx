@@ -1,11 +1,24 @@
 import { Building2, CalendarDays, CircleCheck, ListTodo, Users } from "lucide-react";
+import dynamic from "next/dynamic";
 
-import { GlassTabs } from "@/components/resident-council/GlassTabs";
 import { LiveDateTimeBadge } from "@/components/app/live-date-time-badge";
 import { GlassCard } from "@/components/glass/GlassCard";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { Badge } from "@/components/ui/badge";
 import type { ResidentCouncilSnapshot, ResidentCouncilView } from "@/lib/resident-council/types";
+
+const GlassTabsLazy = dynamic(
+  () => import("@/components/resident-council/GlassTabs").then((mod) => mod.GlassTabs),
+  {
+    loading: () => (
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="h-10 w-32 animate-pulse rounded-xl bg-white/55" />
+        ))}
+      </div>
+    )
+  }
+);
 
 export function ResidentCouncilShell({
   writable,
@@ -44,7 +57,7 @@ export function ResidentCouncilShell({
               </p>
             </div>
           </div>
-          <GlassTabs currentView={currentView} />
+          <GlassTabsLazy currentView={currentView} />
         </div>
       </GlassPanel>
 

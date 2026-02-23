@@ -1389,7 +1389,34 @@ h6 {
 
 .sidebar-dropdown-content {
   transform-origin: top;
-  will-change: height, opacity, transform;
+  opacity: 0;
+  transform: translateY(-4px);
+  max-height: 0;
+  overflow: hidden;
+  will-change: opacity, transform, max-height;
+  transition:
+    opacity 150ms var(--ease-standard),
+    transform 180ms var(--ease-standard),
+    max-height 220ms var(--ease-gentle);
+}
+
+.sidebar-dropdown-content[data-state="open"] {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 520px;
+}
+
+.sidebar-dropdown-content[data-state="closed"] {
+  opacity: 0;
+  transform: translateY(-4px);
+  max-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-dropdown-content {
+    transition: none;
+    transform: none;
+  }
 }
 
 /* Auth-only Clerk cleanup so prebuilt footer/dev strip doesn't clash with ACTIFY glass theme */
@@ -1459,44 +1486,6 @@ h6 {
   -webkit-text-fill-color: #111827 !important;
   box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.9) inset !important;
   transition: background-color 5000s ease-in-out 0s;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .sidebar-dropdown-content[data-state="open"] {
-    animation: sidebar-slide-down 260ms var(--ease-standard) both;
-  }
-
-  .sidebar-dropdown-content[data-state="closed"] {
-    animation: sidebar-slide-up 220ms var(--ease-gentle) both;
-  }
-}
-
-@keyframes sidebar-slide-down {
-  from {
-    height: 0;
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-
-  to {
-    height: var(--radix-accordion-content-height);
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes sidebar-slide-up {
-  from {
-    height: var(--radix-accordion-content-height);
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  to {
-    height: 0;
-    opacity: 0;
-    transform: translateY(-6px);
-  }
 }
 
 @keyframes confetti-burst {

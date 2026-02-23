@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 
-import { SettingsTabs, type SettingsTabKey } from "@/app/app/settings/_components/SettingsTabs";
+import { type SettingsTabKey } from "@/app/app/settings/_components/SettingsTabs";
+import { SettingsTabsLazy } from "@/app/app/settings/_components/SettingsTabsLazy";
 import { requireFacilityContext } from "@/lib/auth";
 import { parseFacilitySettingsRow, parseUserSettingsRow } from "@/lib/settings/defaults";
 import { ensureFacilitySettingsRecord, ensureUserSettingsRecord } from "@/lib/settings/ensure";
@@ -84,7 +85,7 @@ export default async function SettingsPage({
   const initialTab = getInitialTab(searchParams?.tab);
 
   return (
-    <SettingsTabs
+    <SettingsTabsLazy
       initialTab={initialTab}
       role={context.role}
       facilityName={context.facility.name}

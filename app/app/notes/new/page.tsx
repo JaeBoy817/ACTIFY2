@@ -1,4 +1,4 @@
-import { NoteBuilder } from "@/components/notes/NoteBuilder";
+import { NoteBuilderLazy } from "@/components/notes/NoteBuilderLazy";
 import { NotesShell } from "@/components/notes/NotesShell";
 import type { NoteBuilderValues } from "@/lib/notes/types";
 import {
@@ -185,7 +185,7 @@ export default async function NotesBuilderPage({
       title={noteId ? "Edit Note" : "New Note"}
       description="Single guided note builder for general and 1:1 documentation. Required fields first, optional detail sections collapsed."
     >
-      <NoteBuilder
+      <NoteBuilderLazy
         canEdit={canWrite(context.role)}
         noteId={noteId}
         initialValues={initialValues}
