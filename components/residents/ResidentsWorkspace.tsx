@@ -9,6 +9,7 @@ import { ResidentList } from "@/components/residents/ResidentList";
 import { StatCardsRow } from "@/components/residents/StatCardsRow";
 import { ImportResidentsModal } from "@/components/residents/ImportResidentsModal";
 import { Button } from "@/components/ui/button";
+import { useDevRenderTrace } from "@/lib/perf/devRenderTrace";
 import { compareResidentsByRoom } from "@/lib/resident-status";
 import {
   isNeedsOneOnOne,
@@ -64,6 +65,11 @@ export function ResidentsWorkspace({
   initialResidents: ResidentListRow[];
   canEdit: boolean;
 }) {
+  useDevRenderTrace("ResidentsWorkspace", {
+    every: 12,
+    details: { initialCount: initialResidents.length }
+  });
+
   const { toast } = useToast();
   const [residents, setResidents] = useState(initialResidents);
   const [search, setSearch] = useState("");

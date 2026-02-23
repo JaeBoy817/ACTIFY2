@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
 import { prisma } from "@/lib/prisma";
+import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
 
@@ -96,27 +97,7 @@ export async function PATCH(
         followUpFlag: parsed.data.followUpFlag,
         lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
       },
-      include: {
-        carePlans: {
-          where: { status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-          select: {
-            focusAreas: true,
-            nextReviewDate: true
-          }
-        },
-        progressNotes: {
-          where: { type: "ONE_TO_ONE" },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-          select: {
-            id: true,
-            createdAt: true,
-            narrative: true
-          }
-        }
-      }
+      ...residentListContextQuery
     });
 
     return Response.json({ resident: toResidentListRow(updated) });

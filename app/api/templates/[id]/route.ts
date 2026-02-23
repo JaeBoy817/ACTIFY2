@@ -4,6 +4,7 @@ import { z } from "zod";
 import { asTemplatesApiErrorResponse, requireTemplatesApiContext, TemplatesApiError } from "@/lib/templates/api-context";
 import { serializeNoteTemplateMeta } from "@/lib/templates/note-template-meta";
 import { toUnifiedActivityTemplate, toUnifiedNoteTemplate } from "@/lib/templates/serializers";
+import { revalidateTemplatesLibrary } from "@/lib/templates/service";
 import { prisma } from "@/lib/prisma";
 
 const activityPayloadSchema = z.object({
@@ -103,6 +104,8 @@ export async function PATCH(
         }
       });
 
+      revalidateTemplatesLibrary(context.facilityId);
+
       return Response.json({
         template: toUnifiedActivityTemplate(updated, 0)
       });
@@ -141,6 +144,8 @@ export async function PATCH(
       }
     });
 
+    revalidateTemplatesLibrary(context.facilityId);
+
     return Response.json({
       template: toUnifiedNoteTemplate(updated)
     });
@@ -168,6 +173,7 @@ export async function DELETE(
       await prisma.activityTemplate.delete({
         where: { id: activityTemplate.id }
       });
+      revalidateTemplatesLibrary(context.facilityId);
       return Response.json({ ok: true });
     }
 
@@ -187,9 +193,10 @@ export async function DELETE(
       where: { id: noteTemplate.id }
     });
 
+    revalidateTemplatesLibrary(context.facilityId);
+
     return Response.json({ ok: true });
   } catch (error) {
     return asTemplatesApiErrorResponse(error);
   }
 }
-

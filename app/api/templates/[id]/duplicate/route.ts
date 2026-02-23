@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { asTemplatesApiErrorResponse, requireTemplatesApiContext, TemplatesApiError } from "@/lib/templates/api-context";
 import { toUnifiedActivityTemplate, toUnifiedNoteTemplate } from "@/lib/templates/serializers";
+import { revalidateTemplatesLibrary } from "@/lib/templates/service";
 import { prisma } from "@/lib/prisma";
 
 function withCopySuffix(title: string) {
@@ -37,6 +38,8 @@ export async function POST(
         }
       });
 
+      revalidateTemplatesLibrary(context.facilityId);
+
       return Response.json({
         template: toUnifiedActivityTemplate(copy, 0)
       }, { status: 201 });
@@ -62,6 +65,8 @@ export async function POST(
       }
     });
 
+    revalidateTemplatesLibrary(context.facilityId);
+
     return Response.json({
       template: toUnifiedNoteTemplate(copy)
     }, { status: 201 });
@@ -69,4 +74,3 @@ export async function POST(
     return asTemplatesApiErrorResponse(error);
   }
 }
-

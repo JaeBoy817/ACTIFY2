@@ -21,11 +21,11 @@ export default async function DashboardPage() {
   const context = await requireFacilityContext();
   const moduleFlags = asModuleFlags(context.facility.moduleFlags);
 
-  await ensureUserNotificationFeed({
+  ensureUserNotificationFeed({
     userId: context.user.id,
     facilityId: context.facilityId,
     timezone: context.facility.timezone
-  });
+  }).catch(() => undefined);
 
   const summaryPromise = getDashboardHomeSummary({
     facilityId: context.facilityId,
@@ -33,7 +33,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="dashboard-spectrum relative -mt-2 min-h-[calc(100vh-7rem)] space-y-3 pb-2">
+    <div className="relative -mt-2 min-h-[calc(100vh-7rem)] space-y-3 pb-2">
       <DashboardHeader
         welcomeText={`Welcome back, ${context.user.name.split(" ")[0] || "team"}`}
         dateLabel={formatInTimeZone(new Date(), context.facility.timezone, {

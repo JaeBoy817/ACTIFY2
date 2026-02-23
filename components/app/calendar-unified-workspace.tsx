@@ -63,6 +63,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
+import { useDevRenderTrace } from "@/lib/perf/devRenderTrace";
 import { formatInTimeZone, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
 import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
@@ -716,6 +717,11 @@ export function CalendarUnifiedWorkspace({
   hasExplicitView: boolean;
   timeZone: string;
 }) {
+  useDevRenderTrace("CalendarUnifiedWorkspace", {
+    every: 10,
+    details: { templateCount: templates.length }
+  });
+
   const router = useRouter();
   const { toast } = useToast();
   const templateScrollRef = useRef<HTMLDivElement | null>(null);

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
 import { prisma } from "@/lib/prisma";
+import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
 
@@ -56,27 +57,7 @@ export async function GET(request: Request) {
         facilityId: context.facilityId,
         ...(archivedOnly ? { status: ResidentStatus.DISCHARGED } : { status: { not: ResidentStatus.DISCHARGED } })
       },
-      include: {
-        carePlans: {
-          where: { status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-          select: {
-            focusAreas: true,
-            nextReviewDate: true
-          }
-        },
-        progressNotes: {
-          where: { type: "ONE_TO_ONE" },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-          select: {
-            id: true,
-            createdAt: true,
-            narrative: true
-          }
-        }
-      },
+      ...residentListContextQuery,
       orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
     });
 
@@ -119,27 +100,7 @@ export async function POST(request: Request) {
         followUpFlag: parsed.data.followUpFlag ?? false,
         notes: parsed.data.preferences || null
       },
-      include: {
-        carePlans: {
-          where: { status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-          select: {
-            focusAreas: true,
-            nextReviewDate: true
-          }
-        },
-        progressNotes: {
-          where: { type: "ONE_TO_ONE" },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-          select: {
-            id: true,
-            createdAt: true,
-            narrative: true
-          }
-        }
-      }
+      ...residentListContextQuery
     });
 
     return Response.json({ resident: toResidentListRow(created) }, { status: 201 });

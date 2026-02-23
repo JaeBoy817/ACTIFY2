@@ -12,9 +12,17 @@ import { requireModulePage } from "@/lib/page-guards";
 import { canExportMonthlyReport } from "@/lib/permissions";
 import { getMonthlyReportData, parseMonthParam } from "@/lib/reports";
 
-export default async function ReportsPage({ searchParams }: { searchParams?: { month?: string } }) {
+export default async function ReportsPage({
+  searchParams
+}: {
+  searchParams?: {
+    month?: string;
+    inlinePreview?: string;
+  };
+}) {
   const context = await requireModulePage("reports");
   const month = searchParams?.month;
+  const inlinePreview = searchParams?.inlinePreview === "1";
   const parsedMonth = parseMonthParam(month);
   const reportData = await getMonthlyReportData(context.facilityId, parsedMonth);
 
@@ -22,7 +30,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { m
   const monthParam = month || `${parsedMonth.getFullYear()}-${String(parsedMonth.getMonth() + 1).padStart(2, "0")}`;
   const monthlyParticipation = reportData.monthlyParticipation;
   const pdfDownloadHref = `/app/reports/pdf?month=${monthParam}`;
-  const pdfPreviewHref = `/app/reports/pdf?month=${monthParam}&preview=1&t=${Date.now()}`;
+  const pdfPreviewHref = `/app/reports/pdf?month=${monthParam}&preview=1`;
   const summaryTiles = [
     {
       label: "Total Attended Residents",
@@ -130,7 +138,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { m
           </Button>
         </div>
 
-        {canExport ? (
+        {canExport && inlinePreview ? (
           <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/90">
             <iframe
               key={pdfPreviewHref}
@@ -138,6 +146,18 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { m
               src={pdfPreviewHref}
               className="h-[680px] w-full"
             />
+          </div>
+        ) : canExport ? (
+          <div className="rounded-2xl border border-white/60 bg-white/85 px-4 py-6">
+            <p className="text-sm text-foreground/75">
+              Inline preview is disabled by default for faster page loads.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-3 bg-white/80">
+              <Link href={`/app/reports?month=${monthParam}&inlinePreview=1`}>
+                <ExternalLink className="mr-1 h-4 w-4" />
+                Load Inline Preview
+              </Link>
+            </Button>
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border/60 bg-white/80 px-4 py-5 text-sm text-muted-foreground">

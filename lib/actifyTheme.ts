@@ -25,7 +25,7 @@ const DASHBOARD_THEME: ActifyTheme = {
   label: "Dashboard",
   routes: ["/dashboard", "/app/dashboard", "/app"],
   primaryGradient: "linear-gradient(135deg, #63E6BE 0%, #4DABF7 55%, #748FFC 100%)",
-  softWash: "linear-gradient(135deg, #E6FCF5 0%, #E7F5FF 55%, #EDF2FF 100%)",
+  softWash: "linear-gradient(135deg, #F7F4EE 0%, #F7F4EE 100%)",
   accent: "#4DABF7"
 };
 

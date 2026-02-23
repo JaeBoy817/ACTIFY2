@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ensureUserAndFacility } from "@/lib/auth";
 import { actifyUserButtonAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
-import { getUnreadNotificationCount, listUserNotifications } from "@/lib/notifications/service";
+import { getUnreadNotificationCount } from "@/lib/notifications/service";
 import { prisma } from "@/lib/prisma";
 import { asComplianceDefaults } from "@/lib/settings/defaults";
 
@@ -24,13 +24,12 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
 
-  const [settings, unreadNotificationCount, notificationItems] = await Promise.all([
+  const [settings, unreadNotificationCount] = await Promise.all([
     prisma.facilitySettings.findUnique({
       where: { facilityId: user.facilityId },
       select: { complianceJson: true }
     }),
-    getUnreadNotificationCount(user.id),
-    listUserNotifications(user.id, 10)
+    getUnreadNotificationCount(user.id)
   ]);
   const compliance = asComplianceDefaults(settings?.complianceJson);
 
@@ -65,16 +64,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </Badge>
                 <Badge variant="outline">{user.role}</Badge>
                 <NotificationBellDropdown
+                  viewerId={user.id}
                   unreadCount={unreadNotificationCount}
-                  notifications={notificationItems.map((notification) => ({
-                    id: notification.id,
-                    title: notification.title,
-                    body: notification.body,
-                    actionUrl: notification.actionUrl,
-                    kind: notification.kind,
-                    createdAt: notification.createdAt.toISOString(),
-                    readAt: notification.readAt ? notification.readAt.toISOString() : null
-                  }))}
                 />
                 {isClerkConfigured ? (
                   <UserButton afterSignOutUrl="/" appearance={actifyUserButtonAppearance} />

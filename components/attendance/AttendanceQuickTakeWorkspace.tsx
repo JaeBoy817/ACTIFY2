@@ -9,6 +9,7 @@ import { AttendanceResidentListVirtual } from "@/components/attendance/Attendanc
 import { AttendanceTopBar } from "@/components/attendance/AttendanceTopBar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { useDevRenderTrace } from "@/lib/perf/devRenderTrace";
 import type { AttendanceEntriesMap, AttendanceQuickTakePayload } from "@/lib/attendance-tracker/types";
 import { useToast } from "@/lib/use-toast";
 
@@ -46,6 +47,11 @@ export function AttendanceQuickTakeWorkspace({
   initialData: AttendanceQuickTakePayload;
   canEdit: boolean;
 }) {
+  useDevRenderTrace("AttendanceQuickTakeWorkspace", {
+    every: 10,
+    details: { residents: initialData.residents.length, sessions: initialData.sessions.length }
+  });
+
   const router = useRouter();
   const { getToken } = useAuth();
   const { toast } = useToast();

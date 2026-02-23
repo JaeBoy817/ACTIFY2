@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { asTemplatesApiErrorResponse, requireTemplatesApiContext, TemplatesApiError } from "@/lib/templates/api-context";
+import { revalidateTemplatesLibrary } from "@/lib/templates/service";
 import { prisma } from "@/lib/prisma";
 
 const useTemplateSchema = z.object({
@@ -60,6 +61,8 @@ export async function POST(request: Request) {
       }
     });
 
+    revalidateTemplatesLibrary(context.facilityId);
+
     return Response.json({
       activity: {
         id: instance.id,
@@ -71,4 +74,3 @@ export async function POST(request: Request) {
     return asTemplatesApiErrorResponse(error);
   }
 }
-

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, CheckCheck, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
 import { useToast } from "@/lib/use-toast";
+import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -42,6 +43,11 @@ type NotificationsActionResponse = {
   totalCount: number;
 };
 
+type NotificationsListResponse = {
+  unreadCount: number;
+  notifications: NotificationPreview[];
+};
+
 async function runNotificationAction(method: "PATCH" | "DELETE", payload: Record<string, string>) {
   const response = await fetch("/api/notifications", {
     method,
@@ -60,18 +66,52 @@ async function runNotificationAction(method: "PATCH" | "DELETE", payload: Record
 }
 
 export function NotificationBellDropdown({
+  viewerId,
   unreadCount,
-  notifications
+  notifications = []
 }: {
+  viewerId?: string;
   unreadCount: number;
-  notifications: NotificationPreview[];
+  notifications?: NotificationPreview[];
 }) {
   const { toast } = useToast();
   const [items, setItems] = useState<NotificationPreview[]>(notifications);
   const [unread, setUnread] = useState(unreadCount);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [hasLoadedItems, setHasLoadedItems] = useState(notifications.length > 0);
   const [markingAll, setMarkingAll] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
   const [pendingIds, setPendingIds] = useState<Record<string, boolean>>({});
+
+  const loadNotifications = useCallback(async () => {
+    if (loadingItems) return;
+    setLoadingItems(true);
+
+    try {
+      const data = await cachedFetchJson<NotificationsListResponse>(
+        `notifications:${viewerId ?? "unknown"}:dropdown:list`,
+        "/api/notifications?limit=10",
+        { ttlMs: 10_000 }
+      );
+      setItems(data.notifications);
+      setUnread(data.unreadCount);
+      setHasLoadedItems(true);
+    } catch (error) {
+      toast({
+        title: "Could not load notifications",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingItems(false);
+    }
+  }, [loadingItems, toast, viewerId]);
+
+  useEffect(() => {
+    if (!menuOpen || hasLoadedItems) return;
+    void loadNotifications();
+  }, [hasLoadedItems, loadNotifications, menuOpen]);
 
   async function handleMarkRead(notificationId: string) {
     const target = items.find((item) => item.id === notificationId);
@@ -100,6 +140,7 @@ export function NotificationBellDropdown({
         notificationId
       });
       setUnread(result.unreadCount);
+      invalidateClientCache("notifications:");
     } catch (error) {
       setItems(previousItems);
       setUnread(previousUnread);
@@ -133,6 +174,7 @@ export function NotificationBellDropdown({
         action: "mark-all-read"
       });
       setUnread(result.unreadCount);
+      invalidateClientCache("notifications:");
     } catch (error) {
       setItems(previousItems);
       setUnread(previousUnread);
@@ -161,6 +203,7 @@ export function NotificationBellDropdown({
         action: "clear-all"
       });
       setUnread(result.unreadCount);
+      invalidateClientCache("notifications:");
       toast({
         title: "Notifications cleared"
       });
@@ -178,7 +221,11 @@ export function NotificationBellDropdown({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        setMenuOpen(open);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -198,6 +245,7 @@ export function NotificationBellDropdown({
         <div className="flex items-center justify-between px-3 py-2.5">
           <DropdownMenuLabel className="p-0 text-sm">Notifications</DropdownMenuLabel>
           <div className="flex items-center gap-1.5">
+            {loadingItems ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
             <Badge variant="outline" className="border-white/50 bg-white/70 text-xs">
               {unread} unread
             </Badge>
@@ -229,7 +277,11 @@ export function NotificationBellDropdown({
         </div>
         <DropdownMenuSeparator />
 
-        {items.length === 0 ? (
+        {loadingItems && items.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            Loading notifications...
+          </div>
+        ) : items.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             No notifications yet.
           </div>

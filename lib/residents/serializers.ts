@@ -1,13 +1,7 @@
-import type { CarePlan, ProgressNote, Resident, ResidentStatus } from "@prisma/client";
-
 import { parseFocusAreas, parseResidentTags, type ResidentListRow } from "@/lib/residents/types";
+import type { ResidentListContextRow } from "@/lib/residents/query";
 
-type ResidentWithRelations = Resident & {
-  carePlans?: Array<Pick<CarePlan, "focusAreas" | "nextReviewDate">>;
-  progressNotes?: Array<Pick<ProgressNote, "id" | "createdAt" | "narrative">>;
-};
-
-export function toResidentListRow(row: ResidentWithRelations): ResidentListRow {
+export function toResidentListRow(row: ResidentListContextRow): ResidentListRow {
   const fallbackLastOneOnOne = row.progressNotes?.[0]?.createdAt ?? null;
   const mostRecentOneOnOne =
     row.lastOneOnOneAt && fallbackLastOneOnOne
@@ -22,7 +16,7 @@ export function toResidentListRow(row: ResidentWithRelations): ResidentListRow {
     firstName: row.firstName,
     lastName: row.lastName,
     room: row.room,
-    status: row.status as ResidentStatus,
+    status: row.status,
     birthDate: row.birthDate ? row.birthDate.toISOString() : null,
     preferences: row.preferences ?? null,
     safetyNotes: row.safetyNotes ?? null,

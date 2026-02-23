@@ -4,6 +4,7 @@ import { z } from "zod";
 import { asTemplatesApiErrorResponse, requireTemplatesApiContext, TemplatesApiError } from "@/lib/templates/api-context";
 import { serializeNoteTemplateMeta } from "@/lib/templates/note-template-meta";
 import { toUnifiedActivityTemplate, toUnifiedNoteTemplate } from "@/lib/templates/serializers";
+import { getTemplatesLibrarySnapshot, revalidateTemplatesLibrary } from "@/lib/templates/service";
 import { prisma } from "@/lib/prisma";
 
 const activityPayloadSchema = z.object({
@@ -57,39 +58,9 @@ const createTemplateSchema = z.object({
 export async function GET() {
   try {
     const context = await requireTemplatesApiContext();
-
-    const [activityTemplates, noteTemplates, usageRows] = await Promise.all([
-      prisma.activityTemplate.findMany({
-        where: { facilityId: context.facilityId },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.progressNoteTemplate.findMany({
-        where: { facilityId: context.facilityId },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.activityInstance.groupBy({
-        by: ["templateId"],
-        where: {
-          facilityId: context.facilityId,
-          templateId: { not: null }
-        },
-        _count: { _all: true }
-      })
-    ]);
-
-    const usageByTemplateId = new Map<string, number>();
-    for (const row of usageRows) {
-      if (row.templateId) {
-        usageByTemplateId.set(row.templateId, row._count._all);
-      }
-    }
-
-    const templates = [
-      ...activityTemplates.map((template) =>
-        toUnifiedActivityTemplate(template, usageByTemplateId.get(template.id) ?? 0)
-      ),
-      ...noteTemplates.map((template) => toUnifiedNoteTemplate(template))
-    ];
+    const templates = await getTemplatesLibrarySnapshot({
+      facilityId: context.facilityId
+    });
 
     return Response.json({ templates });
   } catch (error) {
@@ -134,6 +105,8 @@ export async function POST(request: Request) {
         }
       });
 
+      revalidateTemplatesLibrary(context.facilityId);
+
       return Response.json({
         template: toUnifiedActivityTemplate(created, 0)
       }, { status: 201 });
@@ -162,6 +135,8 @@ export async function POST(request: Request) {
       }
     });
 
+    revalidateTemplatesLibrary(context.facilityId);
+
     return Response.json({
       template: toUnifiedNoteTemplate(created)
     }, { status: 201 });
@@ -169,4 +144,3 @@ export async function POST(request: Request) {
     return asTemplatesApiErrorResponse(error);
   }
 }
-

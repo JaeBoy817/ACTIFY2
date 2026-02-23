@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import {
   clearAllNotifications,
   clearReadNotifications,
+  listUserNotifications,
   getUnreadNotificationCount,
   markAllNotificationsRead,
   markNotificationRead
@@ -96,6 +97,47 @@ export async function PATCH(request: Request) {
       ok: true,
       ...counts
     });
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    const message = error instanceof Error ? error.message : "Unexpected notifications error.";
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const user = await requireNotificationsApiUser();
+    const url = new URL(request.url);
+    const limitParam = Number(url.searchParams.get("limit") ?? "10");
+    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(20, Math.floor(limitParam))) : 10;
+
+    const [unreadCount, notifications] = await Promise.all([
+      getUnreadNotificationCount(user.id),
+      listUserNotifications(user.id, limit)
+    ]);
+
+    return Response.json(
+      {
+        unreadCount,
+        notifications: notifications.map((notification) => ({
+          id: notification.id,
+          title: notification.title,
+          body: notification.body,
+          actionUrl: notification.actionUrl,
+          kind: notification.kind,
+          createdAt: notification.createdAt.toISOString(),
+          readAt: notification.readAt ? notification.readAt.toISOString() : null
+        }))
+      },
+      {
+        headers: {
+          "cache-control": "private, max-age=10"
+        }
+      }
+    );
   } catch (error) {
     if (error instanceof Response) {
       return error;
