@@ -34,7 +34,7 @@ export function DrilldownListCard({
     count: rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 74,
-    overscan: 8
+    overscan: 12
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();

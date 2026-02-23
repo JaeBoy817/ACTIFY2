@@ -132,7 +132,7 @@ export function NotesListWorkspace({
     count: filteredNotes.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 88,
-    overscan: 8
+    overscan: 12
   });
 
   return (

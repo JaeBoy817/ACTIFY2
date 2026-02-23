@@ -36,9 +36,9 @@
   --actify-grad-wash: linear-gradient(135deg, #E6FCF5 0%, #E7F5FF 55%, #EDF2FF 100%);
   --actify-accent: #4DABF7;
   /* Ambient drift knobs */
-  --ambient-opacity: 0.28;
+  --ambient-opacity: 0.2;
   --ambient-intensity: 1;
-  --ambient-blur: 44px;
+  --ambient-blur: 26px;
   --ambient-speed-a: 46s;
   --ambient-speed-b: 54s;
   --ambient-speed-c: 60s;
@@ -47,7 +47,7 @@
   --ambient-blob-2: 45 212 191;
   --ambient-blob-3: 251 113 133;
   --ambient-blob-4: 99 102 241;
-  --glass-blur: 26px;
+  --glass-blur: 16px;
   --glass-saturation: 140%;
   --glass-bg: rgba(255, 255, 255, 0.22);
   --glass-bg-warm: rgba(255, 247, 237, 0.32);
@@ -60,7 +60,7 @@
   --glass-inner-shadow: rgba(255, 255, 255, 0.38);
   --motion-quick: 160ms;
   --motion-base: 230ms;
-  --motion-slow: 780ms;
+  --motion-slow: 620ms;
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-gentle: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -371,22 +371,6 @@ body[data-perf-mode="low-power"] .marketing-hero-glow {
   animation: marketing-legal-slide-down 220ms var(--ease-standard) both;
 }
 
-section {
-  box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.16);
-}
-
-article {
-  box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.12);
-}
-
-:is(section, article, div)[class*="rounded-2xl"][class*="border"],
-:is(section, article, div)[class*="rounded-3xl"][class*="border"] {
-  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.72) 58%, transparent);
-  box-shadow:
-    0 12px 24px -18px rgba(15, 23, 42, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
 .liquid-chroma-surface {
   background-image:
     radial-gradient(120% 160% at 8% 6%, rgba(56, 189, 248, 0.2) 0%, transparent 52%),
@@ -396,7 +380,7 @@ article {
 }
 
 .liquid-shadow-float {
-  animation: liquid-shadow-drift 10.5s ease-in-out infinite;
+  animation: none;
 }
 
 .liquid-dropdown {
@@ -406,59 +390,8 @@ article {
     radial-gradient(125% 180% at 100% 0%, rgba(139, 92, 246, 0.18) 0%, transparent 55%);
 }
 
-button {
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.54));
-  box-shadow:
-    0 12px 22px -16px rgba(15, 23, 42, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.52);
-  transition:
-    box-shadow var(--motion-quick) var(--ease-gentle),
-    background-color var(--motion-quick) var(--ease-gentle),
-    transform var(--motion-quick) var(--ease-gentle);
-}
-
-button:hover {
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow:
-    0 18px 32px -18px rgba(15, 23, 42, 0.37),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-button:disabled {
-  background: rgba(255, 255, 255, 0.52);
-  box-shadow:
-    0 8px 16px -14px rgba(15, 23, 42, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-select {
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
-}
-
-input,
-textarea {
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.11);
-  transition: box-shadow var(--motion-quick) var(--ease-gentle);
-}
-
-input:hover,
-textarea:hover {
-  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.13);
-}
-
-input:disabled,
-textarea:disabled {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-}
-
-body[data-perf-mode="low-power"] section,
-body[data-perf-mode="low-power"] button,
-body[data-perf-mode="low-power"] select,
-body[data-perf-mode="low-power"] input,
-body[data-perf-mode="low-power"] textarea {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-  transition: none !important;
+body[data-perf-mode="low-power"] .liquid-shadow-float {
+  animation: none !important;
 }
 
 .dashboard-spectrum {
@@ -555,14 +488,12 @@ body[data-perf-mode="low-power"] .ambient-bg {
   position: absolute;
   border-radius: 9999px;
   pointer-events: none;
-  will-change: transform, opacity;
   transform: translate3d(0, 0, 0);
   filter: blur(var(--ambient-blur));
 }
 
 body[data-perf-mode="low-power"] .ambient-blob {
-  animation-duration: 90s !important;
-  filter: blur(calc(var(--ambient-blur) * 0.7));
+  filter: blur(calc(var(--ambient-blur) * 0.75));
 }
 
 .ambient-blob-a {
@@ -571,7 +502,7 @@ body[data-perf-mode="low-power"] .ambient-blob {
   height: 76vmax;
   width: 76vmax;
   background: radial-gradient(circle at 32% 34%, rgb(var(--ambient-blob-1) / calc(0.28 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-1) / calc(0.1 * var(--ambient-intensity))) 38%, transparent 72%);
-  animation: ambient-drift-a var(--ambient-speed-a) linear infinite alternate;
+  animation: none;
 }
 
 .ambient-blob-b {
@@ -580,7 +511,7 @@ body[data-perf-mode="low-power"] .ambient-blob {
   height: 82vmax;
   width: 82vmax;
   background: radial-gradient(circle at 56% 40%, rgb(var(--ambient-blob-2) / calc(0.24 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-2) / calc(0.09 * var(--ambient-intensity))) 40%, transparent 72%);
-  animation: ambient-drift-b var(--ambient-speed-b) linear infinite alternate;
+  animation: none;
 }
 
 .ambient-blob-c {
@@ -589,7 +520,7 @@ body[data-perf-mode="low-power"] .ambient-blob {
   height: 70vmax;
   width: 70vmax;
   background: radial-gradient(circle at 45% 38%, rgb(var(--ambient-blob-3) / calc(0.18 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-3) / calc(0.07 * var(--ambient-intensity))) 42%, transparent 74%);
-  animation: ambient-drift-c var(--ambient-speed-c) linear infinite alternate;
+  animation: none;
 }
 
 .ambient-blob-d {
@@ -598,7 +529,7 @@ body[data-perf-mode="low-power"] .ambient-blob {
   height: 66vmax;
   width: 66vmax;
   background: radial-gradient(circle at 52% 44%, rgb(var(--ambient-blob-4) / calc(0.16 * var(--ambient-intensity))) 0%, rgb(var(--ambient-blob-4) / calc(0.06 * var(--ambient-intensity))) 44%, transparent 76%);
-  animation: ambient-drift-d var(--ambient-speed-d) linear infinite alternate;
+  animation: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -653,7 +584,6 @@ h6 {
 .actify-orb {
   position: absolute;
   border-radius: 9999px;
-  will-change: transform, opacity;
   transform: translate3d(0, 0, 0);
 }
 
@@ -670,7 +600,7 @@ h6 {
   height: 32rem;
   width: 32rem;
   background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.25) 0%, rgba(37, 99, 235, 0.08) 44%, transparent 72%);
-  animation: drift1 18s ease-in-out infinite alternate;
+  animation: none;
 }
 
 .actify-orb-mint {
@@ -679,7 +609,7 @@ h6 {
   height: 34rem;
   width: 34rem;
   background: radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.24) 0%, rgba(45, 212, 191, 0.08) 45%, transparent 72%);
-  animation: drift2 16s ease-in-out infinite alternate;
+  animation: none;
 }
 
 .actify-orb-coral {
@@ -688,7 +618,7 @@ h6 {
   height: 25rem;
   width: 25rem;
   background: radial-gradient(circle at 50% 50%, rgba(251, 113, 133, 0.14) 0%, rgba(251, 113, 133, 0.04) 48%, transparent 75%);
-  animation: drift3 20s ease-in-out infinite alternate;
+  animation: none;
 }
 
 .glass,
@@ -1389,34 +1319,7 @@ h6 {
 
 .sidebar-dropdown-content {
   transform-origin: top;
-  opacity: 0;
-  transform: translateY(-4px);
-  max-height: 0;
-  overflow: hidden;
-  will-change: opacity, transform, max-height;
-  transition:
-    opacity 150ms var(--ease-standard),
-    transform 180ms var(--ease-standard),
-    max-height 220ms var(--ease-gentle);
-}
-
-.sidebar-dropdown-content[data-state="open"] {
-  opacity: 1;
-  transform: translateY(0);
-  max-height: 520px;
-}
-
-.sidebar-dropdown-content[data-state="closed"] {
-  opacity: 0;
-  transform: translateY(-4px);
-  max-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-dropdown-content {
-    transition: none;
-    transform: none;
-  }
+  contain: layout paint style;
 }
 
 /* Auth-only Clerk cleanup so prebuilt footer/dev strip doesn't clash with ACTIFY glass theme */

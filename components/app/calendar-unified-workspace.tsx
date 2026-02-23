@@ -1062,7 +1062,7 @@ export function CalendarUnifiedWorkspace({
     count: filteredTemplates.length,
     getScrollElement: () => templateScrollRef.current,
     estimateSize: () => 112,
-    overscan: 6
+    overscan: 10
   });
 
   const agendaRows = useMemo<AgendaRow[]>(() => {
@@ -1093,7 +1093,7 @@ export function CalendarUnifiedWorkspace({
     count: agendaRows.length,
     getScrollElement: () => agendaScrollRef.current,
     estimateSize: (index) => (agendaRows[index]?.kind === "header" ? 42 : 90),
-    overscan: 10
+    overscan: 14
   });
 
   const rangeLabel = useMemo(() => {

@@ -38,7 +38,7 @@ export function ResidentList({
     count: residents.length,
     getScrollElement: () => scrollParentRef.current,
     estimateSize: () => 104,
-    overscan: 6
+    overscan: 12
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
 

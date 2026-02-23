@@ -103,7 +103,7 @@ export function ActionItemsPanel({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 134,
-    overscan: 8
+    overscan: 12
   });
 
   const unresolvedCount = filtered.filter((item) => item.status === "UNRESOLVED").length;

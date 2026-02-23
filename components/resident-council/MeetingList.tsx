@@ -68,7 +68,7 @@ export function MeetingList({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 98,
-    overscan: 8
+    overscan: 12
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
 

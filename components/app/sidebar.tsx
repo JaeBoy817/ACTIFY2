@@ -117,7 +117,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
                     <span>{group.label}</span>
                   </span>
                 </AccordionTrigger>
-                <AccordionContent className="sidebar-dropdown-content pb-1 pt-1 data-[state=closed]:animate-none data-[state=open]:animate-none">
+                <AccordionContent className="sidebar-dropdown-content pb-1 pt-1">
                   <div className="space-y-1">
                     {group.links.map((link) => {
                       const active =

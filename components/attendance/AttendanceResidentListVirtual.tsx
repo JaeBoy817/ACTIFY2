@@ -87,7 +87,7 @@ export function AttendanceResidentListVirtual({
     count: residents.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 72,
-    overscan: 8
+    overscan: 12
   });
 
   const currentIndex = useMemo(() => {

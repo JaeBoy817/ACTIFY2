@@ -65,7 +65,7 @@ export function TemplateLibraryPanel({
     count: templates.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 96,
-    overscan: 10
+    overscan: 12
   });
 
   return (
@@ -203,4 +203,3 @@ export function TemplateLibraryPanel({
     </section>
   );
 }
-

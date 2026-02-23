@@ -66,7 +66,7 @@ export function DirectoryTab({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 84,
-    overscan: 8
+    overscan: 12
   });
 
   return (

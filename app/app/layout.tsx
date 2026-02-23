@@ -9,7 +9,6 @@ import { PerformanceReporter } from "@/components/app/PerformanceReporter";
 import { RoutePrefetcher } from "@/components/app/RoutePrefetcher";
 import { AppSidebar } from "@/components/app/sidebar";
 import { GlassNavbar } from "@/components/glass/GlassNavbar";
-import { LiquidOrbs } from "@/components/glass/LiquidOrbs";
 import { RouteTransition } from "@/components/motion/RouteTransition";
 import { Badge } from "@/components/ui/badge";
 import { ensureUserAndFacility } from "@/lib/auth";
@@ -35,7 +34,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ActifyThemeShell className="min-h-screen bg-actify-orbs md:flex">
-      <LiquidOrbs />
       <div className="relative z-30 w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
