@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 
-import { CalendarUnifiedWorkspaceLazy } from "@/components/app/CalendarUnifiedWorkspaceLazy";
+import { CalendarShell } from "@/components/calendar/CalendarShell";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
@@ -68,7 +68,7 @@ export default async function CalendarPage({
   const templates = await getCachedCalendarTemplatesByFacility(context.facilityId)();
 
   return (
-    <CalendarUnifiedWorkspaceLazy
+    <CalendarShell
       templates={templates.map((template) => ({
         id: template.id,
         title: template.title,
@@ -80,7 +80,6 @@ export default async function CalendarPage({
       initialDateKey={initialDateKey}
       initialView={initialView}
       initialSection={initialSection}
-      hasExplicitView={Boolean(searchParams?.view)}
       timeZone={timeZone}
     />
   );
