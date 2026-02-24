@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class OneOnOneQueueApiError extends Error {
   status: number;
@@ -50,7 +51,8 @@ export async function requireOneOnOneQueueApiContext(options: { writable?: boole
       facility: {
         select: {
           id: true,
-          moduleFlags: true
+          moduleFlags: true,
+          timezone: true
         }
       }
     }
@@ -72,6 +74,7 @@ export async function requireOneOnOneQueueApiContext(options: { writable?: boole
   return {
     user,
     facilityId: user.facilityId,
-    role: user.role
+    role: user.role,
+    timeZone: getRequestTimeZone(user.facility.timezone)
   };
 }

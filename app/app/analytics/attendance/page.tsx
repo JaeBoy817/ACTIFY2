@@ -19,7 +19,7 @@ export default async function AnalyticsAttendancePage({
   const filters = parseAnalyticsFiltersFromSearch(searchParams);
   const snapshot = await getAnalyticsSnapshot({
     facilityId: context.facilityId,
-    timeZone: context.facility.timezone,
+    timeZone: context.timeZone,
     filters
   });
 

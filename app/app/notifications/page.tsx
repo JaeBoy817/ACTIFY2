@@ -22,7 +22,7 @@ export default async function NotificationsPage() {
   await ensureUserNotificationFeed({
     userId: context.user.id,
     facilityId: context.facilityId,
-    timezone: context.facility.timezone
+    timezone: context.timeZone
   });
 
   const notifications = await listUserNotifications(context.user.id, 60);
@@ -107,7 +107,7 @@ export default async function NotificationsPage() {
                   </div>
                   <p className="text-sm text-foreground/75">{notification.body}</p>
                   <p className="text-xs text-foreground/60">
-                    {formatInTimeZone(notification.createdAt, context.facility.timezone, {
+                    {formatInTimeZone(notification.createdAt, context.timeZone, {
                       month: "short",
                       day: "numeric",
                       hour: "numeric",

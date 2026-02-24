@@ -2,11 +2,13 @@ import { auth } from "@clerk/nextjs/server";
 
 import { canExportMonthlyReport } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 import { resolveReportTheme } from "@/lib/report-pdf/ReportTheme";
 import { generateReportPdf } from "@/lib/report-pdf/monthly-report";
 import { toReportPdfData } from "@/lib/report-pdf/transform";
 import { getMonthlyReportData, parseMonthParam } from "@/lib/reports";
 import { getEffectiveReportSettings } from "@/lib/settings/service";
+import { formatInTimeZone } from "@/lib/timezone";
 
 export const runtime = "nodejs";
 
@@ -16,7 +18,7 @@ export async function GET(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { clerkUserId: userId },
-    include: { facility: { select: { name: true } } }
+    include: { facility: { select: { name: true, timezone: true } } }
   });
   if (!user) return new Response("User not found", { status: 404 });
 
@@ -35,7 +37,8 @@ export async function GET(req: Request) {
     accent: effectiveSettings.reportSettings.accent
   });
 
-  const generatedAt = new Date().toLocaleString("en-US", {
+  const timeZone = getRequestTimeZone(user.facility?.timezone);
+  const generatedAt = formatInTimeZone(new Date(), timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",

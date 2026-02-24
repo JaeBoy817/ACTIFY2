@@ -24,19 +24,19 @@ export default async function DashboardPage() {
   ensureUserNotificationFeed({
     userId: context.user.id,
     facilityId: context.facilityId,
-    timezone: context.facility.timezone
+    timezone: context.timeZone
   }).catch(() => undefined);
 
   const summaryPromise = getDashboardHomeSummary({
     facilityId: context.facilityId,
-    timeZone: context.facility.timezone
+    timeZone: context.timeZone
   });
 
   return (
     <div className="relative -mt-2 min-h-[calc(100vh-7rem)] space-y-3 pb-2">
       <DashboardHeader
         welcomeText={`Welcome back, ${context.user.name.split(" ")[0] || "team"}`}
-        dateLabel={formatInTimeZone(new Date(), context.facility.timezone, {
+        dateLabel={formatInTimeZone(new Date(), context.timeZone, {
           weekday: "long",
           month: "short",
           day: "numeric"

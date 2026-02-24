@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { canWrite } from "@/lib/permissions";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class CalendarApiError extends Error {
   status: number;
@@ -74,7 +75,6 @@ export async function requireCalendarApiContext(options: { writable?: boolean } 
     user,
     facilityId: user.facilityId,
     role: user.role,
-    timezone: user.facility.timezone
+    timezone: getRequestTimeZone(user.facility.timezone)
   };
 }
-

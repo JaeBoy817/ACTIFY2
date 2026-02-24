@@ -70,10 +70,9 @@ type OneOnOneQueueSnapshotDTO = {
   }>;
 };
 
-function getChicagoDateKey(date = new Date()) {
+function getLocalDateKey(date = new Date()) {
   const partMap: Record<string, string> = {};
   for (const part of new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
@@ -202,7 +201,7 @@ export function OneToOneNotesCardClient({
   }, [state.queueSize, toast]);
 
   useEffect(() => {
-    const liveMonthKey = getChicagoDateKey().slice(0, 7);
+    const liveMonthKey = getLocalDateKey().slice(0, 7);
     const queueMonthKey = state.queueDateKey.slice(0, 7);
     if (liveMonthKey === queueMonthKey) return;
 

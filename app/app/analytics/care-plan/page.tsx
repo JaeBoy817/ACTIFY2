@@ -6,6 +6,7 @@ import { DrilldownListCard } from "@/components/analytics/DrilldownListCard";
 import { AnalyticsBarChartLazy } from "@/components/analytics/charts/AnalyticsBarChartLazy";
 import { getAnalyticsSnapshot, parseAnalyticsFiltersFromSearch } from "@/lib/analytics/service";
 import { requireModulePage } from "@/lib/page-guards";
+import { formatInTimeZone } from "@/lib/timezone";
 
 type AnalyticsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -18,9 +19,23 @@ export default async function AnalyticsCarePlanPage({
   const filters = parseAnalyticsFiltersFromSearch(searchParams);
   const snapshot = await getAnalyticsSnapshot({
     facilityId: context.facilityId,
-    timeZone: context.facility.timezone,
+    timeZone: context.timeZone,
     filters
   });
+  const formatDate = (value: string) =>
+    formatInTimeZone(new Date(value), context.timeZone, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  const formatDateTime = (value: string) =>
+    formatInTimeZone(new Date(value), context.timeZone, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
 
   return (
     <AnalyticsShell
@@ -76,11 +91,11 @@ export default async function AnalyticsCarePlanPage({
             title: review.residentName,
             subtitle: `Room ${review.room}`,
             metric: review.status === "OVERDUE" ? "Overdue" : "Due Soon",
-            metricLabel: new Date(review.nextReviewDate).toLocaleDateString(),
+            metricLabel: formatDate(review.nextReviewDate),
             details: [
               { label: "Resident", value: `${review.residentName} (${review.room})` },
               { label: "Status", value: review.status === "OVERDUE" ? "Overdue" : "Due soon" },
-              { label: "Next review", value: new Date(review.nextReviewDate).toLocaleString() },
+              { label: "Next review", value: formatDateTime(review.nextReviewDate) },
               { label: "Care plan ID", value: review.carePlanId }
             ]
           }))}

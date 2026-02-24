@@ -9,6 +9,7 @@ import { logAudit } from "@/lib/audit";
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 
 const uiStatusValues = ["PRESENT_ACTIVE", "LEADING", "REFUSED", "NO_SHOW"] as const;
 const barrierReasonValues = [
@@ -111,7 +112,7 @@ export default async function AttendancePage({
   });
 
   if (!activity) notFound();
-  const activityDayKey = activity.startAt.toISOString().slice(0, 10);
+  const activityDayKey = zonedDateKey(activity.startAt, context.timeZone);
 
   const residents = await prisma.resident.findMany({
     where: {
@@ -281,7 +282,16 @@ export default async function AttendancePage({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Attendance entry</h1>
-          <p className="text-sm text-muted-foreground">{activity.title} · {new Date(activity.startAt).toLocaleString()}</p>
+          <p className="text-sm text-muted-foreground">
+            {activity.title} ·{" "}
+            {formatInTimeZone(activity.startAt, context.timeZone, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit"
+            })}
+          </p>
         </div>
         <Button asChild variant="outline">
           <Link href="/app/calendar">Back to calendar</Link>

@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class NotesApiError extends Error {
   status: number;
@@ -49,7 +50,8 @@ export async function requireNotesApiContext(options: { writable?: boolean } = {
     include: {
       facility: {
         select: {
-          moduleFlags: true
+          moduleFlags: true,
+          timezone: true
         }
       }
     }
@@ -71,6 +73,7 @@ export async function requireNotesApiContext(options: { writable?: boolean } = {
   return {
     user,
     facilityId: user.facilityId,
-    role: user.role
+    role: user.role,
+    timeZone: getRequestTimeZone(user.facility.timezone)
   };
 }

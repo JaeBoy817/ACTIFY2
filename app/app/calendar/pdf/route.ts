@@ -1,28 +1,40 @@
 import { auth } from "@clerk/nextjs/server";
-import {
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  isValid,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-  startOfWeek
-} from "date-fns";
 
 import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 import { generateCalendarPdf, type CalendarPdfView } from "@/lib/calendar-pdf/calendar-export";
 import { getEffectiveReportSettings } from "@/lib/settings/service";
 import { resolveReportTheme } from "@/lib/report-pdf/ReportTheme";
+import {
+  endOfZonedDay,
+  endOfZonedWeek,
+  formatInTimeZone,
+  resolveTimeZone,
+  startOfZonedDay,
+  startOfZonedMonth,
+  startOfZonedMonthShift,
+  startOfZonedWeek,
+  zonedDateKey,
+  zonedDateStringToUtcStart
+} from "@/lib/timezone";
 
 export const runtime = "nodejs";
 
-function parseDateParam(raw: string | null) {
+function parseDateParam(raw: string | null, timeZone: string) {
   if (!raw) return undefined;
-  const normalized = /^\d{4}-\d{2}$/.test(raw) ? `${raw}-01` : raw;
-  const parsed = parseISO(normalized);
-  return isValid(parsed) ? parsed : undefined;
+  const normalized = raw.trim();
+  if (!normalized) return undefined;
+  if (/^\d{4}-\d{2}$/.test(normalized)) {
+    return zonedDateStringToUtcStart(`${normalized}-01`, timeZone) ?? undefined;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return zonedDateStringToUtcStart(normalized, timeZone) ?? undefined;
+  }
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed;
 }
 
 function parseView(raw: string | null): CalendarPdfView {
@@ -36,7 +48,7 @@ export async function GET(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { clerkUserId: userId },
-    include: { facility: { select: { name: true, moduleFlags: true } } }
+    include: { facility: { select: { name: true, moduleFlags: true, timezone: true } } }
   });
   if (!user) return new Response("User not found", { status: 404 });
 
@@ -48,28 +60,29 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const isPreview = url.searchParams.get("preview") === "1";
   const view = parseView(url.searchParams.get("view"));
+  const timeZone = resolveTimeZone(getRequestTimeZone(user.facility?.timezone));
   const now = new Date();
 
   const anchorDate =
     view === "daily"
-      ? parseDateParam(url.searchParams.get("date")) ?? now
+      ? parseDateParam(url.searchParams.get("date"), timeZone) ?? now
       : view === "weekly"
-        ? parseDateParam(url.searchParams.get("weekStart")) ?? now
-        : parseDateParam(url.searchParams.get("month")) ?? now;
+        ? parseDateParam(url.searchParams.get("weekStart"), timeZone) ?? now
+        : parseDateParam(url.searchParams.get("month"), timeZone) ?? now;
 
   const rangeStart =
     view === "daily"
-      ? startOfDay(anchorDate)
+      ? startOfZonedDay(anchorDate, timeZone)
       : view === "weekly"
-        ? startOfWeek(anchorDate, { weekStartsOn: 1 })
-        : startOfMonth(anchorDate);
+        ? startOfZonedWeek(anchorDate, timeZone, 1)
+        : startOfZonedMonth(anchorDate, timeZone);
 
   const rangeEnd =
     view === "daily"
-      ? endOfDay(anchorDate)
+      ? endOfZonedDay(anchorDate, timeZone)
       : view === "weekly"
-        ? endOfWeek(anchorDate, { weekStartsOn: 1 })
-        : endOfMonth(anchorDate);
+        ? endOfZonedWeek(anchorDate, timeZone, 1)
+        : new Date(startOfZonedMonthShift(rangeStart, timeZone, 1).getTime() - 1);
 
   const [activities, effectiveSettings] = await Promise.all([
     prisma.activityInstance.findMany({
@@ -102,7 +115,7 @@ export async function GET(req: Request) {
     accent: effectiveSettings.reportSettings.accent
   });
 
-  const generatedAt = new Date().toLocaleString("en-US", {
+  const generatedAt = formatInTimeZone(new Date(), timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -133,7 +146,7 @@ export async function GET(req: Request) {
     }
   );
 
-  const dateToken = rangeStart.toISOString().slice(0, 10);
+  const dateToken = zonedDateKey(rangeStart, timeZone);
   const filename = `actify-calendar-${view}-${dateToken}.pdf`;
 
   return new Response(Buffer.from(pdfBytes), {

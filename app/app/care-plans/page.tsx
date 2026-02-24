@@ -36,7 +36,7 @@ export default async function CarePlansPage({
         bedBound: searchParams?.bedBound ?? "false",
         primaryFocus: searchParams?.primaryFocus ?? ""
       }}
-      timeZone={resolveTimeZone(context.facility.timezone)}
+      timeZone={resolveTimeZone(context.timeZone)}
     />
   );
 }

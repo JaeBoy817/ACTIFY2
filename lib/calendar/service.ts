@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { expandSeriesToRange, makeOccurrenceKey, normalizeExdates } from "@/lib/calendar/recurrence";
 import { findConflicts, getSchedulingWarningPolicy, isOutsideBusinessHours, type CalendarConflict } from "@/lib/calendar/conflicts";
+import { resolveTimeZone } from "@/lib/timezone";
 
 type PrismaExecutor = PrismaClient | typeof prisma;
 
@@ -506,7 +507,7 @@ export async function createSeriesWithChecks(params: {
       durationMin: Math.floor(params.durationMin),
       rrule: params.rrule,
       until: params.until ?? null,
-      timezone: params.timezone || "America/Chicago",
+      timezone: resolveTimeZone(params.timezone),
       checklist: normalizeChecklist(params.checklist),
       adaptations: normalizeAdaptations(params.adaptations),
       exdates: params.exdates ?? []

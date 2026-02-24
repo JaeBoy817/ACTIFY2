@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
     const snapshot = await pinOneOnOneQueueItemToTomorrow({
       facilityId: context.facilityId,
-      queueItemId: parsed.data.queueItemId
+      queueItemId: parsed.data.queueItemId,
+      timeZone: context.timeZone
     });
 
     return Response.json(serializeOneOnOneSpotlightSnapshot(snapshot));

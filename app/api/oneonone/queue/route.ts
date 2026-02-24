@@ -13,7 +13,8 @@ export async function GET(request: Request) {
     const snapshot = await getOneOnOneSpotlightSnapshot({
       facilityId: context.facilityId,
       date,
-      queueSize
+      queueSize,
+      timeZone: context.timeZone
     });
 
     return Response.json(serializeOneOnOneSpotlightSnapshot(snapshot));

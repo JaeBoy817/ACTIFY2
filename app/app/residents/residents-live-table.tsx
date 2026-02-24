@@ -113,16 +113,37 @@ function calculateAgeFromBirthDate(birthDateIso: string | null, todayKey: string
   const birthDate = new Date(birthDateIso);
   if (Number.isNaN(birthDate.getTime())) return null;
 
-  const today = new Date(`${todayKey}T12:00:00.000Z`);
-  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
-  const monthDelta = today.getUTCMonth() - birthDate.getUTCMonth();
-  const dayDelta = today.getUTCDate() - birthDate.getUTCDate();
+  const [yearRaw, monthRaw, dayRaw] = todayKey.split("-").map(Number);
+  if (!Number.isFinite(yearRaw) || !Number.isFinite(monthRaw) || !Number.isFinite(dayRaw)) return null;
+
+  let age = yearRaw - birthDate.getUTCFullYear();
+  const monthDelta = monthRaw - (birthDate.getUTCMonth() + 1);
+  const dayDelta = dayRaw - birthDate.getUTCDate();
 
   if (monthDelta < 0 || (monthDelta === 0 && dayDelta < 0)) {
     age -= 1;
   }
 
   return age >= 0 ? age : null;
+}
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatBirthDateLabel(birthDateIso: string | null) {
+  if (!birthDateIso) return "—";
+  const date = new Date(birthDateIso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
 }
 
 export function ResidentsLiveTable({
@@ -143,7 +164,7 @@ export function ResidentsLiveTable({
   const [query, setQuery] = useState("");
   const [statusDrafts, setStatusDrafts] = useState<Record<string, ResidentStatusValue>>({});
   const [editResident, setEditResident] = useState<EditResidentState | null>(null);
-  const [todayKey, setTodayKey] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayKey, setTodayKey] = useState(() => getLocalDateKey());
   const [isEditPending, startEditTransition] = useTransition();
 
   useEffect(() => {
@@ -152,7 +173,7 @@ export function ResidentsLiveTable({
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      const nextTodayKey = new Date().toISOString().slice(0, 10);
+      const nextTodayKey = getLocalDateKey();
       setTodayKey((current) => (current === nextTodayKey ? current : nextTodayKey));
     }, 60_000);
 
@@ -170,7 +191,7 @@ export function ResidentsLiveTable({
       const fullName = `${resident.firstName} ${resident.lastName}`.toLowerCase();
       const reverseName = `${resident.lastName}, ${resident.firstName}`.toLowerCase();
       const statusLabel = formatResidentStatusLabel(resident.status).toLowerCase();
-      const birthdayLabel = resident.birthDate ? new Date(resident.birthDate).toLocaleDateString().toLowerCase() : "";
+      const birthdayLabel = formatBirthDateLabel(resident.birthDate).toLowerCase();
       const age = calculateAgeFromBirthDate(resident.birthDate, todayKey);
       const ageLabel = age != null ? String(age) : "";
       return (
@@ -352,7 +373,7 @@ export function ResidentsLiveTable({
                   <TableRow key={resident.id}>
                     <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                     <TableCell>{resident.room}</TableCell>
-                    <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell>{formatBirthDateLabel(resident.birthDate)}</TableCell>
                     <TableCell>{age ?? "—"}</TableCell>
                     <TableCell>{resident.unitName ?? "-"}</TableCell>
                     <TableCell>{resident.attendanceCount}</TableCell>
@@ -450,7 +471,7 @@ export function ResidentsLiveTable({
                     <TableRow key={`discharged-${resident.id}`}>
                       <TableCell className="font-medium">{resident.firstName} {resident.lastName}</TableCell>
                       <TableCell>{resident.room}</TableCell>
-                      <TableCell>{resident.birthDate ? new Date(resident.birthDate).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell>{formatBirthDateLabel(resident.birthDate)}</TableCell>
                       <TableCell>{age ?? "—"}</TableCell>
                       <TableCell>{resident.unitName ?? "-"}</TableCell>
                       <TableCell>{resident.attendanceCount}</TableCell>

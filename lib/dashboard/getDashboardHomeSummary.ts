@@ -280,7 +280,8 @@ async function computeDashboardHomeSummary(args: {
       }
     }),
     getOneOnOneSpotlightSnapshot({
-      facilityId: args.facilityId
+      facilityId: args.facilityId,
+      timeZone: args.timeZone
     }),
     prisma.progressNote.findMany({
       where: {

@@ -15,7 +15,7 @@ export default async function AttendanceQuickTakePage({
 
   const initialData = await getAttendanceQuickTakePayload({
     facilityId: context.facilityId,
-    timeZone: context.facility.timezone,
+    timeZone: context.timeZone,
     dateKey: searchParams?.date,
     sessionId: searchParams?.sessionId
   });

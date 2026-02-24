@@ -301,7 +301,7 @@ export async function getBudgetStockHubSnapshot(params: {
   monthKey?: string | null;
   timeZone?: string | null;
 }): Promise<BudgetStockHubSnapshot> {
-  const range = parseMonthKey(params.monthKey, params.timeZone ?? "America/Chicago");
+  const range = parseMonthKey(params.monthKey, resolveTimeZone(params.timeZone));
   await ensureBudgetStockCategories(params.facilityId);
   await canonicalizeBudgetStockCategories(params.facilityId);
 

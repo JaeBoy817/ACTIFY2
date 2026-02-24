@@ -7,6 +7,7 @@ import { IdleComplianceGuard } from "@/components/app/IdleComplianceGuard";
 import { NotificationBellDropdown } from "@/components/app/NotificationBellDropdown";
 import { PerformanceReporter } from "@/components/app/PerformanceReporter";
 import { RoutePrefetcher } from "@/components/app/RoutePrefetcher";
+import { TimezoneSync } from "@/components/app/TimezoneSync";
 import { AppSidebar } from "@/components/app/sidebar";
 import { GlassNavbar } from "@/components/glass/GlassNavbar";
 import { RouteTransition } from "@/components/motion/RouteTransition";
@@ -76,6 +77,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <main className="container py-6">
           <RoutePrefetcher />
+          <TimezoneSync />
           <PerformanceReporter />
           <RouteTransition>{children}</RouteTransition>
         </main>

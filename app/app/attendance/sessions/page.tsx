@@ -17,7 +17,7 @@ export default async function AttendanceSessionsPage({
   };
 }) {
   const context = await requireModulePage("attendanceTracking");
-  const timeZone = context.facility.timezone;
+  const timeZone = context.timeZone;
 
   const todayStart = startOfZonedDay(new Date(), timeZone);
   const defaultTo = zonedDateKey(todayStart, timeZone);

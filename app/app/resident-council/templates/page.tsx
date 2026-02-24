@@ -13,20 +13,23 @@ import {
   listResidentCouncilMeetings
 } from "@/lib/resident-council/queries";
 import { residentCouncilTopicTemplates } from "@/lib/resident-council/service";
+import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 
 export default async function ResidentCouncilTemplatesPage() {
   const context = await requireModulePage("residentCouncil");
   const writable = canWrite(context.role);
-  const month = new Date().toISOString().slice(0, 7);
+  const month = zonedDateKey(new Date(), context.timeZone).slice(0, 7);
 
   const [overview, residents, meetings] = await Promise.all([
     getResidentCouncilOverviewData({
       facilityId: context.facilityId,
-      month
+      month,
+      timeZone: context.timeZone
     }),
     writable ? getResidentCouncilActiveResidents(context.facilityId) : Promise.resolve([]),
     listResidentCouncilMeetings({
       facilityId: context.facilityId,
+      timeZone: context.timeZone,
       page: 1,
       pageSize: 30,
       sort: "newest"
@@ -39,7 +42,7 @@ export default async function ResidentCouncilTemplatesPage() {
     <div className="space-y-4">
       <ResidentCouncilShell
         writable={writable}
-        timeZone={context.facility.timezone}
+        timeZone={context.timeZone}
         currentSection="templates"
         month={month}
         monthFormAction="/app/resident-council"
@@ -58,7 +61,15 @@ export default async function ResidentCouncilTemplatesPage() {
                   ).toFixed(1)
                 )
               : 0,
-          nextMeetingLabel: overview.nextMeeting ? new Date(overview.nextMeeting.heldAt).toLocaleString() : null
+          nextMeetingLabel: overview.nextMeeting
+            ? formatInTimeZone(new Date(overview.nextMeeting.heldAt), context.timeZone, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit"
+              })
+            : null
         }}
         selectedMeeting={selectedMeeting ? { id: selectedMeeting.id, label: selectedMeeting.title } : null}
         meetingTemplates={residentCouncilTopicTemplates.map((template) => ({ id: template.id, title: template.title }))}

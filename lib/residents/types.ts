@@ -1,4 +1,5 @@
 import type { ResidentStatus } from "@prisma/client";
+import { formatInTimeZone, resolveTimeZone } from "@/lib/timezone";
 
 export const RESIDENT_SORT_OPTIONS = [
   { value: "ROOM", label: "Room" },
@@ -133,17 +134,26 @@ export function formatResidentBirthDate(birthDate: string | null) {
   if (!birthDate) return "Not set";
   const parsed = new Date(birthDate);
   if (Number.isNaN(parsed.getTime())) return "Not set";
-  return parsed.toLocaleDateString();
+  return formatInTimeZone(parsed, "UTC", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
-export function getResidentAge(birthDate: string | null, today = new Date()) {
+export function getResidentAge(birthDate: string | null, today = new Date(), timeZone?: string | null) {
   if (!birthDate) return null;
   const parsedBirthDate = new Date(birthDate);
   if (Number.isNaN(parsedBirthDate.getTime())) return null;
 
-  let age = today.getUTCFullYear() - parsedBirthDate.getUTCFullYear();
-  const monthDelta = today.getUTCMonth() - parsedBirthDate.getUTCMonth();
-  const dayDelta = today.getUTCDate() - parsedBirthDate.getUTCDate();
+  const zone = timeZone ? resolveTimeZone(timeZone) : null;
+  const currentYear = zone ? Number(formatInTimeZone(today, zone, { year: "numeric" })) : today.getFullYear();
+  const currentMonth = zone ? Number(formatInTimeZone(today, zone, { month: "2-digit" })) : today.getMonth() + 1;
+  const currentDay = zone ? Number(formatInTimeZone(today, zone, { day: "2-digit" })) : today.getDate();
+
+  let age = currentYear - parsedBirthDate.getUTCFullYear();
+  const monthDelta = currentMonth - (parsedBirthDate.getUTCMonth() + 1);
+  const dayDelta = currentDay - parsedBirthDate.getUTCDate();
 
   if (monthDelta < 0 || (monthDelta === 0 && dayDelta < 0)) {
     age -= 1;

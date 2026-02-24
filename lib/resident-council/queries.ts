@@ -11,6 +11,15 @@ import {
 } from "@/lib/resident-council/service";
 import type { ResidentCouncilActionItemDTO, ResidentCouncilSection, ResidentCouncilTopicCategory } from "@/lib/resident-council/types";
 import { compareResidentsByRoom } from "@/lib/resident-status";
+import {
+  addZonedDays,
+  formatInTimeZone,
+  resolveTimeZone,
+  startOfZonedMonth,
+  startOfZonedMonthShift,
+  zonedDateKey,
+  zonedDateStringToUtcStart
+} from "@/lib/timezone";
 
 const DEPARTMENT_SECTIONS = [
   { key: "activities", label: "Activities" },
@@ -116,16 +125,20 @@ export type ResidentCouncilMeetingDetailData = {
 };
 
 type DateRange = {
+  timeZone: string;
+  monthKey: string;
   start: Date;
   end: Date;
 };
 
-function getMonthRange(month?: string): DateRange {
-  const isValid = typeof month === "string" && /^\d{4}-\d{2}$/.test(month);
-  const base = isValid ? new Date(`${month}-01T00:00:00.000Z`) : new Date();
-  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 1));
-  return { start, end };
+function getMonthRange(month?: string, timeZone?: string): DateRange {
+  const zone = resolveTimeZone(timeZone);
+  const fallbackMonth = zonedDateKey(new Date(), zone).slice(0, 7);
+  const monthKey = typeof month === "string" && /^\d{4}-\d{2}$/.test(month) ? month : fallbackMonth;
+  const start =
+    zonedDateStringToUtcStart(`${monthKey}-01`, zone) ?? startOfZonedMonth(new Date(), zone);
+  const end = startOfZonedMonthShift(start, zone, 1);
+  return { start, end, monthKey, timeZone: zone };
 }
 
 function clampPage(raw: number | undefined) {
@@ -209,7 +222,8 @@ function toMeetingRow(input: {
   attendanceCount: number;
   notes: string | null;
   items: Array<{ id: string; category: string; concern: string; status: "RESOLVED" | "UNRESOLVED" }>;
-}): ResidentCouncilMeetingRow {
+}, timeZone?: string): ResidentCouncilMeetingRow {
+  const zone = resolveTimeZone(timeZone);
   const parsed = parseMeetingSheetNotes(input.notes);
   const unresolvedCount = input.items.filter((item) => item.status === "UNRESOLVED").length;
   const status = unresolvedCount > 0 ? "DRAFT" : "FINAL";
@@ -225,7 +239,7 @@ function toMeetingRow(input: {
   const summaryLine = parsed?.summary?.split("\n")[0]?.trim();
   const title = summaryLine && summaryLine.length > 0
     ? summaryLine
-    : `Resident Council • ${new Date(input.heldAt).toLocaleDateString()}`;
+    : `Resident Council • ${formatInTimeZone(input.heldAt, zone, { month: "short", day: "numeric", year: "numeric" })}`;
 
   const snippet = getSnippet(parsed?.summary ?? parsed?.newBusiness ?? input.notes);
 
@@ -270,6 +284,7 @@ function toActionItemRow(input: {
 
 export async function listResidentCouncilMeetings(params: {
   facilityId: string;
+  timeZone?: string | null;
   page?: number;
   pageSize?: number;
   search?: string;
@@ -280,6 +295,7 @@ export async function listResidentCouncilMeetings(params: {
   to?: string;
   sort?: ResidentCouncilMeetingSort;
 }): Promise<ResidentCouncilMeetingListResult> {
+  const timeZone = resolveTimeZone(params.timeZone);
   const page = clampPage(params.page);
   const pageSize = clampPageSize(params.pageSize);
   const search = params.search?.trim();
@@ -291,10 +307,16 @@ export async function listResidentCouncilMeetings(params: {
   if (params.from || params.to) {
     where.heldAt = {};
     if (params.from) {
-      where.heldAt.gte = new Date(`${params.from}T00:00:00.000Z`);
+      const parsedFrom = zonedDateStringToUtcStart(params.from, timeZone);
+      if (parsedFrom) {
+        where.heldAt.gte = parsedFrom;
+      }
     }
     if (params.to) {
-      where.heldAt.lte = new Date(`${params.to}T23:59:59.999Z`);
+      const parsedTo = zonedDateStringToUtcStart(params.to, timeZone);
+      if (parsedTo) {
+        where.heldAt.lt = addZonedDays(parsedTo, timeZone, 1);
+      }
     }
   }
 
@@ -363,7 +385,7 @@ export async function listResidentCouncilMeetings(params: {
     })
   ]);
 
-  const mapped = rows.map((row) => toMeetingRow(row));
+  const mapped = rows.map((row) => toMeetingRow(row, timeZone));
   if (params.sort === "most_departments") {
     mapped.sort((a, b) => b.departments.length - a.departments.length || +new Date(b.heldAt) - +new Date(a.heldAt));
   }
@@ -469,11 +491,11 @@ export async function listResidentCouncilActionItems(params: {
   return { rows: mapped, total, page, pageSize, pageCount };
 }
 
-function getOverviewDataCached(facilityId: string, monthKey: string) {
+function getOverviewDataCached(facilityId: string, monthKey: string, timeZone: string) {
   return unstable_cache(
     async (): Promise<ResidentCouncilOverviewData> => {
-      const monthRange = getMonthRange(monthKey);
-      const sixMonthsAgo = new Date(Date.UTC(monthRange.start.getUTCFullYear(), monthRange.start.getUTCMonth() - 5, 1));
+      const monthRange = getMonthRange(monthKey, timeZone);
+      const sixMonthsAgo = startOfZonedMonthShift(monthRange.start, monthRange.timeZone, -5);
 
       const [nextMeetingRow, totalMeetings, totalResolvedActionItems, meetingsThisMonth, openItemsRows, recentMeetings, openItemsPreview, trendRows] = await Promise.all([
         prisma.residentCouncilMeeting.findFirst({
@@ -523,6 +545,7 @@ function getOverviewDataCached(facilityId: string, monthKey: string) {
         }),
         listResidentCouncilMeetings({
           facilityId,
+          timeZone: monthRange.timeZone,
           page: 1,
           pageSize: 8,
           sort: "newest"
@@ -563,7 +586,7 @@ function getOverviewDataCached(facilityId: string, monthKey: string) {
 
       const trendMap = new Map<string, { meetings: number; attendanceTotal: number; openItems: number; resolvedItems: number }>();
       for (const row of trendRows) {
-        const key = `${row.heldAt.getUTCFullYear()}-${String(row.heldAt.getUTCMonth() + 1).padStart(2, "0")}`;
+        const key = zonedDateKey(row.heldAt, monthRange.timeZone).slice(0, 7);
         const current = trendMap.get(key) ?? { meetings: 0, attendanceTotal: 0, openItems: 0, resolvedItems: 0 };
         current.meetings += 1;
         current.attendanceTotal += row.attendanceCount;
@@ -583,7 +606,7 @@ function getOverviewDataCached(facilityId: string, monthKey: string) {
         }));
 
       return {
-        month: monthKey,
+        month: monthRange.monthKey,
         totalMeetings,
         totalResolvedActionItems,
         nextMeeting: nextMeetingRow ? toMeetingRow(nextMeetingRow) : null,
@@ -595,7 +618,7 @@ function getOverviewDataCached(facilityId: string, monthKey: string) {
         trends
       };
     },
-    ["resident-council-overview-v2", facilityId, monthKey],
+    ["resident-council-overview-v2", facilityId, monthKey, timeZone],
     {
       revalidate: 45,
       tags: [getResidentCouncilCacheTag(facilityId)]
@@ -606,11 +629,13 @@ function getOverviewDataCached(facilityId: string, monthKey: string) {
 export async function getResidentCouncilOverviewData(params: {
   facilityId: string;
   month?: string;
+  timeZone?: string | null;
 }) {
+  const timeZone = resolveTimeZone(params.timeZone);
   const month = params.month && /^\d{4}-\d{2}$/.test(params.month)
     ? params.month
-    : new Date().toISOString().slice(0, 7);
-  return getOverviewDataCached(params.facilityId, month)();
+    : zonedDateKey(new Date(), timeZone).slice(0, 7);
+  return getOverviewDataCached(params.facilityId, month, timeZone)();
 }
 
 export async function getResidentCouncilMeetingDetail(params: {

@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     const snapshot = await skipOneOnOneQueueItem({
       facilityId: context.facilityId,
       queueItemId: parsed.data.queueItemId,
-      skipReason: parsed.data.skipReason
+      skipReason: parsed.data.skipReason,
+      timeZone: context.timeZone
     });
 
     return Response.json(serializeOneOnOneSpotlightSnapshot(snapshot));

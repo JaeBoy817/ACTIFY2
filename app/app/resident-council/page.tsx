@@ -23,6 +23,7 @@ import {
   type ResidentCouncilMeetingSort
 } from "@/lib/resident-council/queries";
 import { residentCouncilTopicTemplates } from "@/lib/resident-council/service";
+import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 
 type HubView = "overview" | "meetings" | "actions" | "analytics" | "settings";
 
@@ -42,9 +43,8 @@ function parseView(value: string): HubView {
   return "overview";
 }
 
-function currentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+function currentMonthKey(timeZone: string) {
+  return zonedDateKey(new Date(), timeZone).slice(0, 7);
 }
 
 function parseMeetingSort(value: string): ResidentCouncilMeetingSort {
@@ -67,13 +67,16 @@ export default async function ResidentCouncilPage({
 
   const rawView = first(searchParams?.view);
   const currentView = parseView(rawView);
-  const month = /^\d{4}-\d{2}$/.test(first(searchParams?.month)) ? first(searchParams?.month) : currentMonthKey();
+  const month = /^\d{4}-\d{2}$/.test(first(searchParams?.month))
+    ? first(searchParams?.month)
+    : currentMonthKey(context.timeZone);
   const selectedMeetingId = first(searchParams?.meetingId);
 
   const [overview, residentOptions] = await Promise.all([
     getResidentCouncilOverviewData({
       facilityId: context.facilityId,
-      month
+      month,
+      timeZone: context.timeZone
     }),
     writable ? getResidentCouncilActiveResidents(context.facilityId) : Promise.resolve([])
   ]);
@@ -103,6 +106,7 @@ export default async function ResidentCouncilPage({
     currentView === "meetings" || currentView === "settings"
       ? listResidentCouncilMeetings({
           facilityId: context.facilityId,
+          timeZone: context.timeZone,
           page: Number.isFinite(meetingFilters.page) && meetingFilters.page > 0 ? meetingFilters.page : 1,
           search: meetingFilters.search || undefined,
           status: meetingFilters.status,
@@ -156,7 +160,7 @@ export default async function ResidentCouncilPage({
     <div className="space-y-4">
       <ResidentCouncilShell
         writable={writable}
-        timeZone={context.facility.timezone}
+        timeZone={context.timeZone}
         currentSection={currentSection}
         month={month}
         monthFormAction="/app/resident-council"
@@ -175,7 +179,7 @@ export default async function ResidentCouncilPage({
                   ).toFixed(1)
                 )
               : 0,
-          nextMeetingLabel: overview.nextMeeting ? formatDateTime(overview.nextMeeting.heldAt) : null
+          nextMeetingLabel: overview.nextMeeting ? formatDateTime(overview.nextMeeting.heldAt, context.timeZone) : null
         }}
         selectedMeeting={selectedMeetingRow ? { id: selectedMeetingRow.id, label: selectedMeetingRow.title } : null}
         meetingTemplates={residentCouncilTopicTemplates.map((template) => ({ id: template.id, title: template.title }))}
@@ -186,7 +190,7 @@ export default async function ResidentCouncilPage({
             <div className="space-y-3">
               <div className="rounded-xl border border-white/30 bg-white/60 p-3">
                 <p className="text-xs uppercase tracking-wide text-foreground/65">Focused Meeting</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{getMeetingLabel(detailForContext)}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{getMeetingLabel(detailForContext, context.timeZone)}</p>
                 <p className="mt-1 text-xs text-foreground/68">
                   {detailForContext.status} • {detailForContext.unresolvedCount} open actions
                 </p>
@@ -217,7 +221,7 @@ export default async function ResidentCouncilPage({
         }
       >
         {currentView === "overview" ? (
-          <OverviewPanel overview={overview} />
+          <OverviewPanel overview={overview} timeZone={context.timeZone} />
         ) : null}
 
         {currentView === "meetings" && meetingsResult ? (
@@ -245,6 +249,7 @@ export default async function ResidentCouncilPage({
             overview={overview}
             meetings={meetingsResult?.rows ?? overview.recentMeetings}
             selectedMeetingId={selectedMeetingRow?.id ?? ""}
+            timeZone={context.timeZone}
           />
         ) : null}
       </ResidentCouncilShell>
@@ -253,9 +258,11 @@ export default async function ResidentCouncilPage({
 }
 
 function OverviewPanel({
-  overview
+  overview,
+  timeZone
 }: {
   overview: Awaited<ReturnType<typeof getResidentCouncilOverviewData>>;
+  timeZone: string;
 }) {
   return (
     <div className="space-y-4">
@@ -284,7 +291,7 @@ function OverviewPanel({
                   className="block rounded-xl border border-white/30 bg-white/70 px-3 py-3 shadow-sm transition hover:bg-white/85"
                 >
                   <p className="text-sm font-semibold text-foreground">{meeting.title}</p>
-                  <p className="text-xs text-foreground/65">{formatDateTime(meeting.heldAt)}</p>
+                  <p className="text-xs text-foreground/65">{formatDateTime(meeting.heldAt, timeZone)}</p>
                   <p className="mt-1 line-clamp-2 text-xs text-foreground/72">{meeting.snippet}</p>
                 </Link>
               ))}
@@ -434,12 +441,14 @@ function SettingsExportPanel({
   month,
   overview,
   meetings,
-  selectedMeetingId
+  selectedMeetingId,
+  timeZone
 }: {
   month: string;
   overview: Awaited<ReturnType<typeof getResidentCouncilOverviewData>>;
   meetings: Array<{ id: string; heldAt: string; title: string }>;
   selectedMeetingId: string;
+  timeZone: string;
 }) {
   const fallbackMeetingId = selectedMeetingId || meetings[0]?.id || "";
   return (
@@ -456,7 +465,7 @@ function SettingsExportPanel({
           <select defaultValue={fallbackMeetingId} className="h-10 rounded-xl border border-white/35 bg-white/80 px-3 text-sm shadow-md shadow-black/10">
             {meetings.map((meeting) => (
               <option key={meeting.id} value={meeting.id}>
-                {formatDateTime(meeting.heldAt)}
+                {formatDateTime(meeting.heldAt, timeZone)}
               </option>
             ))}
           </select>
@@ -537,16 +546,16 @@ function EmptyCard({ message }: { message: string }) {
   );
 }
 
-function getMeetingLabel(meeting: Awaited<ReturnType<typeof getResidentCouncilMeetingDetail>>) {
+function getMeetingLabel(meeting: Awaited<ReturnType<typeof getResidentCouncilMeetingDetail>>, timeZone: string) {
   if (!meeting) return "Unknown meeting";
   const summaryLine = meeting.summary.split(/\n+/).map((entry) => entry.trim()).find(Boolean);
-  return summaryLine && summaryLine.length > 0 ? summaryLine : formatDateTime(meeting.heldAt);
+  return summaryLine && summaryLine.length > 0 ? summaryLine : formatDateTime(meeting.heldAt, timeZone);
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value: string, timeZone: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleString(undefined, {
+  return formatInTimeZone(date, timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",

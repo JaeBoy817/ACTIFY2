@@ -4,13 +4,13 @@ import { requireFacilityContext } from "@/lib/auth";
 import { formatInTimeZone } from "@/lib/timezone";
 
 export default async function DashboardSettingsPage() {
-  const { facility } = await requireFacilityContext();
+  const context = await requireFacilityContext();
   const now = new Date();
 
   return (
     <DashboardShell
       active="settings"
-      dateLabel={formatInTimeZone(now, facility.timezone, {
+      dateLabel={formatInTimeZone(now, context.timeZone, {
         weekday: "long",
         month: "short",
         day: "numeric"

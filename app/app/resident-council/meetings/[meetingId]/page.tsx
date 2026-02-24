@@ -20,6 +20,7 @@ import {
   getResidentCouncilOverviewData
 } from "@/lib/resident-council/queries";
 import { residentCouncilTopicTemplates } from "@/lib/resident-council/service";
+import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -33,8 +34,24 @@ function parseTab(value: string): MeetingDetailTab {
   return "minutes";
 }
 
-function monthFromIso(value: string) {
-  return value.slice(0, 7);
+function monthFromIso(value: string, timeZone: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return zonedDateKey(new Date(), timeZone).slice(0, 7);
+  }
+  return zonedDateKey(parsed, timeZone).slice(0, 7);
+}
+
+function formatDateTime(value: string, timeZone: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown date";
+  return formatInTimeZone(parsed, timeZone, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 export default async function ResidentCouncilMeetingDetailPage({
@@ -58,7 +75,8 @@ export default async function ResidentCouncilMeetingDetailPage({
   const [overview, residentOptions] = await Promise.all([
     getResidentCouncilOverviewData({
       facilityId: context.facilityId,
-      month: monthFromIso(meeting.heldAt)
+      month: monthFromIso(meeting.heldAt, context.timeZone),
+      timeZone: context.timeZone
     }),
     writable ? getResidentCouncilActiveResidents(context.facilityId) : Promise.resolve([])
   ]);
@@ -67,9 +85,9 @@ export default async function ResidentCouncilMeetingDetailPage({
     <div className="space-y-4">
       <ResidentCouncilShell
         writable={writable}
-        timeZone={context.facility.timezone}
+        timeZone={context.timeZone}
         currentSection="minutes"
-        month={monthFromIso(meeting.heldAt)}
+        month={monthFromIso(meeting.heldAt, context.timeZone)}
         monthFormAction="/app/resident-council"
         monthFormView="overview"
         sectionStats={{
@@ -86,9 +104,9 @@ export default async function ResidentCouncilMeetingDetailPage({
                   ).toFixed(1)
                 )
               : 0,
-          nextMeetingLabel: overview.nextMeeting ? new Date(overview.nextMeeting.heldAt).toLocaleString() : null
+          nextMeetingLabel: overview.nextMeeting ? formatDateTime(overview.nextMeeting.heldAt, context.timeZone) : null
         }}
-        selectedMeeting={{ id: meeting.id, label: meeting.summary || new Date(meeting.heldAt).toLocaleString() }}
+        selectedMeeting={{ id: meeting.id, label: meeting.summary || formatDateTime(meeting.heldAt, context.timeZone) }}
         meetingTemplates={residentCouncilTopicTemplates.map((template) => ({ id: template.id, title: template.title }))}
         residentOptions={residentOptions}
         createMeetingAction={createResidentCouncilMeetingAction}

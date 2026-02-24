@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { CalendarUnifiedWorkspaceLazy } from "@/components/app/CalendarUnifiedWorkspaceLazy";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
-import { zonedDateKey } from "@/lib/timezone";
+import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
 
 type CalendarView = "week" | "day" | "month" | "agenda";
 type CalendarSection = "schedule" | "create" | "templates" | "settings";
@@ -60,7 +60,7 @@ export default async function CalendarPage({
   searchParams?: { date?: string; month?: string; view?: string; section?: string };
 }) {
   const context = await requireModulePage("calendar");
-  const timeZone = context.facility.timezone || "America/Chicago";
+  const timeZone = resolveTimeZone(context.timeZone);
   const initialView = parseInitialView(searchParams?.view);
   const initialSection = parseInitialSection(searchParams?.section);
   const initialDateKey = parseInitialDate(searchParams, timeZone);

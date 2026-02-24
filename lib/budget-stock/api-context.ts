@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class BudgetStockApiError extends Error {
   status: number;
@@ -74,6 +75,6 @@ export async function requireBudgetStockApiContext(options: { writable?: boolean
     user,
     facilityId: user.facilityId,
     role: user.role,
-    timezone: user.facility.timezone
+    timezone: getRequestTimeZone(user.facility.timezone)
   };
 }

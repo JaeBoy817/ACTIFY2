@@ -21,7 +21,7 @@ export default async function AttendanceResidentsPage({
     ? await getResidentAttendanceSummary({
         facilityId: context.facilityId,
         residentId: initialResidentId,
-        timeZone: context.facility.timezone
+        timeZone: context.timeZone
       })
     : null;
 

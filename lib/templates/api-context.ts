@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class TemplatesApiError extends Error {
   status: number;
@@ -73,7 +74,6 @@ export async function requireTemplatesApiContext(options: { writable?: boolean }
   return {
     user,
     facilityId: user.facilityId,
-    timezone: user.facility.timezone
+    timezone: getRequestTimeZone(user.facility.timezone)
   };
 }
-

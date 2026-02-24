@@ -18,7 +18,7 @@ export default async function AttendanceReportsPage({
   };
 }) {
   const context = await requireModulePage("attendanceTracking");
-  const timeZone = context.facility.timezone;
+  const timeZone = context.timeZone;
 
   const monthKey = resolveMonthKey(searchParams?.month, timeZone);
   const monthStart = zonedDateStringToUtcStart(`${monthKey}-01`, timeZone) ?? startOfZonedMonth(new Date(), timeZone);

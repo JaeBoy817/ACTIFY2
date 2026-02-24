@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { defaultModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 import { ensureSettingsForUserAndFacility } from "@/lib/settings/ensure";
 
 export async function ensureUserAndFacility() {
@@ -132,10 +133,12 @@ export async function getOptionalUser() {
 
 export async function requireFacilityContext() {
   const user = await requireUser();
+  const timeZone = getRequestTimeZone(user.facility.timezone);
   return {
     user,
     facilityId: user.facilityId,
     role: user.role,
-    facility: user.facility
+    facility: user.facility,
+    timeZone
   };
 }

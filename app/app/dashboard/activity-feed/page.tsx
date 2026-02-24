@@ -30,12 +30,13 @@ export default async function DashboardActivityFeedPage() {
   const [summary, oneOnOneSnapshot] = await Promise.all([
     getDashboardSummary({
       facilityId: context.facilityId,
-      timeZone: context.facility.timezone,
+      timeZone: context.timeZone,
       showBirthdaysWidget: moduleFlags.widgets.birthdays,
       includeExtended: true
     }),
     getOneOnOneSpotlightSnapshot({
-      facilityId: context.facilityId
+      facilityId: context.facilityId,
+      timeZone: context.timeZone
     })
   ]);
 
@@ -75,7 +76,7 @@ export default async function DashboardActivityFeedPage() {
         <OneOnOneSpotlight
           initialSnapshot={serializeOneOnOneSpotlightSnapshot(oneOnOneSnapshot)}
           canEdit={canWrite(context.role)}
-          timeZone={context.facility.timezone}
+          timeZone={context.timeZone}
         />
 
         <DashboardActivityFeedExtras

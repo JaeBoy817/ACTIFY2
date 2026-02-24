@@ -31,7 +31,7 @@ export default async function ResidentCarePlanOverviewPage({
       plan={data.plan}
       status={data.displayStatus}
       trend={data.trend}
-      timeZone={resolveTimeZone(context.facility.timezone)}
+      timeZone={resolveTimeZone(context.timeZone)}
       canEdit={canWrite(context.role)}
       archiveAction={archiveAction}
     />

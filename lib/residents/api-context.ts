@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class ResidentsApiError extends Error {
   status: number;
@@ -67,6 +68,6 @@ export async function requireResidentsApiContext(options: { writable?: boolean }
     user,
     facilityId: user.facilityId,
     role: user.role,
-    timezone: user.facility.timezone
+    timezone: getRequestTimeZone(user.facility.timezone)
   };
 }

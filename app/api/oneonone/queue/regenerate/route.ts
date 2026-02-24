@@ -25,7 +25,8 @@ export async function POST(request: Request) {
       facilityId: context.facilityId,
       date: parsed.data.date,
       queueSize: parsed.data.queueSize,
-      missingThisMonthOnly: parsed.data.missingThisMonthOnly
+      missingThisMonthOnly: parsed.data.missingThisMonthOnly,
+      timeZone: context.timeZone
     });
 
     return Response.json(serializeOneOnOneSpotlightSnapshot(snapshot));

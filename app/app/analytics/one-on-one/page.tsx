@@ -6,6 +6,7 @@ import { DrilldownListCard } from "@/components/analytics/DrilldownListCard";
 import { AnalyticsBarChartLazy } from "@/components/analytics/charts/AnalyticsBarChartLazy";
 import { getAnalyticsSnapshot, parseAnalyticsFiltersFromSearch } from "@/lib/analytics/service";
 import { requireModulePage } from "@/lib/page-guards";
+import { formatInTimeZone } from "@/lib/timezone";
 
 type AnalyticsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -18,9 +19,17 @@ export default async function AnalyticsOneOnOnePage({
   const filters = parseAnalyticsFiltersFromSearch(searchParams);
   const snapshot = await getAnalyticsSnapshot({
     facilityId: context.facilityId,
-    timeZone: context.facility.timezone,
+    timeZone: context.timeZone,
     filters
   });
+  const formatDateTime = (value: string) =>
+    formatInTimeZone(new Date(value), context.timeZone, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
 
   const delta = snapshot.oneOnOne.totalNotes - snapshot.oneOnOne.previousTotalNotes;
 
@@ -80,7 +89,7 @@ export default async function AnalyticsOneOnOnePage({
               { label: "Resident", value: row.residentName },
               { label: "Room", value: row.room },
               { label: "1:1 notes", value: String(row.notesCount) },
-              { label: "Last 1:1", value: new Date(row.lastNoteAt).toLocaleString() }
+              { label: "Last 1:1", value: formatDateTime(row.lastNoteAt) }
             ]
           }))}
           emptyLabel="No 1:1 notes found in this range."
@@ -92,12 +101,12 @@ export default async function AnalyticsOneOnOnePage({
           rows={snapshot.oneOnOne.recentNotes.map((note) => ({
             id: note.id,
             title: note.residentName,
-            subtitle: `${note.room} · ${new Date(note.createdAt).toLocaleString()}`,
+            subtitle: `${note.room} · ${formatDateTime(note.createdAt)}`,
             metric: note.response,
             metricLabel: note.mood,
             details: [
               { label: "Resident", value: `${note.residentName} (${note.room})` },
-              { label: "Created", value: new Date(note.createdAt).toLocaleString() },
+              { label: "Created", value: formatDateTime(note.createdAt) },
               { label: "Response", value: note.response },
               { label: "Mood", value: note.mood },
               { label: "Narrative", value: note.narrativePreview || "No narrative preview." }

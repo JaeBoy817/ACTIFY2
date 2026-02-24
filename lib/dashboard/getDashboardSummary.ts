@@ -287,7 +287,8 @@ async function computeDashboardSummary(args: {
       }
     }),
     getOneOnOneSpotlightSnapshot({
-      facilityId: args.facilityId
+      facilityId: args.facilityId,
+      timeZone: args.timeZone
     }),
     prisma.budgetStockItem.findMany({
       where: {

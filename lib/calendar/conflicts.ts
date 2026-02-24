@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { asAttendanceRules, asBusinessHours } from "@/lib/settings/defaults";
-import { formatInTimeZone } from "@/lib/timezone";
+import { formatInTimeZone, resolveTimeZone } from "@/lib/timezone";
 
 const WEEKDAY_TOKEN_TO_INDEX: Record<string, number> = {
   SUN: 0,
@@ -110,7 +110,7 @@ export async function getSchedulingWarningPolicy(facilityId: string): Promise<Sc
     warnTherapyOverlap: asAttendanceRules(settings?.attendanceRulesJson).warnTherapyOverlap,
     warnOutsideBusinessHours: asAttendanceRules(settings?.attendanceRulesJson).warnOutsideBusinessHours,
     businessHours: asBusinessHours(settings?.businessHoursJson),
-    timezone: settings?.timezone || "America/Chicago"
+    timezone: resolveTimeZone(settings?.timezone)
   };
 }
 
@@ -142,4 +142,3 @@ export async function findConflicts(params: {
     orderBy: { startAt: "asc" }
   });
 }
-

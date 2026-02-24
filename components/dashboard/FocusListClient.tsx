@@ -40,10 +40,9 @@ function formatLastOneOnOne(value: string | null) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function getChicagoDateKey(date = new Date()) {
+function getLocalDateKey(date = new Date()) {
   const partMap: Record<string, string> = {};
   for (const part of new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
@@ -139,7 +138,7 @@ export function FocusListClient({
     if (didInitialMonthCheck) return;
     setDidInitialMonthCheck(true);
 
-    const liveMonthKey = getChicagoDateKey().slice(0, 7);
+    const liveMonthKey = getLocalDateKey().slice(0, 7);
     const queueMonthKey = focus.queueDateKey.slice(0, 7);
     if (liveMonthKey === queueMonthKey) return;
 

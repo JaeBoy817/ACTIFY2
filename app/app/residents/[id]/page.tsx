@@ -15,6 +15,7 @@ import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { barriers as planBarriers, goalTemplates, interventions as planInterventions } from "@/lib/planLibrary";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { formatInTimeZone } from "@/lib/timezone";
 
 const assessmentSchema = z.object({
   music: z.string().optional(),
@@ -110,12 +111,11 @@ function parseBoolean(raw: FormDataEntryValue | null) {
 
 function formatBirthDate(value: Date | null) {
   if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
+  return formatInTimeZone(value, "UTC", {
     month: "long",
     day: "numeric",
     year: "numeric"
-  }).format(value);
+  });
 }
 
 function getNextBirthdaySummary(value: Date | null) {
@@ -138,6 +138,20 @@ function getNextBirthdaySummary(value: Date | null) {
 
 export default async function ResidentProfilePage({ params }: { params: { id: string } }) {
   const context = await getFacilityContextWithSubscription();
+  const dateTimeFormat = (value: Date) =>
+    formatInTimeZone(value, context.timeZone, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  const dateFormat = (value: Date) =>
+    formatInTimeZone(value, context.timeZone, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
 
   const resident = await prisma.resident.findFirst({
     where: {
@@ -516,7 +530,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
             const suggestedPrograms = Array.isArray(assessment.suggestedPrograms) ? assessment.suggestedPrograms : [];
             return (
               <div key={assessment.id} className="rounded-md border p-3">
-                <p className="mb-2 text-xs text-muted-foreground">{new Date(assessment.createdAt).toLocaleString()}</p>
+                <p className="mb-2 text-xs text-muted-foreground">{dateTimeFormat(assessment.createdAt)}</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestedPrograms.map((program) => (
                     <Badge key={String(program)} variant="secondary">
@@ -540,7 +554,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
               {resident.progressNotes.map((note) => (
                 <li key={note.id} className="rounded-md border p-3">
                   <p className="text-xs text-muted-foreground">
-                    {new Date(note.createdAt).toLocaleString()} · {note.type} · by {note.createdByUser.name}
+                    {dateTimeFormat(note.createdAt)} · {note.type} · by {note.createdByUser.name}
                   </p>
                   <p className="mt-2">{note.narrative}</p>
                 </li>
@@ -566,7 +580,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
               <TableBody>
                 {resident.attendance.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell>{new Date(item.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{dateFormat(item.createdAt)}</TableCell>
                     <TableCell>{item.activityInstance.title}</TableCell>
                     <TableCell>{item.status}</TableCell>
                     <TableCell>{item.barrierReason ?? "-"}</TableCell>

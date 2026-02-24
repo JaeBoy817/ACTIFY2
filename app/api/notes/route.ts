@@ -204,7 +204,7 @@ export async function POST(request: Request) {
           }
         });
 
-        const queueDateKey = zonedDateKey(note.createdAt, "America/Chicago");
+        const queueDateKey = zonedDateKey(note.createdAt, context.timeZone);
         await tx.dailyOneOnOneQueue.updateMany({
           where: {
             facilityId: context.facilityId,

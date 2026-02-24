@@ -12,7 +12,7 @@ export default async function BudgetStockHubPage({
   };
 }) {
   const context = await requireModulePage("inventory");
-  const timeZone = resolveTimeZone(context.facility.timezone);
+  const timeZone = resolveTimeZone(context.timeZone);
   const monthOptions = buildMonthOptions(timeZone, 12);
   const initialMonthKey = searchParams?.month && /^\d{4}-\d{2}$/.test(searchParams.month)
     ? searchParams.month

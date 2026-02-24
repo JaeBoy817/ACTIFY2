@@ -4,7 +4,9 @@ import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { resolveReportTheme } from "@/lib/report-pdf/ReportTheme";
 import { generateResidentCouncilPdf } from "@/lib/report-pdf/resident-council-report";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 import { getEffectiveReportSettings } from "@/lib/settings/service";
+import { formatInTimeZone } from "@/lib/timezone";
 
 export const runtime = "nodejs";
 
@@ -64,7 +66,8 @@ export async function GET(req: Request) {
     accent: effectiveSettings.reportSettings.accent
   });
 
-  const generatedAt = new Date().toLocaleString("en-US", {
+  const timeZone = getRequestTimeZone(user.facility?.timezone);
+  const generatedAt = formatInTimeZone(new Date(), timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -91,7 +94,7 @@ export async function GET(req: Request) {
       },
       facilityName: user.facility?.name ?? "My Facility",
       generatedAt,
-      timeZone: user.facility?.timezone ?? "America/Chicago"
+      timeZone
     },
     theme,
     {

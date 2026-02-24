@@ -4,7 +4,7 @@ import { Role } from "@prisma/client";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { resolveTimeZone } from "@/lib/timezone";
+import { getRequestTimeZone } from "@/lib/request-timezone";
 
 export class AttendanceTrackerApiError extends Error {
   status: number;
@@ -81,6 +81,6 @@ export async function requireAttendanceTrackerApiContext(options: { writable?: b
     user,
     facilityId: user.facilityId,
     role: user.role,
-    timeZone: resolveTimeZone(user.facility.timezone)
+    timeZone: getRequestTimeZone(user.facility.timezone)
   };
 }

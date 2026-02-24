@@ -2,9 +2,17 @@ import { Prisma, type OneOnOneQueueSkipReason, type ResidentStatus } from "@pris
 
 import { prisma } from "@/lib/prisma";
 import { compareResidentsByRoom, formatResidentStatusLabel } from "@/lib/resident-status";
-import { addZonedDays, startOfZonedDay, startOfZonedMonth, startOfZonedMonthShift, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
+import {
+  addZonedDays,
+  resolveTimeZone,
+  startOfZonedDay,
+  startOfZonedMonth,
+  startOfZonedMonthShift,
+  zonedDateKey,
+  zonedDateStringToUtcStart
+} from "@/lib/timezone";
 
-const ONE_ON_ONE_TIME_ZONE = "America/Chicago";
+const ONE_ON_ONE_TIME_ZONE = resolveTimeZone();
 const DEFAULT_QUEUE_SIZE = 6;
 const MIN_QUEUE_SIZE = 1;
 const MAX_QUEUE_SIZE = 20;
@@ -22,6 +30,7 @@ const skipReasonLabels: Record<OneOnOneQueueSkipReason, string> = {
 type TxClient = Prisma.TransactionClient;
 
 type DateContext = {
+  timeZone: string;
   queueDate: Date;
   queueDateKey: string;
   queueDayStart: Date;
@@ -158,33 +167,35 @@ function clampQueueSize(size: number | undefined) {
   return Math.min(MAX_QUEUE_SIZE, Math.max(MIN_QUEUE_SIZE, Math.trunc(size)));
 }
 
-function createDateContext(inputDate?: string): DateContext {
+function createDateContext(inputDate?: string, timeZone?: string | null): DateContext {
+  const resolvedTimeZone = resolveTimeZone(timeZone);
   const parsedDate = inputDate?.trim();
 
   let queueDate: Date;
   if (parsedDate) {
-    const parsed = zonedDateStringToUtcStart(parsedDate, ONE_ON_ONE_TIME_ZONE);
+    const parsed = zonedDateStringToUtcStart(parsedDate, resolvedTimeZone);
     if (!parsed) {
       throw new Error("Invalid queue date. Expected YYYY-MM-DD.");
     }
     queueDate = parsed;
   } else {
-    queueDate = startOfZonedDay(new Date(), ONE_ON_ONE_TIME_ZONE);
+    queueDate = startOfZonedDay(new Date(), resolvedTimeZone);
   }
 
-  const queueDateKey = zonedDateKey(queueDate, ONE_ON_ONE_TIME_ZONE);
-  const queueDayStart = zonedDateStringToUtcStart(queueDateKey, ONE_ON_ONE_TIME_ZONE);
+  const queueDateKey = zonedDateKey(queueDate, resolvedTimeZone);
+  const queueDayStart = zonedDateStringToUtcStart(queueDateKey, resolvedTimeZone);
   if (!queueDayStart) {
     throw new Error("Unable to derive queue day start.");
   }
 
-  const nextQueueDate = addZonedDays(queueDayStart, ONE_ON_ONE_TIME_ZONE, 1);
+  const nextQueueDate = addZonedDays(queueDayStart, resolvedTimeZone, 1);
   const queueDayEnd = new Date(nextQueueDate.getTime() - 1);
-  const monthStart = startOfZonedMonth(queueDayStart, ONE_ON_ONE_TIME_ZONE);
-  const nextMonthStart = startOfZonedMonthShift(queueDayStart, ONE_ON_ONE_TIME_ZONE, 1);
+  const monthStart = startOfZonedMonth(queueDayStart, resolvedTimeZone);
+  const nextMonthStart = startOfZonedMonthShift(queueDayStart, resolvedTimeZone, 1);
   const monthEnd = new Date(nextMonthStart.getTime() - 1);
 
   return {
+    timeZone: resolvedTimeZone,
     queueDate,
     queueDateKey,
     queueDayStart,
@@ -195,10 +206,10 @@ function createDateContext(inputDate?: string): DateContext {
   };
 }
 
-function daysSince(referenceDate: Date, compareDate: Date | null) {
+function daysSince(referenceDate: Date, compareDate: Date | null, timeZone: string) {
   if (!compareDate) return null;
-  const referenceStart = startOfZonedDay(referenceDate, ONE_ON_ONE_TIME_ZONE).getTime();
-  const compareStart = startOfZonedDay(compareDate, ONE_ON_ONE_TIME_ZONE).getTime();
+  const referenceStart = startOfZonedDay(referenceDate, timeZone).getTime();
+  const compareStart = startOfZonedDay(compareDate, timeZone).getTime();
   const delta = referenceStart - compareStart;
   if (delta <= 0) return 0;
   return Math.floor(delta / DAY_MS);
@@ -316,7 +327,7 @@ async function loadResidentQueueStats(tx: TxClient, facilityId: string, dateCont
     const monthNoteCount = monthRow?.count ?? 0;
     const monthLastNoteAt = monthRow?.lastAt ?? null;
     const lastOneOnOneAt = lastByResident.get(resident.id) ?? null;
-    const daysSinceLastOneOnOne = daysSince(dateContext.queueDayStart, lastOneOnOneAt);
+    const daysSinceLastOneOnOne = daysSince(dateContext.queueDayStart, lastOneOnOneAt, dateContext.timeZone);
 
     return {
       residentId: resident.id,
@@ -647,8 +658,9 @@ export async function getOneOnOneSpotlightSnapshot(params: {
   facilityId: string;
   date?: string;
   queueSize?: number;
+  timeZone?: string | null;
 }) {
-  const dateContext = createDateContext(params.date);
+  const dateContext = createDateContext(params.date, params.timeZone);
   const queueSize = clampQueueSize(params.queueSize);
 
   return prisma.$transaction((tx) =>
@@ -667,8 +679,9 @@ export async function regenerateOneOnOneQueueSnapshot(params: {
   date?: string;
   queueSize?: number;
   missingThisMonthOnly?: boolean;
+  timeZone?: string | null;
 }) {
-  const dateContext = createDateContext(params.date);
+  const dateContext = createDateContext(params.date, params.timeZone);
   const queueSize = clampQueueSize(params.queueSize);
 
   return prisma.$transaction((tx) =>
@@ -709,6 +722,7 @@ async function getQueueItemOrThrow(params: {
 export async function completeOneOnOneQueueItem(params: {
   facilityId: string;
   queueItemId: string;
+  timeZone?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
     const row = await getQueueItemOrThrow({
@@ -716,6 +730,8 @@ export async function completeOneOnOneQueueItem(params: {
       facilityId: params.facilityId,
       queueItemId: params.queueItemId
     });
+
+    const dateContext = createDateContext(row.queueDateKey, params.timeZone);
 
     await tx.dailyOneOnOneQueue.update({
       where: { id: row.id },
@@ -729,7 +745,7 @@ export async function completeOneOnOneQueueItem(params: {
     return buildSnapshotTx(tx, {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
-      dateContext: createDateContext(row.queueDateKey),
+      dateContext,
       regenerate: false,
       missingThisMonthOnly: false
     });
@@ -740,6 +756,7 @@ export async function skipOneOnOneQueueItem(params: {
   facilityId: string;
   queueItemId: string;
   skipReason: OneOnOneQueueSkipReason;
+  timeZone?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
     const row = await getQueueItemOrThrow({
@@ -747,6 +764,8 @@ export async function skipOneOnOneQueueItem(params: {
       facilityId: params.facilityId,
       queueItemId: params.queueItemId
     });
+
+    const dateContext = createDateContext(row.queueDateKey, params.timeZone);
 
     await tx.dailyOneOnOneQueue.update({
       where: { id: row.id },
@@ -760,7 +779,7 @@ export async function skipOneOnOneQueueItem(params: {
     return buildSnapshotTx(tx, {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
-      dateContext: createDateContext(row.queueDateKey),
+      dateContext,
       regenerate: false,
       missingThisMonthOnly: false
     });
@@ -770,6 +789,7 @@ export async function skipOneOnOneQueueItem(params: {
 export async function pinOneOnOneQueueItemToTomorrow(params: {
   facilityId: string;
   queueItemId: string;
+  timeZone?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
     const row = await getQueueItemOrThrow({
@@ -778,7 +798,8 @@ export async function pinOneOnOneQueueItemToTomorrow(params: {
       queueItemId: params.queueItemId
     });
 
-    const tomorrow = addZonedDays(row.queueDate, ONE_ON_ONE_TIME_ZONE, 1);
+    const dateContext = createDateContext(row.queueDateKey, params.timeZone);
+    const tomorrow = addZonedDays(row.queueDate, dateContext.timeZone, 1);
 
     await tx.dailyOneOnOneQueue.update({
       where: { id: row.id },
@@ -791,7 +812,7 @@ export async function pinOneOnOneQueueItemToTomorrow(params: {
     return buildSnapshotTx(tx, {
       facilityId: params.facilityId,
       queueSize: DEFAULT_QUEUE_SIZE,
-      dateContext: createDateContext(row.queueDateKey),
+      dateContext,
       regenerate: false,
       missingThisMonthOnly: false
     });
