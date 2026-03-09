@@ -16,6 +16,7 @@ import {
   UsersRound
 } from "lucide-react";
 
+import { MODULE_VISUAL_TOKENS } from "@/lib/design-system/tokens";
 import type { ModuleFlags } from "@/lib/module-flags";
 
 export type ModuleRegistryKey =
@@ -58,7 +59,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Dashboard",
     href: "/app",
     icon: LayoutDashboard,
-    accentGradientClasses: "from-sky-500/35 to-indigo-500/10 text-sky-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.dashboard.accentGradientClasses,
     description: "Run your activity program from one calm workspace.",
     sidebarGroup: "daily-workflow"
   },
@@ -67,7 +68,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Calendar",
     href: "/app/calendar",
     icon: CalendarDays,
-    accentGradientClasses: "from-blue-500/35 to-indigo-500/10 text-blue-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.calendar.accentGradientClasses,
     description: "Build schedules from templates and keep your day organized.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "calendar"
@@ -77,7 +78,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Templates",
     href: "/app/templates",
     icon: Layers,
-    accentGradientClasses: "from-violet-500/35 to-fuchsia-500/10 text-violet-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.templates.accentGradientClasses,
     description: "Reuse your best activities in one click.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "templates"
@@ -87,7 +88,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Attendance Tracker",
     href: "/app/attendance",
     icon: ClipboardCheck,
-    accentGradientClasses: "from-emerald-500/35 to-teal-500/10 text-emerald-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.attendance.accentGradientClasses,
     description: "Track who attended and why residents missed.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "calendar"
@@ -97,7 +98,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Notes",
     href: "/app/notes",
     icon: ClipboardPenLine,
-    accentGradientClasses: "from-rose-500/35 to-orange-400/10 text-rose-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.notes.accentGradientClasses,
     description: "Capture progress and 1:1 outcomes quickly.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "notes"
@@ -107,7 +108,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Residents",
     href: "/app/residents",
     icon: Users,
-    accentGradientClasses: "from-fuchsia-500/35 to-rose-500/10 text-fuchsia-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.residents.accentGradientClasses,
     description: "Keep census, preferences, and follow-up context in one workspace.",
     sidebarGroup: "residents-outcomes"
   },
@@ -116,7 +117,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Care Plans",
     href: "/app/care-plans",
     icon: ClipboardList,
-    accentGradientClasses: "from-cyan-500/35 to-blue-500/10 text-cyan-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS["care-plan"].accentGradientClasses,
     description: "Track goals, barriers, and engagement outcomes.",
     sidebarGroup: "residents-outcomes",
     moduleFlagKey: "carePlan"
@@ -126,7 +127,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Analytics",
     href: "/app/analytics",
     icon: BarChart3,
-    accentGradientClasses: "from-indigo-500/35 to-violet-500/10 text-indigo-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.analytics.accentGradientClasses,
     description: "Monitor attendance trends, barriers, and participation outcomes.",
     sidebarGroup: "residents-outcomes",
     moduleFlagKey: "analyticsHeatmaps"
@@ -136,7 +137,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Volunteers",
     href: "/app/volunteers",
     icon: Handshake,
-    accentGradientClasses: "from-emerald-500/35 to-cyan-500/10 text-emerald-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.volunteers.accentGradientClasses,
     description: "Manage volunteer scheduling, visits, and hours.",
     sidebarGroup: "operations",
     moduleFlagKey: "volunteers"
@@ -146,7 +147,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Budget + Stock",
     href: "/app/dashboard/budget-stock",
     icon: Landmark,
-    accentGradientClasses: "from-amber-500/35 to-orange-500/10 text-amber-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS["budget-stock"].accentGradientClasses,
     description: "Track inventory, prize sales, and monthly spending.",
     sidebarGroup: "operations",
     moduleFlagKey: "inventory"
@@ -156,7 +157,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Resident Council",
     href: "/app/resident-council",
     icon: UsersRound,
-    accentGradientClasses: "from-orange-500/35 to-rose-500/10 text-orange-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS["resident-council"].accentGradientClasses,
     description: "Track meetings, action items, and departmental updates.",
     sidebarGroup: "operations",
     moduleFlagKey: "residentCouncil"
@@ -166,7 +167,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     title: "Reports",
     href: "/app/reports",
     icon: FileText,
-    accentGradientClasses: "from-slate-500/35 to-indigo-400/10 text-slate-700",
+    accentGradientClasses: MODULE_VISUAL_TOKENS.reports.accentGradientClasses,
     description: "Generate clean, export-ready monthly reports quickly.",
     sidebarGroup: "operations",
     moduleFlagKey: "reports"
@@ -197,4 +198,3 @@ export const SIDEBAR_MODULE_GROUPS: readonly SidebarModuleGroup[] = [
 export function getModuleRegistryItem(key: ModuleRegistryKey) {
   return MODULE_REGISTRY.find((item) => item.key === key);
 }
-

@@ -2,7 +2,9 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
+import { AppRouteHeader } from "@/components/app/AppRouteHeader";
 import { ActifyThemeShell } from "@/components/app/ActifyThemeShell";
+import { GlobalCommandPalette } from "@/components/app/GlobalCommandPalette";
 import { IdleComplianceGuard } from "@/components/app/IdleComplianceGuard";
 import { NotificationBellDropdown } from "@/components/app/NotificationBellDropdown";
 import { PerformanceReporter } from "@/components/app/PerformanceReporter";
@@ -35,19 +37,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ActifyThemeShell className="min-h-screen bg-actify-orbs md:flex">
-      <div className="relative z-30 w-full p-4 md:sticky md:top-0 md:h-screen md:w-72 md:p-4">
+      <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-[296px] md:p-3">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
-      <div className="flex-1 pb-8">
+      <div className="flex-1 pb-8 pr-3">
         {isClerkConfigured ? (
           <IdleComplianceGuard
             enabled={compliance.hipaaMode.enabled}
             autoLogoutMinutes={compliance.hipaaMode.autoLogoutMinutes}
           />
         ) : null}
-        <div className="relative z-30 px-4 pt-4">
-          <GlassNavbar variant="dense" className="actify-shell-solid actify-header-white liquid-enter !p-0 overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-3">
+        <div className="relative z-30 px-2 pt-3 md:px-3">
+          <GlassNavbar variant="dense" className="actify-shell-solid liquid-enter !overflow-hidden !p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3">
                 <Link href="/app" className="inline-flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <ActifyLogo variant="icon" size={34} aria-label="ACTIFY app home" />
@@ -75,11 +77,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </GlassNavbar>
         </div>
-        <main className="container py-6">
+        <main className="container py-4">
+          <div className="space-y-4">
+            <AppRouteHeader />
+          </div>
           <RoutePrefetcher />
           <TimezoneSync />
           <PerformanceReporter />
-          <RouteTransition>{children}</RouteTransition>
+          <GlobalCommandPalette />
+          <div className="mt-4">
+            <RouteTransition>{children}</RouteTransition>
+          </div>
         </main>
       </div>
     </ActifyThemeShell>

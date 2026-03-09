@@ -1551,8 +1551,71 @@ h6 {
   @apply mx-auto max-w-4xl bg-white p-6 text-black;
 }
 
+.actify-page-shell {
+  isolation: isolate;
+}
+
+.actify-page-shell::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(42rem circle at 8% 10%, rgba(56, 189, 248, 0.16), transparent 56%),
+    radial-gradient(44rem circle at 92% 12%, rgba(168, 85, 247, 0.14), transparent 58%),
+    radial-gradient(48rem circle at 50% 88%, rgba(45, 212, 191, 0.14), transparent 58%);
+  filter: blur(2px);
+  opacity: 0.88;
+}
+
+.actify-shell-solid {
+  background:
+    linear-gradient(170deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.62) 100%),
+    var(--actify-grad-wash);
+  border-color: rgba(255, 255, 255, 0.62);
+  box-shadow:
+    0 20px 42px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.sidebar-group-trigger[data-state="open"] {
+  border-color: rgba(255, 255, 255, 0.48);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.sidebar-dropdown-content {
+  overflow: hidden;
+  transition:
+    height 180ms var(--ease-standard),
+    opacity 180ms var(--ease-standard);
+}
+
+.sidebar-nav-link {
+  will-change: transform;
+}
+
+.sidebar-nav-link:hover {
+  transform: translateY(-1px);
+}
+
+.actify-shell-solid .glass-content {
+  position: relative;
+}
+
+.actify-shell-solid .glass-content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(130deg, rgba(255, 255, 255, 0.46) 0%, transparent 42%);
+  opacity: 0.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .actify-page-shell::before,
+  .actify-page-shell::after,
   .ambient-blob,
   .actify-orb-blue,
   .actify-orb-mint,
