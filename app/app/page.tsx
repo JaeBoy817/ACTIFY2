@@ -26,14 +26,14 @@ export default async function DashboardPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/app/dashboard/activity-feed"
-          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-[#141a25] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/80 hover:border-white/30 hover:text-white"
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-100 hover:border-zinc-500 hover:text-white"
         >
           <ActivitySquare className="h-4 w-4" />
           Activity Feed
         </Link>
         <Link
           href="/app/dashboard/settings"
-          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-[#141a25] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/80 hover:border-white/30 hover:text-white"
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-100 hover:border-zinc-500 hover:text-white"
         >
           <Settings2 className="h-4 w-4" />
           Dashboard Settings

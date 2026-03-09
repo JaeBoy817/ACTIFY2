@@ -7,9 +7,9 @@ type GlassTone = "default" | "strong";
 
 function getToneClass(tone: GlassTone) {
   if (tone === "strong") {
-    return "bg-white/10 border-white/18";
+    return "bg-zinc-900 text-zinc-50 border-zinc-700";
   }
-  return "bg-white/8 border-white/15";
+  return "bg-white text-zinc-900 border-zinc-200";
 }
 
 export function GlassCard({
@@ -21,7 +21,7 @@ export function GlassCard({
   return (
     <div
       className={cn(
-        "marketing-glass rounded-2xl border shadow-[0_12px_34px_-24px_rgba(15,23,42,0.4)] backdrop-blur-md",
+        "rounded-2xl border shadow-[0_18px_36px_-28px_rgba(15,23,42,0.4)]",
         getToneClass(tone),
         className
       )}
@@ -41,7 +41,7 @@ export function GlassPanel({
   return (
     <section
       className={cn(
-        "marketing-glass rounded-3xl border p-6 shadow-[0_12px_34px_-24px_rgba(15,23,42,0.4)] backdrop-blur-md md:p-8",
+        "rounded-3xl border p-6 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.4)] md:p-8",
         getToneClass(tone),
         className
       )}
@@ -67,11 +67,11 @@ export function GlassButton({
     <Comp
       className={cn(
         "inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500/35",
         "hover:-translate-y-[2px]",
         variant === "primary"
-          ? "border-white/25 bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.65)]"
-          : "border-white/18 bg-white/12 text-foreground shadow-[0_10px_24px_-18px_rgba(15,23,42,0.45)]",
+          ? "border-zinc-900 bg-zinc-900 text-white shadow-[0_12px_22px_-16px_rgba(15,23,42,0.55)]"
+          : "border-zinc-300 bg-zinc-100 text-zinc-900 shadow-[0_10px_20px_-16px_rgba(15,23,42,0.3)]",
         className
       )}
       {...props}

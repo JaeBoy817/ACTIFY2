@@ -8,13 +8,13 @@ import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
 const glassButtonVariants = cva(
-  "glass-button relative inline-flex items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-medium shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
+  "nb-button relative inline-flex items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-actify-brand text-white border-white/45",
-        warm: "bg-actify-warm text-foreground border-white/45",
-        dense: "bg-white/70 text-foreground border-white/60"
+        default: "border-blue-500 bg-blue-600 text-white hover:bg-blue-500",
+        warm: "border-zinc-300 bg-zinc-100 text-zinc-900 hover:bg-zinc-200",
+        dense: "border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800"
       },
       size: {
         default: "h-10",
@@ -95,9 +95,9 @@ export function GlassButton({ className, variant, size, asChild = false, hover =
     <Comp
       className={cn(
         glassButtonVariants({ variant, size }),
-        hover && !reducedMotion && "glass-button-hover",
+        hover && !reducedMotion && "nb-button-hover",
         canMagnet && "magnetic-button",
-        hover && "hover:-translate-y-0.5 hover:shadow-md",
+        hover && "hover:-translate-y-0.5",
         className
       )}
       onPointerMove={handlePointerMove}

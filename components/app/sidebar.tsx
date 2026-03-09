@@ -106,7 +106,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   }, []);
 
   return (
-    <GlassSidebar variant="dense" className="actify-shell-solid liquid-enter flex h-full w-full flex-col gap-3 overflow-hidden">
+    <GlassSidebar variant="dense" className="actify-shell-solid flex h-full w-full flex-col gap-3 overflow-hidden">
       <div className="space-y-3">
         <Link href="/app" className="inline-flex items-center">
           <ActifyLogo variant="lockup" size={34} />
@@ -115,13 +115,13 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
         <button
           type="button"
           onClick={() => window.dispatchEvent(new Event("actify:open-command-palette"))}
-          className="inline-flex w-full items-center justify-between rounded-xl border border-white/35 bg-white/62 px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.11em] text-foreground/70 transition hover:bg-white/78"
+          className="inline-flex w-full items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.11em] text-zinc-100 transition hover:bg-zinc-800"
         >
           <span className="inline-flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-actifyBlue" />
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
             Command Center
           </span>
-          <span className="rounded border border-white/45 bg-white/75 px-1.5 py-0.5 text-[10px]">⌘K</span>
+          <span className="rounded border border-zinc-600 bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-200">⌘K</span>
         </button>
 
         <div className="relative">
@@ -130,7 +130,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Find module"
-            className="h-10 bg-white/76 pl-9"
+            className="h-10 pl-9"
           />
         </div>
       </div>
@@ -146,10 +146,10 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
               <AccordionItem key={group.id} value={group.id} className="border-none">
                 <AccordionTrigger
                   className={cn(
-                    "sidebar-group-trigger rounded-xl border border-white/25 px-3 py-2 text-sm hover:no-underline",
+                    "sidebar-group-trigger rounded-xl border px-3 py-2 text-sm hover:no-underline",
                     groupActive
-                      ? "actify-nav-active bg-white/68 text-foreground shadow-sm"
-                      : "bg-white/46 text-muted-foreground hover:bg-white/62 hover:text-foreground"
+                      ? "actify-nav-active border-zinc-700 bg-zinc-900 text-zinc-100"
+                      : "border-zinc-700/70 bg-zinc-900/70 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -176,12 +176,12 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
                           className={cn(
                             "sidebar-nav-link actify-nav-item ml-1.5 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             active
-                              ? "actify-nav-active border-white/45 bg-white/84 text-foreground shadow-md shadow-black/12"
-                              : "border-transparent bg-white/42 text-muted-foreground hover:border-white/35 hover:bg-white/65 hover:text-foreground"
+                              ? "actify-nav-active border-zinc-700 bg-zinc-800 text-zinc-100"
+                              : "border-transparent bg-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-zinc-100"
                           )}
                         >
-                          <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/35 bg-gradient-to-br", link.accentGradientClasses)}>
-                            <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br", link.accentGradientClasses)}>
+                            <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0 text-zinc-950" aria-hidden="true" />
                           </span>
                           <span>{link.label}</span>
                         </Link>
@@ -195,7 +195,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
         </Accordion>
       </nav>
 
-      <div className="border-t border-white/40 pt-3">
+      <div className="border-t border-zinc-700 pt-3">
         {(() => {
           const Icon = settingsLink.icon;
           const active = pathname === settingsLink.href || pathname.startsWith(`${settingsLink.href}/`);
@@ -209,12 +209,12 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
               className={cn(
                 "sidebar-nav-link actify-nav-item flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 active
-                  ? "actify-nav-active border-white/45 bg-white/84 text-foreground shadow-md shadow-black/12"
-                  : "border-transparent bg-white/42 text-muted-foreground hover:border-white/35 hover:bg-white/65 hover:text-foreground"
+                  ? "actify-nav-active border-zinc-700 bg-zinc-800 text-zinc-100"
+                  : "border-transparent bg-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-zinc-100"
               )}
             >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/35 bg-gradient-to-br from-slate-500/25 to-slate-300/10">
-                <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-slate-300 to-slate-500">
+                <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0 text-zinc-950" aria-hidden="true" />
               </span>
               <span>{settingsLink.label}</span>
             </Link>

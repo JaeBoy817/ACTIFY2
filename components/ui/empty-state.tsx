@@ -21,13 +21,13 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-dashed border-white/45 bg-white/55 p-6 text-center shadow-sm shadow-black/5",
+        "rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center shadow-sm",
         className
       )}
       {...props}
     >
       {Icon ? (
-        <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/45 bg-gradient-to-br from-indigo-500/25 to-cyan-500/10 text-indigo-700">
+        <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 text-white">
           <Icon className="h-4 w-4" aria-hidden />
         </div>
       ) : null}

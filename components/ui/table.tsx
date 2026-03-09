@@ -3,14 +3,14 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto rounded-2xl border border-white/35 bg-white/58 shadow-lg shadow-black/10 backdrop-blur-sm">
+  <div className="relative w-full overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
     <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
   </div>
 ));
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b [&_tr]:border-white/35 bg-white/58", className)} {...props} />
+  <thead ref={ref} className={cn("[&_tr]:border-b [&_tr]:border-zinc-200 bg-zinc-50", className)} {...props} />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -20,7 +20,7 @@ const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes
 TableBody.displayName = "TableBody";
 
 const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className, ...props }, ref) => (
-  <tfoot ref={ref} className={cn("border-t border-white/35 bg-white/62 font-medium [&>tr]:last:border-b-0", className)} {...props} />
+  <tfoot ref={ref} className={cn("border-t border-zinc-200 bg-zinc-50 font-medium [&>tr]:last:border-b-0", className)} {...props} />
 ));
 TableFooter.displayName = "TableFooter";
 
@@ -28,8 +28,8 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
   <tr
     ref={ref}
     className={cn(
-      "border-b border-white/25 transition-colors",
-      "hover:bg-white/66 data-[state=selected]:bg-white/78",
+      "border-b border-zinc-200 transition-colors",
+      "hover:bg-zinc-50 data-[state=selected]:bg-zinc-100",
       className
     )}
     {...props}

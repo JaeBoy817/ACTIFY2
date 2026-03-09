@@ -9,7 +9,7 @@ interface GlassSidebarProps extends React.HTMLAttributes<HTMLElement> {
 
 export function GlassSidebar({ className, variant = "dense", children, ...props }: GlassSidebarProps) {
   return (
-    <aside className={cn("rounded-2xl p-4", getGlassVariantClass(variant), className)} {...props}>
+    <aside className={cn("nb-surface nb-sidebar rounded-2xl p-4", getGlassVariantClass(variant), className)} {...props}>
       <div className="glass-content">{children}</div>
     </aside>
   );

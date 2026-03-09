@@ -36,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const compliance = asComplianceDefaults(settings?.complianceJson);
 
   return (
-    <ActifyThemeShell className="min-h-screen bg-actify-orbs md:flex">
+    <ActifyThemeShell className="actify-editorial-shell min-h-screen md:flex">
       <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-[296px] md:p-3">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
@@ -48,22 +48,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           />
         ) : null}
         <div className="relative z-30 px-2 pt-3 md:px-3">
-          <GlassNavbar variant="dense" className="actify-shell-solid liquid-enter !overflow-hidden !p-0">
+          <GlassNavbar variant="dense" className="actify-shell-solid !overflow-hidden !p-0">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3">
                 <Link href="/app" className="inline-flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <ActifyLogo variant="icon" size={34} aria-label="ACTIFY app home" />
                 </Link>
                 <div>
-                  <p className="text-sm text-muted-foreground">Facility</p>
-                  <p className="font-semibold">{user.facility.name}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Facility</p>
+                  <p className="text-base font-bold text-zinc-900">{user.facility.name}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="actify-accent-badge">
+                <Badge variant="secondary" className="border-zinc-300 bg-zinc-100 text-zinc-800">
                   Workspace
                 </Badge>
-                <Badge variant="outline">{user.role}</Badge>
+                <Badge variant="outline" className="border-zinc-300 bg-white text-zinc-700">{user.role}</Badge>
                 <NotificationBellDropdown
                   viewerId={user.id}
                   unreadCount={unreadNotificationCount}

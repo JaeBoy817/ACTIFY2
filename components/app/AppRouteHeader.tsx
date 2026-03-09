@@ -37,10 +37,10 @@ export function AppRouteHeader() {
   const Icon = activeModule.icon;
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-white/32 bg-white/52 p-5 shadow-xl shadow-black/12 backdrop-blur-md">
+    <section className="nb-surface nb-panel relative overflow-hidden rounded-3xl border p-5">
       <div
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-3xl bg-gradient-to-r",
+          "pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-3xl bg-gradient-to-r",
           activeModule.accentGradientClasses
         )}
       />
@@ -48,16 +48,16 @@ export function AppRouteHeader() {
         <div className="flex items-start gap-3">
           <div
             className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/38 bg-gradient-to-br",
+              "inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]",
               activeModule.accentGradientClasses
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-5 w-5 text-zinc-950" />
           </div>
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.14em] text-foreground/60">Workspace</p>
-            <h1 className="font-[var(--font-display)] text-3xl leading-none text-foreground">{activeModule.title}</h1>
-            <p className="max-w-2xl text-sm text-foreground/70">{activeModule.description}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Workspace</p>
+            <h1 className="font-[var(--font-display)] text-3xl leading-none text-zinc-950">{activeModule.title}</h1>
+            <p className="max-w-2xl text-sm text-zinc-600">{activeModule.description}</p>
           </div>
         </div>
 
@@ -65,7 +65,7 @@ export function AppRouteHeader() {
           <Button
             type="button"
             variant="outline"
-            className="bg-white/70"
+            className="h-9 border-zinc-300 bg-zinc-100"
             onClick={() => {
               window.dispatchEvent(new Event("actify:open-command-palette"));
             }}
@@ -73,23 +73,23 @@ export function AppRouteHeader() {
             <Command className="h-4 w-4" />
             Command
           </Button>
-          <Badge variant="outline" className="inline-flex items-center gap-1 bg-white/70">
-            <Sparkles className="h-3.5 w-3.5 text-fuchsia-500" />
-            Premium workspace
+          <Badge variant="outline" className="inline-flex items-center gap-1 border-zinc-300 bg-white text-zinc-700">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            Actify 1.0
           </Badge>
         </div>
       </div>
 
       {related.length > 0 ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <p className="text-xs uppercase tracking-[0.12em] text-foreground/60">Quick jump</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Quick jump</p>
           {related.map((module) => {
             const RelatedIcon = module.icon;
             return (
               <Link
                 key={module.key}
                 href={module.href}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/72 px-3 py-1.5 text-xs font-semibold text-foreground/85 transition hover:translate-y-[-1px] hover:bg-white/88"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:-translate-y-px hover:bg-zinc-50"
               >
                 <RelatedIcon className="h-3.5 w-3.5" />
                 {module.title}

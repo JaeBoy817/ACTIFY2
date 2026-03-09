@@ -9,7 +9,7 @@ interface GlassNavbarProps extends React.HTMLAttributes<HTMLElement> {
 
 export function GlassNavbar({ className, variant = "dense", children, ...props }: GlassNavbarProps) {
   return (
-    <header className={cn("rounded-2xl px-5 py-3", getGlassVariantClass(variant), className)} {...props}>
+    <header className={cn("nb-surface nb-navbar rounded-2xl px-5 py-3", getGlassVariantClass(variant), className)} {...props}>
       <div className="glass-content">{children}</div>
     </header>
   );

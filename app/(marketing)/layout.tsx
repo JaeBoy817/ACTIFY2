@@ -26,7 +26,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div
       data-ambient="marketing"
-      className={`${marketingFont.className} relative min-h-screen overflow-hidden bg-gradient-to-br from-[#F3F0FF]/70 via-[#F8F0FC]/60 to-[#FFF0F6]/70`}
+      className={`${marketingFont.className} relative min-h-screen overflow-hidden bg-[#f4f1ea]`}
     >
       <AmbientBackdrop />
       <div className="relative z-10 mx-auto w-full max-w-[1280px] px-4 pb-10 md:px-8">

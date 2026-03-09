@@ -1730,3 +1730,300 @@ h6 {
     margin: 0.4in;
   }
 }
+
+/* ============================================================
+   ACTIFY 1.0 EDITORIAL THEME (MATTE, NON-GLASS)
+   Keep legacy class names for compatibility across modules.
+   ============================================================ */
+
+:root {
+  --background: 42 30% 95%;
+  --foreground: 224 20% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 20% 14%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 20% 14%;
+  --muted: 42 22% 90%;
+  --muted-foreground: 223 12% 38%;
+  --border: 220 14% 85%;
+  --input: 220 14% 85%;
+  --ring: 220 72% 45%;
+  --primary: 221 72% 48%;
+  --secondary: 32 82% 52%;
+  --accent: 44 92% 56%;
+}
+
+body {
+  background: #f2efe8;
+  color: #171a22;
+}
+
+.actify-editorial-shell {
+  background:
+    radial-gradient(1200px circle at 8% 8%, rgba(16, 77, 181, 0.08), transparent 52%),
+    radial-gradient(900px circle at 92% 14%, rgba(245, 158, 11, 0.12), transparent 44%),
+    #f2efe8;
+}
+
+.actify-page-shell {
+  isolation: isolate;
+}
+
+.actify-page-shell::before {
+  inset: 0;
+  background:
+    radial-gradient(1400px circle at 4% -10%, rgba(99, 102, 241, 0.08), transparent 44%),
+    radial-gradient(1200px circle at 98% 4%, rgba(251, 191, 36, 0.09), transparent 40%);
+  opacity: 1;
+  animation: none;
+}
+
+.actify-page-shell::after {
+  display: none;
+}
+
+.ambient-bg {
+  opacity: 0.35;
+}
+
+.ambient-blob {
+  animation-duration: 80s;
+  filter: blur(26px);
+}
+
+.nb-surface {
+  border: 1px solid #d7dce6;
+  background: #ffffff;
+  box-shadow: 0 22px 42px -32px rgba(15, 23, 42, 0.36), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  color: inherit;
+}
+
+.nb-card {
+  border-radius: 1.25rem;
+}
+
+.nb-panel {
+  border-radius: 1.5rem;
+}
+
+.nb-navbar {
+  border-radius: 1rem;
+}
+
+.nb-sidebar {
+  border-radius: 1rem;
+}
+
+.nb-tone-default {
+  background: #ffffff;
+  border-color: #d7dce6;
+  color: #171a22;
+}
+
+.nb-tone-warm {
+  background: #f7f4ed;
+  border-color: #ddd6c9;
+  color: #1f2430;
+}
+
+.nb-tone-dense {
+  background: #12151c;
+  border-color: #2b3241;
+  color: #f3f5f7;
+}
+
+.glass,
+.glass-warm,
+.glass-dense {
+  background: #ffffff;
+  border: 1px solid #d7dce6;
+  box-shadow: 0 22px 42px -32px rgba(15, 23, 42, 0.36), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.glass-panel,
+.glass-panel-strong,
+.glass-chip,
+.marketing-glass {
+  background: #ffffff !important;
+  border-color: #d7dce6 !important;
+  box-shadow: 0 22px 42px -32px rgba(15, 23, 42, 0.36) !important;
+}
+
+.backdrop-blur,
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl,
+.backdrop-blur-2xl,
+.backdrop-blur-3xl {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.glass-warm {
+  background: #f7f4ed;
+  border-color: #ddd6c9;
+}
+
+.glass-dense {
+  background: #12151c;
+  border-color: #2b3241;
+  color: #f3f5f7;
+}
+
+.glass::before,
+.glass-warm::before,
+.glass-dense::before,
+.glass::after,
+.glass-warm::after,
+.glass-dense::after {
+  display: none;
+}
+
+.glass-content {
+  position: relative;
+  z-index: 1;
+  color: inherit;
+}
+
+.actify-shell-solid {
+  background: #ffffff !important;
+  border-color: #d7dce6 !important;
+  box-shadow: 0 16px 30px -24px rgba(15, 23, 42, 0.32);
+}
+
+.actify-shell-solid .glass-content::before {
+  display: none;
+}
+
+.nb-sidebar.actify-shell-solid,
+.actify-shell-solid.nb-sidebar {
+  background: #0f131a !important;
+  border-color: #2b3241 !important;
+  color: #f3f5f7;
+}
+
+.nb-button,
+.glass-button {
+  border-radius: 0.8rem;
+  box-shadow: 0 14px 28px -18px rgba(15, 23, 42, 0.35);
+  transform: translateZ(0);
+}
+
+.nb-button::before,
+.nb-button::after,
+.glass-button::before,
+.glass-button::after {
+  display: none !important;
+}
+
+.nb-button-hover:hover,
+.nb-button-hover:focus-visible,
+.glass-button-hover:hover,
+.glass-button-hover:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px -18px rgba(15, 23, 42, 0.4);
+}
+
+.nb-hover-lift {
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nb-hover-lift:hover,
+.nb-hover-lift:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 34px -24px rgba(15, 23, 42, 0.42);
+}
+
+.nb-input {
+  border-color: #d5dbe6;
+  background: #ffffff;
+  color: #171a22;
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.42);
+}
+
+.nb-input:hover {
+  border-color: #bfc8d8;
+  background: #ffffff;
+}
+
+.nb-input:focus-visible,
+.nb-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.nb-dropdown,
+.liquid-dropdown {
+  background: #ffffff !important;
+  border-color: #d7dce6 !important;
+  box-shadow: 0 24px 36px -28px rgba(15, 23, 42, 0.4) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.actify-nav-item {
+  transition:
+    background-color 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 130ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.actify-nav-item::before {
+  display: none;
+}
+
+.actify-nav-active {
+  border-color: #3b4252;
+}
+
+.actify-nav-active .actify-nav-icon {
+  color: inherit;
+}
+
+.sidebar-group-trigger {
+  transition:
+    background-color 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 130ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-dropdown-content {
+  overflow: hidden;
+  transition: opacity 130ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-dropdown-content[data-state="closed"] {
+  opacity: 0;
+}
+
+.sidebar-dropdown-content[data-state="open"] {
+  opacity: 1;
+}
+
+.sidebar-nav-link {
+  transform: translateY(0);
+}
+
+.sidebar-nav-link:hover {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-bg,
+  .ambient-blob,
+  .nb-button-hover:hover,
+  .nb-button-hover:focus-visible,
+  .nb-hover-lift:hover,
+  .nb-hover-lift:focus-within,
+  .sidebar-nav-link:hover {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

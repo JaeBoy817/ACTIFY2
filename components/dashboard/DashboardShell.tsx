@@ -41,9 +41,9 @@ export function DashboardShell({
       <GlassPanel variant="warm" className="rounded-3xl p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
-            <h1 className="font-[var(--font-display)] text-3xl text-foreground">Dashboard</h1>
-            <p className="text-sm text-foreground/75">{dateLabel}</p>
-            <p className="text-sm text-foreground/70">{statusLine}</p>
+            <h1 className="font-[var(--font-display)] text-3xl text-zinc-950">Dashboard</h1>
+            <p className="text-sm text-zinc-600">{dateLabel}</p>
+            <p className="text-sm text-zinc-600">{statusLine}</p>
           </div>
 
           <nav aria-label="Dashboard sections" className="flex flex-wrap items-center gap-2">
@@ -58,8 +58,8 @@ export function DashboardShell({
                   className={cn(
                     "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
-                      ? "border-white/50 bg-white/80 text-foreground shadow-sm"
-                      : "border-white/40 bg-white/60 text-foreground/75 hover:bg-white/70"
+                      ? "border-zinc-300 bg-zinc-900 text-zinc-100 shadow-sm"
+                      : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
                   )}
                 >
                   <Icon className="h-4 w-4" />

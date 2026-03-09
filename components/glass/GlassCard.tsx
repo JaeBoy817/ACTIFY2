@@ -12,9 +12,9 @@ export function GlassCard({ className, variant = "default", hover = false, child
   return (
     <div
       className={cn(
-        "liquid-shadow-float liquid-chroma-surface rounded-2xl p-5 shadow-xl shadow-black/15",
+        "nb-surface nb-card rounded-2xl p-5",
         getGlassVariantClass(variant),
-        hover && "glass-hover hover-lift hover-specular",
+        hover && "nb-hover-lift",
         className
       )}
       {...props}

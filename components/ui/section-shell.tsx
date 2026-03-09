@@ -24,7 +24,7 @@ export function SectionShell({
   return (
     <section
       className={cn(
-        "liquid-shadow-float rounded-2xl border border-white/40 bg-white/65 p-4 shadow-lg shadow-black/10 backdrop-blur-md md:p-5",
+        "nb-surface rounded-2xl border p-4 md:p-5",
         className
       )}
       {...props}
@@ -34,7 +34,7 @@ export function SectionShell({
           {Icon ? (
             <span
               className={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/45 bg-gradient-to-br from-sky-500/25 to-indigo-500/10 text-sky-700",
+                "inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-white",
                 iconClassName
               )}
             >
