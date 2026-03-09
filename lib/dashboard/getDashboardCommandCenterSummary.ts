@@ -285,6 +285,355 @@ function pickMoraleCard(now: Date) {
   return MORALE_ROTATION[index];
 }
 
+function defaultQuickActions(): DashboardQuickAction[] {
+  return [
+    { id: "new-activity", label: "New Activity", href: "/app/calendar?quickAdd=1", module: "calendar" },
+    { id: "new-note", label: "New Note", href: "/app/notes/new?type=general", module: "notes" },
+    { id: "new-1on1", label: "New 1:1 Note", href: "/app/notes/new?type=1on1", module: "oneToOne" },
+    { id: "attendance", label: "Add Attendance", href: "/app/attendance", module: "attendance" },
+    { id: "search-resident", label: "Search Resident", href: "/app/residents", module: "residents" },
+    { id: "update-care-plan", label: "Update Care Plan", href: "/app/care-plans", module: "carePlan" },
+    { id: "inventory", label: "Add Inventory", href: "/app/dashboard/budget-stock?open=inventory", module: "budgetStock" },
+    { id: "reports", label: "Open Reports", href: "/app/reports", module: "reports" }
+  ];
+}
+
+function deriveLowStockCountFromAlerts(base: DashboardHomeSummary) {
+  const inventoryAlert = base.alerts.items.find((item) => item.id === "inventory-low");
+  if (!inventoryAlert) return 0;
+  const match = inventoryAlert.detail.match(/(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function buildFallbackCommandCenterSummary(args: {
+  base: DashboardHomeSummary;
+  facilityName: string;
+  timeZone: string;
+}): DashboardCommandCenterSummary {
+  const now = new Date();
+  const lowStockCount = deriveLowStockCountFromAlerts(args.base);
+  const overdueItemsCount =
+    args.base.oneToOne.missingThisMonthCount +
+    args.base.alerts.items.filter((item) => item.id === "careplan-overdue" || item.id === "attendance-pending").length;
+
+  const timeline: DashboardTimelineItem[] = args.base.todayAgenda.map((item, index) => ({
+    id: item.id,
+    title: item.title,
+    location: item.location,
+    templateSource: null,
+    startAt: item.startAt,
+    endAt: item.endAt,
+    timeLabel: item.timeLabel,
+    attendanceCompleted: item.attendanceCompleted,
+    documentationCompleted: true,
+    isUpcoming: index === 0,
+    isInProgress: false,
+    isNextUp: index === 0,
+    attendanceHref: "/app/attendance",
+    openHref: item.href,
+    editHref: item.href,
+    noteHref: "/app/notes/new?type=general"
+  }));
+
+  const missions: DashboardMission[] = [
+    {
+      id: "mission-calendar",
+      title: "Run Today’s Schedule",
+      detail: `${timeline.length} activities queued.`,
+      href: "/app/calendar?view=day",
+      ctaLabel: "Open calendar",
+      module: "calendar",
+      priority: timeline.length > 0 ? "high" : "medium"
+    },
+    {
+      id: "mission-1on1",
+      title: "Complete 1:1 Visits",
+      detail: `${args.base.oneToOne.missingThisMonthCount} residents still need 1:1 this month.`,
+      href: "/app/notes/new?type=1on1",
+      ctaLabel: "Start 1:1",
+      module: "oneToOne",
+      priority: args.base.oneToOne.missingThisMonthCount > 0 ? "high" : "low"
+    },
+    {
+      id: "mission-documentation",
+      title: "Document Today’s Activities",
+      detail: `${Math.max(0, args.base.dailyMetrics.programsToday - args.base.dailyMetrics.attendanceSessionsCompleted)} sessions still need documentation.`,
+      href: "/app/notes/new?type=general",
+      ctaLabel: "Add note",
+      module: "notes",
+      priority: "medium"
+    },
+    {
+      id: "mission-stock",
+      title: "Restock Prize Cart",
+      detail: `${lowStockCount} inventory items below threshold.`,
+      href: "/app/dashboard/budget-stock?tab=stock&mode=LOW",
+      ctaLabel: "Open stock",
+      module: "budgetStock",
+      priority: lowStockCount > 0 ? "medium" : "low"
+    }
+  ];
+
+  const residentAttention: DashboardResidentAttentionCategory[] = [
+    {
+      key: "needs-one-on-one",
+      title: "Needs 1:1 this month",
+      description: "Residents with no logged 1:1 note in the current month.",
+      module: "oneToOne",
+      viewAllHref: args.base.oneToOne.viewAllHref,
+      items: args.base.oneToOne.items.slice(0, 8).map((item) => ({
+        id: `needs-${item.id}`,
+        residentId: item.residentId,
+        name: item.residentName,
+        room: item.room,
+        status: item.statusLabel,
+        reason: item.reason,
+        chips: ["1:1 pending"],
+        primaryAction: {
+          label: "Start note",
+          href: item.href
+        },
+        secondaryAction: {
+          label: "Resident profile",
+          href: `/app/residents?residentId=${encodeURIComponent(item.residentId)}`
+        }
+      }))
+    }
+  ];
+
+  return {
+    generatedAt: now.toISOString(),
+    hero: {
+      facilityName: args.facilityName,
+      dayOfWeek: formatInTimeZone(now, args.timeZone, { weekday: "long" }),
+      fullDate: formatInTimeZone(now, args.timeZone, {
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      }),
+      censusCount: args.base.participationPreview.activeResidents,
+      scheduledTodayCount: args.base.dailyMetrics.programsToday,
+      oneToOneNeededThisMonthCount: args.base.oneToOne.missingThisMonthCount,
+      overdueItemsCount,
+      smartSummary: buildSmartSummary({
+        scheduledTodayCount: args.base.dailyMetrics.programsToday,
+        missingOneOnOneCount: args.base.oneToOne.missingThisMonthCount,
+        overdueItemsCount,
+        lowStockCount
+      })
+    },
+    base: args.base,
+    missions,
+    timeline,
+    residentAttention,
+    momentum: {
+      dailyParticipationRate: clampPercent(args.base.analytics.today.participationPercent),
+      weeklyParticipationTrend: 0,
+      monthlyParticipationGoalProgress: clampPercent((args.base.analytics.month.participationPercent / 70) * 100),
+      monthlyOneOnOneCompletionRate: toPercent(
+        args.base.oneToOne.residentsWithNoteThisMonth,
+        args.base.oneToOne.totalEligibleResidents
+      ),
+      documentationCompletionRate: toPercent(
+        args.base.dailyMetrics.attendanceSessionsCompleted,
+        Math.max(1, args.base.dailyMetrics.programsToday)
+      ),
+      carePlanCompletionRate: clampPercent(100 - Math.min(100, args.base.alerts.items.some((item) => item.id === "careplan-overdue") ? 25 : 0)),
+      miniSeries: [
+        clampPercent(args.base.analytics.today.participationPercent),
+        clampPercent(args.base.analytics.month.averageDailyPercent),
+        clampPercent((args.base.analytics.month.participationPercent / 70) * 100),
+        clampPercent(toPercent(args.base.oneToOne.residentsWithNoteThisMonth, args.base.oneToOne.totalEligibleResidents)),
+        clampPercent(toPercent(args.base.dailyMetrics.attendanceSessionsCompleted, Math.max(1, args.base.dailyMetrics.programsToday)))
+      ]
+    },
+    inventoryPulse: {
+      lowStockCount,
+      lowStockItems: [],
+      monthSpending: 0,
+      mostUsedItems: [],
+      belowThresholdCount: lowStockCount
+    },
+    notesHub: {
+      notesCreatedToday: args.base.dailyMetrics.oneToOneCompletedToday,
+      oneToOneCreatedToday: args.base.dailyMetrics.oneToOneCompletedToday,
+      overdueOneToOneCount: args.base.oneToOne.missingThisMonthCount,
+      groupDocumentationMissingCount: Math.max(
+        0,
+        args.base.dailyMetrics.programsToday - args.base.dailyMetrics.attendanceSessionsCompleted
+      ),
+      recentActivity: args.base.recentOneToOneNotes.map((note) => ({
+        id: note.id,
+        residentName: note.residentName,
+        room: note.room,
+        type: "ONE_TO_ONE",
+        createdAt: note.createdAt,
+        href: note.continueHref
+      }))
+    },
+    upcoming: {
+      tomorrowActivityCount: 0,
+      nextOuting: null,
+      upcomingBirthdays: [],
+      volunteerCoverageSoon: {
+        shifts: 0,
+        hours: 0
+      },
+      nextResidentCouncilMeeting: null,
+      reportDueIndicator: {
+        label: "Monthly reports due",
+        dueDate: formatInTimeZone(startOfZonedMonthShift(now, args.timeZone, 1), args.timeZone, {
+          month: "short",
+          day: "numeric"
+        }),
+        daysRemaining: 0,
+        href: "/app/reports"
+      }
+    },
+    morale: pickMoraleCard(now),
+    quickActions: defaultQuickActions()
+  };
+}
+
+function buildEmergencyCommandCenterSummary(args: {
+  facilityName: string;
+  timeZone: string;
+}): DashboardCommandCenterSummary {
+  const now = new Date();
+  return {
+    generatedAt: now.toISOString(),
+    hero: {
+      facilityName: args.facilityName,
+      dayOfWeek: formatInTimeZone(now, args.timeZone, { weekday: "long" }),
+      fullDate: formatInTimeZone(now, args.timeZone, {
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      }),
+      censusCount: 0,
+      scheduledTodayCount: 0,
+      oneToOneNeededThisMonthCount: 0,
+      overdueItemsCount: 0,
+      smartSummary: "Dashboard data is loading. Use quick actions to continue work."
+    },
+    base: {
+      generatedAt: now.toISOString(),
+      dateLabel: formatInTimeZone(now, args.timeZone, {
+        weekday: "long",
+        month: "short",
+        day: "numeric"
+      }),
+      quickStatusLine: "Loading facility summary",
+      nextUp: null,
+      todayAgenda: [],
+      agendaInsights: { overlapCount: 0, missingLocationCount: 0 },
+      dailyMetrics: {
+        attendanceToday: 0,
+        programsToday: 0,
+        oneToOneCompletedToday: 0,
+        residentsEngagedToday: 0,
+        attendanceSessionsCompleted: 0
+      },
+      monthlyMetrics: {
+        totalPrograms: 0,
+        averageAttendancePerProgram: 0,
+        totalOneToOneNotes: 0,
+        volunteerHours: null
+      },
+      analytics: {
+        today: {
+          rangeLabel: "Today",
+          averageDailyPercent: 0,
+          participationPercent: 0,
+          residentsParticipated: 0,
+          totalAttendedResidents: 0,
+          oneOnOneNotes: 0,
+          carePlanReviews: 0
+        },
+        month: {
+          rangeLabel: "30D",
+          averageDailyPercent: 0,
+          participationPercent: 0,
+          residentsParticipated: 0,
+          totalAttendedResidents: 0,
+          oneOnOneNotes: 0,
+          carePlanReviews: 0,
+          volunteerHours: 0
+        }
+      },
+      participationPreview: {
+        averageDailyPercent: 0,
+        participationPercent: 0,
+        residentsParticipated: 0,
+        totalAttendedResidents: 0,
+        activeResidents: 0
+      },
+      oneToOne: {
+        queueDateKey: "",
+        queueSize: 0,
+        dueTodayCount: 0,
+        missingThisMonthCount: 0,
+        residentsWithNoteThisMonth: 0,
+        totalEligibleResidents: 0,
+        items: [],
+        viewAllHref: "/app/notes/new?type=1on1"
+      },
+      recentOneToOneNotes: [],
+      alerts: {
+        count: 0,
+        items: []
+      }
+    },
+    missions: [],
+    timeline: [],
+    residentAttention: [],
+    momentum: {
+      dailyParticipationRate: 0,
+      weeklyParticipationTrend: 0,
+      monthlyParticipationGoalProgress: 0,
+      monthlyOneOnOneCompletionRate: 0,
+      documentationCompletionRate: 0,
+      carePlanCompletionRate: 0,
+      miniSeries: [0, 0, 0, 0, 0]
+    },
+    inventoryPulse: {
+      lowStockCount: 0,
+      lowStockItems: [],
+      monthSpending: 0,
+      mostUsedItems: [],
+      belowThresholdCount: 0
+    },
+    notesHub: {
+      notesCreatedToday: 0,
+      oneToOneCreatedToday: 0,
+      overdueOneToOneCount: 0,
+      groupDocumentationMissingCount: 0,
+      recentActivity: []
+    },
+    upcoming: {
+      tomorrowActivityCount: 0,
+      nextOuting: null,
+      upcomingBirthdays: [],
+      volunteerCoverageSoon: {
+        shifts: 0,
+        hours: 0
+      },
+      nextResidentCouncilMeeting: null,
+      reportDueIndicator: {
+        label: "Monthly reports due",
+        dueDate: formatInTimeZone(startOfZonedMonthShift(now, args.timeZone, 1), args.timeZone, {
+          month: "short",
+          day: "numeric"
+        }),
+        daysRemaining: 0,
+        href: "/app/reports"
+      }
+    },
+    morale: pickMoraleCard(now),
+    quickActions: defaultQuickActions()
+  };
+}
+
 function isMissingPrismaResourceError(error: unknown) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1385,5 +1734,27 @@ export async function getDashboardCommandCenterSummary(
 ): Promise<DashboardCommandCenterSummary> {
   const timeZone = resolveTimeZone(options.timeZone);
   const getCached = getCachedDashboardCommandCenterSummary(options.facilityId, options.facilityName);
-  return getCached(timeZone);
+
+  try {
+    return await getCached(timeZone);
+  } catch (error) {
+    console.error("[dashboard-command-center] Falling back to base summary", error);
+    try {
+      const base = await getDashboardHomeSummary({
+        facilityId: options.facilityId,
+        timeZone
+      });
+      return buildFallbackCommandCenterSummary({
+        base,
+        facilityName: options.facilityName,
+        timeZone
+      });
+    } catch (baseError) {
+      console.error("[dashboard-command-center] Emergency fallback", baseError);
+      return buildEmergencyCommandCenterSummary({
+        facilityName: options.facilityName,
+        timeZone
+      });
+    }
+  }
 }
