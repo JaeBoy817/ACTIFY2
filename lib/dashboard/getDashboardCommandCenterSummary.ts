@@ -285,6 +285,24 @@ function pickMoraleCard(now: Date) {
   return MORALE_ROTATION[index];
 }
 
+function isMissingPrismaResourceError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  );
+}
+
+async function withOptionalData<T>(query: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await query();
+  } catch (error) {
+    if (isMissingPrismaResourceError(error)) {
+      return fallback;
+    }
+    throw error;
+  }
+}
+
 async function computeDashboardCommandCenterSummary(args: {
   facilityId: string;
   facilityName: string;
@@ -464,52 +482,64 @@ async function computeDashboardCommandCenterSummary(args: {
         }
       }
     }),
-    prisma.budgetStockItem.findMany({
-      where: {
-        facilityId: args.facilityId,
-        isActive: true
-      },
-      select: {
-        id: true,
-        name: true,
-        category: true,
-        onHand: true,
-        reorderPoint: true,
-        parLevel: true
-      }
-    }),
-    prisma.budgetStockExpense.aggregate({
-      where: {
-        facilityId: args.facilityId,
-        date: {
-          gte: monthStart,
-          lt: nextMonthStart
-        }
-      },
-      _sum: {
-        amount: true
-      }
-    }),
-    prisma.budgetStockSale.findMany({
-      where: {
-        facilityId: args.facilityId,
-        date: {
-          gte: monthStart,
-          lt: nextMonthStart
-        }
-      },
-      select: {
-        itemId: true,
-        qty: true,
-        revenue: true,
-        profit: true,
-        item: {
+    withOptionalData(
+      () =>
+        prisma.budgetStockItem.findMany({
+          where: {
+            facilityId: args.facilityId,
+            isActive: true
+          },
           select: {
-            name: true
+            id: true,
+            name: true,
+            category: true,
+            onHand: true,
+            reorderPoint: true,
+            parLevel: true
           }
-        }
-      }
-    }),
+        }),
+      []
+    ),
+    withOptionalData(
+      () =>
+        prisma.budgetStockExpense.aggregate({
+          where: {
+            facilityId: args.facilityId,
+            date: {
+              gte: monthStart,
+              lt: nextMonthStart
+            }
+          },
+          _sum: {
+            amount: true
+          }
+        }),
+      { _sum: { amount: 0 } }
+    ),
+    withOptionalData(
+      () =>
+        prisma.budgetStockSale.findMany({
+          where: {
+            facilityId: args.facilityId,
+            date: {
+              gte: monthStart,
+              lt: nextMonthStart
+            }
+          },
+          select: {
+            itemId: true,
+            qty: true,
+            revenue: true,
+            profit: true,
+            item: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }),
+      []
+    ),
     prisma.activityInstance.count({
       where: {
         facilityId: args.facilityId,
@@ -554,43 +584,55 @@ async function computeDashboardCommandCenterSummary(args: {
         birthDate: true
       }
     }),
-    prisma.volunteerVisit.findMany({
-      where: {
-        startAt: {
-          gte: dayStart,
-          lte: sevenDaysAhead
-        },
-        volunteer: {
-          facilityId: args.facilityId
-        }
-      },
-      select: {
-        startAt: true,
-        endAt: true
-      }
-    }),
-    prisma.residentCouncilMeeting.findFirst({
-      where: {
-        facilityId: args.facilityId,
-        heldAt: {
-          gte: now
-        }
-      },
-      orderBy: [{ heldAt: "asc" }],
-      select: {
-        id: true,
-        heldAt: true,
-        attendanceCount: true
-      }
-    }),
-    prisma.residentCouncilItem.count({
-      where: {
-        status: "UNRESOLVED",
-        meeting: {
-          facilityId: args.facilityId
-        }
-      }
-    }),
+    withOptionalData(
+      () =>
+        prisma.volunteerVisit.findMany({
+          where: {
+            startAt: {
+              gte: dayStart,
+              lte: sevenDaysAhead
+            },
+            volunteer: {
+              facilityId: args.facilityId
+            }
+          },
+          select: {
+            startAt: true,
+            endAt: true
+          }
+        }),
+      []
+    ),
+    withOptionalData(
+      () =>
+        prisma.residentCouncilMeeting.findFirst({
+          where: {
+            facilityId: args.facilityId,
+            heldAt: {
+              gte: now
+            }
+          },
+          orderBy: [{ heldAt: "asc" }],
+          select: {
+            id: true,
+            heldAt: true,
+            attendanceCount: true
+          }
+        }),
+      null
+    ),
+    withOptionalData(
+      () =>
+        prisma.residentCouncilItem.count({
+          where: {
+            status: "UNRESOLVED",
+            meeting: {
+              facilityId: args.facilityId
+            }
+          }
+        }),
+      0
+    ),
     prisma.resident.findMany({
       where: {
         ...residentWhere,

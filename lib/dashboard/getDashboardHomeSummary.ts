@@ -173,6 +173,24 @@ function calculateOverlapCount(rows: Array<{ startAt: Date; endAt: Date }>) {
   return overlapCount;
 }
 
+function isMissingPrismaResourceError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  );
+}
+
+async function withOptionalData<T>(query: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await query();
+  } catch (error) {
+    if (isMissingPrismaResourceError(error)) {
+      return fallback;
+    }
+    throw error;
+  }
+}
+
 async function computeDashboardHomeSummary(args: {
   facilityId: string;
   timeZone: string;
@@ -345,21 +363,25 @@ async function computeDashboardHomeSummary(args: {
         }
       }
     }),
-    prisma.volunteerVisit.findMany({
-      where: {
-        startAt: {
-          gte: monthStart,
-          lt: nextMonthStart
-        },
-        volunteer: {
-          facilityId: args.facilityId
-        }
-      },
-      select: {
-        startAt: true,
-        endAt: true
-      }
-    }),
+    withOptionalData(
+      () =>
+        prisma.volunteerVisit.findMany({
+          where: {
+            startAt: {
+              gte: monthStart,
+              lt: nextMonthStart
+            },
+            volunteer: {
+              facilityId: args.facilityId
+            }
+          },
+          select: {
+            startAt: true,
+            endAt: true
+          }
+        }),
+      []
+    ),
     prisma.carePlan.count({
       where: {
         status: "ACTIVE",
@@ -421,35 +443,47 @@ async function computeDashboardHomeSummary(args: {
         staffId: null
       }
     }),
-    prisma.budgetStockItem.findMany({
-      where: {
-        facilityId: args.facilityId,
-        isActive: true
-      },
-      select: {
-        onHand: true,
-        reorderPoint: true,
-        parLevel: true
-      }
-    }),
-    prisma.inventoryItem.findMany({
-      where: {
-        facilityId: args.facilityId
-      },
-      select: {
-        onHand: true,
-        reorderAt: true
-      }
-    }),
-    prisma.prizeItem.findMany({
-      where: {
-        facilityId: args.facilityId
-      },
-      select: {
-        onHand: true,
-        reorderAt: true
-      }
-    })
+    withOptionalData(
+      () =>
+        prisma.budgetStockItem.findMany({
+          where: {
+            facilityId: args.facilityId,
+            isActive: true
+          },
+          select: {
+            onHand: true,
+            reorderPoint: true,
+            parLevel: true
+          }
+        }),
+      []
+    ),
+    withOptionalData(
+      () =>
+        prisma.inventoryItem.findMany({
+          where: {
+            facilityId: args.facilityId
+          },
+          select: {
+            onHand: true,
+            reorderAt: true
+          }
+        }),
+      []
+    ),
+    withOptionalData(
+      () =>
+        prisma.prizeItem.findMany({
+          where: {
+            facilityId: args.facilityId
+          },
+          select: {
+            onHand: true,
+            reorderAt: true
+          }
+        }),
+      []
+    )
   ]);
 
   const attendanceCompletedIds = new Set(attendanceGroupsToday.map((item) => item.activityInstanceId));
