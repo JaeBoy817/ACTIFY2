@@ -1,32 +1,32 @@
 import Link from "next/link";
 
-import { GlassCard } from "@/components/marketing/Glass";
+import { MattePanel } from "@/components/public/PublicPrimitives";
 
 export function MarketingFooter() {
   return (
     <footer className="pt-10">
-      <GlassCard tone="default" className="px-4 py-4 md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-foreground/75">
-          <p className="font-[var(--font-brand)] tracking-[0.12em] text-foreground">ACTIFY</p>
+      <MattePanel className="border-zinc-900 bg-zinc-900 px-4 py-5 text-zinc-200 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <p className="font-[var(--font-brand)] tracking-[0.12em] text-zinc-100">ACTIFY</p>
           <nav className="flex flex-wrap items-center gap-4">
-            <Link href="/#modules-snapshot" prefetch className="hover:text-foreground">
+            <Link href="/#what-actify-does" prefetch className="hover:text-zinc-50">
               Product
             </Link>
-            <Link href="/about" prefetch className="hover:text-foreground">
+            <Link href="/about" prefetch className="hover:text-zinc-50">
               About
             </Link>
-            <Link href="/terms" prefetch className="hover:text-foreground">
+            <Link href="/terms" prefetch className="hover:text-zinc-50">
               Terms
             </Link>
-            <Link href="/privacy" prefetch className="hover:text-foreground">
+            <Link href="/privacy" prefetch className="hover:text-zinc-50">
               Privacy
             </Link>
-            <Link href="/sign-in" prefetch className="hover:text-foreground">
+            <Link href="/sign-in" prefetch className="hover:text-zinc-50">
               Sign In
             </Link>
           </nav>
         </div>
-      </GlassCard>
+      </MattePanel>
     </footer>
   );
 }

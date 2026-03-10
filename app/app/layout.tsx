@@ -69,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   unreadCount={unreadNotificationCount}
                 />
                 {isClerkConfigured ? (
-                  <UserButton afterSignOutUrl="/" appearance={actifyUserButtonAppearance} />
+                  <UserButton afterSignOutUrl="/signed-out" appearance={actifyUserButtonAppearance} />
                 ) : (
                   <Badge variant="secondary">Clerk not configured</Badge>
                 )}

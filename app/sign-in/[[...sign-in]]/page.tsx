@@ -1,30 +1,28 @@
 import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 
-import { AuthPageShell } from "@/components/marketing/AuthPageShell";
-import { GlassButton, GlassCard } from "@/components/marketing/Glass";
+import { AuthEditorialShell } from "@/components/public/AuthEditorialShell";
+import { MattePanel } from "@/components/public/PublicPrimitives";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
 
 function ClerkUnavailable() {
   return (
-    <GlassCard className="bg-gradient-to-br from-sky-200/22 via-white/14 to-violet-200/14 p-5">
-      <h2 className="text-lg font-semibold text-foreground">Clerk keys required</h2>
-      <p className="mt-2 text-sm text-foreground/72">
-        Add valid Clerk keys in your environment variables to enable sign-in.
+    <MattePanel className="border-zinc-300 bg-white p-5">
+      <h2 className="text-lg font-semibold text-zinc-900">Authentication is not configured</h2>
+      <p className="mt-2 text-sm leading-6 text-zinc-600">
+        Add valid Clerk keys in environment variables to enable sign in.
       </p>
-      <GlassButton asChild variant="secondary" className="mt-3">
-        <Link href="/sign-up" prefetch>
-          Create an account
-        </Link>
-      </GlassButton>
-    </GlassCard>
+      <Link href="/sign-up" className="mt-4 inline-flex text-sm font-semibold text-zinc-900 underline underline-offset-4">
+        Create an account
+      </Link>
+    </MattePanel>
   );
 }
 
 export default function SignInPage() {
   return (
-    <AuthPageShell mode="sign-in">
+    <AuthEditorialShell mode="sign-in">
       {isClerkConfigured ? (
         <SignIn
           path="/sign-in"
@@ -36,6 +34,6 @@ export default function SignInPage() {
       ) : (
         <ClerkUnavailable />
       )}
-    </AuthPageShell>
+    </AuthEditorialShell>
   );
 }
