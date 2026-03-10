@@ -22,6 +22,7 @@ function findActiveModule(pathname: string) {
 
 export function AppRouteHeader() {
   const pathname = usePathname();
+  const isDashboardRoot = pathname === "/app";
   const activeModule = useMemo(() => findActiveModule(pathname ?? "/app"), [pathname]);
 
   const related = useMemo(() => {
@@ -35,6 +36,10 @@ export function AppRouteHeader() {
   }, [activeModule.key, activeModule.sidebarGroup]);
 
   const Icon = activeModule.icon;
+
+  if (isDashboardRoot) {
+    return null;
+  }
 
   return (
     <section className="nb-surface nb-panel relative overflow-hidden rounded-3xl border p-5">
