@@ -16,25 +16,20 @@ export async function ensureUserAndFacility() {
   const existingUser = await prisma.user.findUnique({
     where: { clerkUserId: userId },
     include: {
-      settings: { select: { id: true } },
-      facility: {
-        include: {
-          settings: { select: { id: true } }
-        }
-      }
+      facility: true
     }
   });
 
   if (existingUser) {
-    // These settings records are needed only once. Avoid upsert writes on every request/action.
-    if (!existingUser.settings || !existingUser.facility.settings) {
-      await ensureSettingsForUserAndFacility({
-        facilityId: existingUser.facilityId,
-        userId: existingUser.id,
-        timezone: existingUser.facility.timezone,
-        moduleFlags: existingUser.facility.moduleFlags
-      });
-    }
+    // Keep auth path resilient if settings tables are unavailable/migrating.
+    ensureSettingsForUserAndFacility({
+      facilityId: existingUser.facilityId,
+      userId: existingUser.id,
+      timezone: existingUser.facility.timezone,
+      moduleFlags: existingUser.facility.moduleFlags
+    }).catch((error) => {
+      console.error("[auth] ensure settings skipped", error);
+    });
     return existingUser;
   }
 
@@ -69,23 +64,18 @@ export async function ensureUserAndFacility() {
       const existing = await prisma.user.findUnique({
         where: { clerkUserId: userId },
         include: {
-          settings: { select: { id: true } },
-          facility: {
-            include: {
-              settings: { select: { id: true } }
-            }
-          }
+          facility: true
         }
       });
       if (existing) {
-        if (!existing.settings || !existing.facility.settings) {
-          await ensureSettingsForUserAndFacility({
-            facilityId: existing.facilityId,
-            userId: existing.id,
-            timezone: existing.facility.timezone,
-            moduleFlags: existing.facility.moduleFlags
-          });
-        }
+        ensureSettingsForUserAndFacility({
+          facilityId: existing.facilityId,
+          userId: existing.id,
+          timezone: existing.facility.timezone,
+          moduleFlags: existing.facility.moduleFlags
+        }).catch((innerError) => {
+          console.error("[auth] ensure settings skipped after race fallback", innerError);
+        });
         return existing;
       }
     }
@@ -95,12 +85,7 @@ export async function ensureUserAndFacility() {
   const createdUser = await prisma.user.findUnique({
     where: { clerkUserId: userId },
     include: {
-      settings: { select: { id: true } },
-      facility: {
-        include: {
-          settings: { select: { id: true } }
-        }
-      }
+      facility: true
     }
   });
 
@@ -108,14 +93,14 @@ export async function ensureUserAndFacility() {
     throw new Error("User creation failed: unable to load newly created user.");
   }
 
-  if (!createdUser.settings || !createdUser.facility.settings) {
-    await ensureSettingsForUserAndFacility({
-      facilityId: createdUser.facilityId,
-      userId: createdUser.id,
-      timezone: createdUser.facility.timezone,
-      moduleFlags: createdUser.facility.moduleFlags
-    });
-  }
+  ensureSettingsForUserAndFacility({
+    facilityId: createdUser.facilityId,
+    userId: createdUser.id,
+    timezone: createdUser.facility.timezone,
+    moduleFlags: createdUser.facility.moduleFlags
+  }).catch((error) => {
+    console.error("[auth] ensure settings skipped for newly created user", error);
+  });
 
   return createdUser;
 }
