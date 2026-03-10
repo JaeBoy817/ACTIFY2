@@ -23,13 +23,13 @@ export function PremiumPillButton({
   className
 }: PremiumPillButtonProps) {
   const toneClass = {
-    neutral: "border-[#3a4364] bg-[linear-gradient(180deg,#171f33_0%,#121b2d_100%)] text-[#d8e3ff] hover:border-[#55608d]",
-    blue: "border-blue-500/50 bg-[linear-gradient(180deg,#1d2b4d_0%,#15213c_100%)] text-blue-100 hover:border-blue-400/70",
-    sky: "border-sky-500/50 bg-[linear-gradient(180deg,#1a2f45_0%,#112437_100%)] text-sky-100 hover:border-sky-400/70",
-    violet: "border-violet-500/50 bg-[linear-gradient(180deg,#2a2247_0%,#1e1838_100%)] text-violet-100 hover:border-violet-400/75",
+    neutral: "border-emerald-900/65 bg-[linear-gradient(180deg,#10231b_0%,#0d1d16_100%)] text-emerald-50 hover:border-emerald-600/55",
+    blue: "border-emerald-500/50 bg-[linear-gradient(180deg,#173328_0%,#13291f_100%)] text-emerald-100 hover:border-emerald-400/70",
+    sky: "border-teal-500/50 bg-[linear-gradient(180deg,#16342c_0%,#12281f_100%)] text-teal-100 hover:border-teal-400/70",
+    violet: "border-emerald-500/45 bg-[linear-gradient(180deg,#153126_0%,#11261d_100%)] text-emerald-100 hover:border-emerald-300/75",
     emerald: "border-emerald-500/45 bg-[linear-gradient(180deg,#1a302a_0%,#142721_100%)] text-emerald-100 hover:border-emerald-400/70",
-    orange: "border-orange-500/45 bg-[linear-gradient(180deg,#35261f_0%,#2a1f18_100%)] text-orange-100 hover:border-orange-400/75",
-    rose: "border-rose-500/45 bg-[linear-gradient(180deg,#34202a_0%,#271924_100%)] text-rose-100 hover:border-rose-400/75"
+    orange: "border-lime-500/45 bg-[linear-gradient(180deg,#25311f_0%,#1e2718_100%)] text-lime-100 hover:border-lime-400/75",
+    rose: "border-emerald-500/45 bg-[linear-gradient(180deg,#193025_0%,#14261e_100%)] text-emerald-100 hover:border-emerald-300/75"
   }[tone];
 
   const sizeClass = size === "md" ? "h-11 px-4 text-sm" : "h-9 px-3 text-xs";
@@ -42,7 +42,7 @@ export function PremiumPillButton({
   );
 
   const classes = cn(
-    "inline-flex items-center gap-2 rounded-full border font-semibold tracking-[0.02em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_-14px_rgba(99,102,241,0.65)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
+    "inline-flex items-center gap-2 rounded-full border font-semibold tracking-[0.02em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_-14px_rgba(16,185,129,0.5)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40",
     sizeClass,
     toneClass,
     className

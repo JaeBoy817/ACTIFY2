@@ -18,19 +18,19 @@ export function GlowCard({
   children: React.ReactNode;
 }) {
   const accentClass = {
-    blue: "from-blue-500/28 via-indigo-500/10 to-transparent",
-    violet: "from-violet-500/26 via-indigo-500/10 to-transparent",
-    sky: "from-sky-500/26 via-blue-500/10 to-transparent",
+    blue: "from-emerald-500/28 via-emerald-400/12 to-transparent",
+    violet: "from-emerald-500/24 via-teal-400/10 to-transparent",
+    sky: "from-teal-500/26 via-emerald-500/12 to-transparent",
     emerald: "from-emerald-500/24 via-teal-500/10 to-transparent",
-    rose: "from-rose-500/24 via-fuchsia-500/10 to-transparent",
-    amber: "from-amber-500/26 via-orange-500/10 to-transparent",
-    zinc: "from-zinc-300/18 via-zinc-500/8 to-transparent"
+    rose: "from-emerald-500/20 via-lime-500/10 to-transparent",
+    amber: "from-lime-500/24 via-emerald-500/10 to-transparent",
+    zinc: "from-emerald-400/16 via-emerald-500/8 to-transparent"
   }[accent ?? "blue"];
 
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[1.7rem] border border-[#2a3555] bg-[linear-gradient(180deg,#101625_0%,#0c1220_100%)] shadow-[0_26px_50px_-34px_rgba(2,6,23,0.95),0_14px_34px_-28px_rgba(59,130,246,0.42)]",
+        "relative overflow-hidden rounded-[1.7rem] border border-emerald-900/65 bg-[linear-gradient(180deg,#0b1712_0%,#09130f_100%)] shadow-[0_26px_50px_-34px_rgba(2,6,23,0.95),0_14px_34px_-28px_rgba(16,185,129,0.36)]",
         className
       )}
     >
@@ -41,7 +41,7 @@ export function GlowCard({
           <header className="mb-4 flex items-start justify-between gap-3">
             <div>
               {subtitle ? (
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#95a7d6]">{subtitle}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/75">{subtitle}</p>
               ) : null}
               {title ? <h2 className="mt-1 text-lg font-bold text-white">{title}</h2> : null}
             </div>
