@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Search, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -12,8 +12,6 @@ import type { SidebarGroup } from "@/components/app/sidepanel/types";
 import { Input } from "@/components/ui/input";
 import { asModuleFlags } from "@/lib/module-flags";
 import { getModuleRegistryItem, SIDEBAR_MODULE_GROUPS } from "@/lib/moduleRegistry";
-
-const SIDEBAR_EXPANDED_STORAGE_KEY = "actify.sidebar.expanded";
 
 function withOneToOneLink(groups: SidebarGroup[]) {
   return groups.map((group) => {
@@ -60,25 +58,10 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   const pathname = usePathname();
   const router = useRouter();
   const moduleFlags = useMemo(() => asModuleFlags(moduleFlagsRaw), [moduleFlagsRaw]);
+  const expanded = true;
 
   const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
-    if (saved === "0" || saved === "1") {
-      setExpanded(saved === "1");
-    }
-  }, []);
-
-  const setExpandedPersisted = useCallback((next: boolean) => {
-    setExpanded(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, next ? "1" : "0");
-    }
-  }, []);
 
   const visibleGroups = useMemo(
     () =>
@@ -146,8 +129,6 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
           <SidebarRail
             groups={visibleGroups}
             pathname={pathname}
-            expanded={expanded}
-            onToggle={() => setExpandedPersisted(!expanded)}
             onPrefetch={prefetchRoute}
             onNavigate={handleNavigate}
           />

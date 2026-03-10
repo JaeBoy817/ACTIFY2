@@ -5,7 +5,6 @@ import { LifeBuoy, Settings } from "lucide-react";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
 import { SidebarNavGroup } from "@/components/app/sidepanel/SidebarNavGroup";
-import { SidebarToggleButton } from "@/components/app/sidepanel/SidebarToggleButton";
 import { SidebarTooltip } from "@/components/app/sidepanel/SidebarTooltip";
 import type { SidebarGroup } from "@/components/app/sidepanel/types";
 import { cn } from "@/lib/utils";
@@ -13,15 +12,11 @@ import { cn } from "@/lib/utils";
 export function SidebarRail({
   groups,
   pathname,
-  expanded,
-  onToggle,
   onPrefetch,
   onNavigate
 }: {
   groups: SidebarGroup[];
   pathname: string;
-  expanded: boolean;
-  onToggle: () => void;
   onPrefetch?: (href: string) => void;
   onNavigate?: (href: string) => void;
 }) {
@@ -42,9 +37,6 @@ export function SidebarRail({
             <ActifyLogo variant="icon" size={24} />
           </Link>
         </SidebarTooltip>
-        <div className="hidden md:block">
-          <SidebarToggleButton expanded={expanded} onToggle={onToggle} />
-        </div>
       </div>
 
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5">

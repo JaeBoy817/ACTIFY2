@@ -37,10 +37,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ActifyThemeShell className="actify-editorial-shell min-h-screen md:flex">
-      <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-[296px] md:p-3">
+      <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-max md:shrink-0 md:p-3">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
-      <div className="flex-1 pb-8 pr-3">
+      <div className="min-w-0 flex-1 pb-8 pr-3">
         {isClerkConfigured ? (
           <IdleComplianceGuard
             enabled={compliance.hipaaMode.enabled}
@@ -77,7 +77,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </GlassNavbar>
         </div>
-        <main className="container py-4">
+        <main className="px-2 py-4 md:px-3">
           <div className="space-y-4">
             <AppRouteHeader />
           </div>
