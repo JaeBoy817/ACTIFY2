@@ -4,7 +4,15 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { AmbientGradientDrift } from "@/components/ambient/AmbientGradientDrift";
 import { Toaster } from "@/components/ui/toaster";
-import { clerkPublishableKey, isClerkConfigured } from "@/lib/clerk-config";
+import {
+  clerkAfterSignOutUrl,
+  clerkPublishableKey,
+  clerkSignInFallbackRedirectUrl,
+  clerkSignInUrl,
+  clerkSignUpFallbackRedirectUrl,
+  clerkSignUpUrl,
+  isClerkConfigured
+} from "@/lib/clerk-config";
 
 function getMetadataBase() {
   try {
@@ -55,7 +63,20 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body data-ambient="default" className="relative min-h-screen font-[var(--font-sans)]">
         <AmbientGradientDrift />
         <div className="relative z-10 min-h-screen">
-          {isClerkConfigured ? <ClerkProvider publishableKey={clerkPublishableKey}>{bodyContent}</ClerkProvider> : bodyContent}
+          {isClerkConfigured ? (
+            <ClerkProvider
+              publishableKey={clerkPublishableKey}
+              signInUrl={clerkSignInUrl}
+              signUpUrl={clerkSignUpUrl}
+              signInFallbackRedirectUrl={clerkSignInFallbackRedirectUrl}
+              signUpFallbackRedirectUrl={clerkSignUpFallbackRedirectUrl}
+              afterSignOutUrl={clerkAfterSignOutUrl}
+            >
+              {bodyContent}
+            </ClerkProvider>
+          ) : (
+            bodyContent
+          )}
         </div>
       </body>
     </html>

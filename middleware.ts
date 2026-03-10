@@ -4,12 +4,37 @@ import { NextResponse } from "next/server";
 
 import { isClerkBackendConfigured } from "@/lib/clerk-config";
 
-const isProtectedRoute = createRouteMatcher(["/app(.*)"]);
+const isProtectedRoute = createRouteMatcher(["/app(.*)", "/dashboard(.*)"]);
 
 const protectedMiddleware = clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+  const pathname = req.nextUrl.pathname;
+  const isProtected = isProtectedRoute(req);
+
+  if (!isProtected) {
+    if (process.env.NODE_ENV === "development" && pathname.startsWith("/sign-")) {
+      console.info(`[middleware][auth] public route: ${pathname}`);
+    }
+    return NextResponse.next();
   }
+
+  const { userId } = await auth();
+  if (!userId) {
+    const signInUrl = new URL("/sign-in", req.url);
+    const intendedPath = `${pathname}${req.nextUrl.search}`;
+    signInUrl.searchParams.set("redirect_url", intendedPath);
+
+    if (process.env.NODE_ENV === "development") {
+      console.info(`[middleware][auth] redirecting unauthenticated request ${pathname} -> ${signInUrl.pathname}`);
+    }
+
+    return NextResponse.redirect(signInUrl);
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
+  }
+
+  return NextResponse.next();
 });
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
@@ -17,7 +42,7 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
 
   // Avoid edge crashes in environments where Clerk keys are not configured yet.
   if (!isClerkBackendConfigured) {
-    if (pathname.startsWith("/app")) {
+    if (pathname.startsWith("/app") || pathname.startsWith("/dashboard")) {
       const signInUrl = new URL("/sign-in", req.url);
       signInUrl.searchParams.set("auth", "unconfigured");
       return NextResponse.redirect(signInUrl);

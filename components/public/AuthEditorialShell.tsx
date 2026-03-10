@@ -25,7 +25,7 @@ export function AuthEditorialShell({
       : "Get your activity department organized in one place.";
 
   return (
-    <div className="min-h-screen bg-[#111319] text-zinc-100">
+    <div className="min-h-screen bg-transparent text-zinc-100">
       <PublicContainer className="py-6 md:py-10">
         <header className="mb-8 flex items-center justify-between">
           <Link href="/" className="inline-flex items-center gap-2">

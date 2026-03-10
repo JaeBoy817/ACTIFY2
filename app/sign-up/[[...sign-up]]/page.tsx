@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { ArrowRight, CalendarDays, ClipboardCheck, Users2 } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { MattePanel } from "@/components/public/PublicPrimitives";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
-import { isClerkBackendConfigured, isClerkConfigured } from "@/lib/clerk-config";
+import {
+  clerkSignInUrl,
+  clerkSignUpFallbackRedirectUrl,
+  isClerkBackendConfigured,
+  isClerkConfigured
+} from "@/lib/clerk-config";
 
 function ClerkUnavailableCard() {
   return (
@@ -25,9 +32,16 @@ function ClerkUnavailableCard() {
   );
 }
 
-export default function SignUpPage() {
+export default async function SignUpPage() {
+  if (isClerkBackendConfigured) {
+    const { userId } = await auth();
+    if (userId) {
+      redirect("/dashboard");
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_16%_0%,#23345d_0%,#101522_42%,#0a0d14_100%)] text-zinc-100">
+    <div className="min-h-screen bg-transparent text-zinc-100">
       <div className="mx-auto grid w-full max-w-[1260px] gap-6 px-4 py-8 md:px-8 md:py-12 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="rounded-[2rem] border border-zinc-700 bg-[linear-gradient(160deg,#111724_0%,#0c111b_62%,#0a0d14_100%)] p-7 shadow-[0_34px_70px_-42px_rgba(0,0,0,0.9)] md:p-10">
           <div className="space-y-5">
@@ -81,8 +95,8 @@ export default function SignUpPage() {
               <SignUp
                 path="/sign-up"
                 routing="path"
-                signInUrl="/sign-in"
-                forceRedirectUrl="/app"
+                signInUrl={clerkSignInUrl}
+                fallbackRedirectUrl={clerkSignUpFallbackRedirectUrl}
                 appearance={actifyClerkAppearance}
               />
             ) : (
@@ -94,7 +108,7 @@ export default function SignUpPage() {
               <p className="mt-1">Sign in and continue where you left off.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
-                  href="/sign-in"
+                  href={clerkSignInUrl}
                   className="inline-flex items-center gap-2 rounded-xl border border-yellow-500 bg-yellow-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-400"
                 >
                   Sign In

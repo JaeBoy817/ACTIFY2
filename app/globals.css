@@ -2027,3 +2027,53 @@ body {
     transform: none !important;
   }
 }
+
+/* ============================================================
+   GLOBAL SIGN-IN GRADIENT FOUNDATION
+   Source of truth: previous /sign-in radial gradient
+   ============================================================ */
+
+:root {
+  --actify-global-bg-base: #0a0d14;
+  --actify-global-bg-gradient: radial-gradient(circle at 16% 0%, #23345d 0%, #101522 42%, #0a0d14 100%);
+  --actify-global-bg-overlay: linear-gradient(180deg, rgba(7, 10, 16, 0.14) 0%, rgba(7, 10, 16, 0.38) 100%);
+}
+
+body {
+  background-color: var(--actify-global-bg-base) !important;
+}
+
+.actify-global-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  background: var(--actify-global-bg-gradient);
+}
+
+.actify-global-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--actify-global-bg-overlay);
+}
+
+.actify-editorial-shell,
+.actify-page-shell {
+  background: transparent !important;
+}
+
+.actify-page-shell::before {
+  display: none !important;
+}
+
+body[data-perf-mode="low-power"] .actify-global-background::after {
+  background: linear-gradient(180deg, rgba(7, 10, 16, 0.18) 0%, rgba(7, 10, 16, 0.44) 100%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .actify-global-background::after {
+    background: linear-gradient(180deg, rgba(9, 13, 20, 0.22) 0%, rgba(9, 13, 20, 0.52) 100%);
+  }
+}

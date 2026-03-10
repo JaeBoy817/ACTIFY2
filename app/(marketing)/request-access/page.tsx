@@ -3,7 +3,7 @@ import { ArrowLeft, Building2, ClipboardList, Mail, ShieldCheck, UserCheck } fro
 
 export default function RequestAccessPage() {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_18%_0%,#253865_0%,#111827_44%,#0b0f16_100%)] text-zinc-100">
+    <div className="min-h-screen bg-transparent text-zinc-100">
       <div className="mx-auto w-full max-w-5xl px-4 py-10 md:px-8 md:py-14">
         <div className="mb-6 flex items-center justify-between">
           <Link href="/sign-in" className="inline-flex items-center gap-2 rounded-xl border border-zinc-600 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-800">

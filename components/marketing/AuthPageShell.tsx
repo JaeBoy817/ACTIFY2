@@ -30,7 +30,7 @@ export function AuthPageShell({ mode, children }: { mode: Mode; children: React.
       : "Create your account to start your ACTIFY workspace.";
 
   return (
-    <div data-ambient="auth" className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#E7F5FF]/70 via-[#EDF2FF]/60 to-[#E3FAFC]/70">
+    <div data-ambient="auth" className="relative min-h-screen overflow-hidden bg-transparent">
       <AmbientBackdrop />
       <div
         aria-hidden
