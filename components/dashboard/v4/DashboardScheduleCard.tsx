@@ -1,18 +1,34 @@
 import { CalendarClock } from "lucide-react";
 
 import { GlowCard } from "@/components/dashboard/v4/GlowCard";
+import { GlowProgressBar } from "@/components/dashboard/v4/GlowProgressBar";
 import { PremiumPillButton } from "@/components/dashboard/v4/PremiumPillButton";
 import type { DashboardCommandCenterSummary } from "@/lib/dashboard/getDashboardCommandCenterSummary";
 import { cn } from "@/lib/utils";
 
 export function DashboardScheduleCard({ summary }: { summary: DashboardCommandCenterSummary }) {
+  const totalActivities = summary.timeline.length;
+  const doneActivities = summary.timeline.filter((item) => item.attendanceCompleted || item.documentationCompleted).length;
+  const progress = totalActivities === 0 ? 0 : (doneActivities / totalActivities) * 100;
+
   return (
     <GlowCard
       title="Today’s Schedule"
       subtitle="Timeline"
       accent="sky"
+      icon={<CalendarClock className="h-4 w-4" />}
       action={<PremiumPillButton label="Open Calendar" href="/app/calendar?view=day" tone="blue" />}
     >
+      {summary.timeline.length > 0 ? (
+        <div className="rounded-2xl border border-[#2c3f66] bg-[#101a30] px-4 py-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ab2dc]">Activities progress</p>
+            <p className="text-xs font-bold text-white">{doneActivities}/{totalActivities}</p>
+          </div>
+          <GlowProgressBar value={progress} tone="sky" />
+        </div>
+      ) : null}
+
       {summary.timeline.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#3c4c74] bg-[#0f172a] px-4 py-8 text-sm text-[#90a6cf]">
           No activities scheduled today.

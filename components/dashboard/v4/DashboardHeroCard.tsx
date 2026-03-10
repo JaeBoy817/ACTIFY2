@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ArrowRight, Target } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Flame, Stethoscope, Target, Users } from "lucide-react";
 
 import { DashboardKPIBlock } from "@/components/dashboard/v4/DashboardKPIBlock";
 import { GlowCard } from "@/components/dashboard/v4/GlowCard";
 import { GlowProgressBar } from "@/components/dashboard/v4/GlowProgressBar";
-import { MODULE_TONE, formatPercent } from "@/components/dashboard/v4/theme";
+import { formatPercent, moduleToneFor } from "@/components/dashboard/v4/theme";
 import { PremiumPillButton } from "@/components/dashboard/v4/PremiumPillButton";
 import type { DashboardCommandCenterSummary } from "@/lib/dashboard/getDashboardCommandCenterSummary";
 
@@ -17,9 +17,14 @@ function resolveGreeting(isoDate: string) {
 
 export function DashboardHeroCard({ summary }: { summary: DashboardCommandCenterSummary }) {
   const greeting = resolveGreeting(summary.generatedAt);
+  const totalActivities = Math.max(summary.timeline.length, summary.hero.scheduledTodayCount);
+  const attendanceCompleteCount = summary.timeline.filter((item) => item.attendanceCompleted).length;
+  const documentationCompleteCount = summary.timeline.filter((item) => item.documentationCompleted).length;
+  const activitiesProgress =
+    totalActivities === 0 ? 0 : Math.round(((attendanceCompleteCount + documentationCompleteCount) / (totalActivities * 2)) * 100);
 
   return (
-    <GlowCard title="Daily Overview" subtitle="Hero" accent="blue">
+    <GlowCard title="Daily Overview" subtitle="Hero" accent="blue" icon={<Flame className="h-4 w-4" />}>
       <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8ea5d0]">{summary.hero.dayOfWeek} · {summary.hero.fullDate}</p>
@@ -38,13 +43,24 @@ export function DashboardHeroCard({ summary }: { summary: DashboardCommandCenter
             <GlowProgressBar value={summary.momentum.monthlyParticipationGoalProgress} tone="blue" />
             <p className="mt-2 text-xs text-[#8ca2ca]">Monthly participation target benchmark: 70%</p>
           </div>
+
+          <div className="rounded-2xl border border-[#33446b] bg-[#121c31] p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a9d6]">Activities progress bar</p>
+              <span className="text-sm font-bold text-white">{activitiesProgress}%</span>
+            </div>
+            <GlowProgressBar value={activitiesProgress} tone="sky" />
+            <p className="mt-2 text-xs text-[#8ca2ca]">
+              {attendanceCompleteCount} attendance complete · {documentationCompleteCount} documentation complete out of {totalActivities} activities.
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <DashboardKPIBlock label="Census" value={summary.hero.censusCount} helper="Active residents" />
-          <DashboardKPIBlock label="Activities Today" value={summary.hero.scheduledTodayCount} helper="Scheduled in calendar" tone="sky" />
-          <DashboardKPIBlock label="Needs 1:1" value={summary.hero.oneToOneNeededThisMonthCount} helper="Still missing this month" tone="orange" />
-          <DashboardKPIBlock label="Overdue" value={summary.hero.overdueItemsCount} helper="Docs or care plan items" tone="rose" />
+          <DashboardKPIBlock label="Census" value={summary.hero.censusCount} helper="Active residents" icon={Users} />
+          <DashboardKPIBlock label="Activities Today" value={summary.hero.scheduledTodayCount} helper="Scheduled in calendar" tone="sky" icon={ClipboardCheck} />
+          <DashboardKPIBlock label="Needs 1:1" value={summary.hero.oneToOneNeededThisMonthCount} helper="Still missing this month" tone="orange" icon={Stethoscope} />
+          <DashboardKPIBlock label="Overdue" value={summary.hero.overdueItemsCount} helper="Docs or care plan items" tone="rose" icon={Target} />
         </div>
       </div>
 
@@ -52,7 +68,7 @@ export function DashboardHeroCard({ summary }: { summary: DashboardCommandCenter
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8ea4cf]">Daily Mission Strip</p>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {summary.missions.slice(0, 6).map((mission) => {
-            const tone = MODULE_TONE[mission.module];
+            const tone = moduleToneFor(mission.module);
             return (
               <article
                 key={mission.id}

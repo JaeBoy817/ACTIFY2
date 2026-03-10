@@ -16,6 +16,7 @@ export function DashboardDocumentationCard({ summary }: { summary: DashboardComm
       title="Documentation Progress"
       subtitle="Notes + 1:1"
       accent="rose"
+      icon={<FileCheck2 className="h-4 w-4" />}
       action={<PremiumPillButton label="Open Notes" href="/app/notes" tone="violet" />}
     >
       <div className="grid gap-3 sm:grid-cols-2">

@@ -23,6 +23,7 @@ export function DashboardAlertsPanel({ summary }: { summary: DashboardCommandCen
         title="Needs Attention"
         subtitle="Priority Queue"
         accent="amber"
+        icon={<AlertTriangle className="h-4 w-4" />}
         action={<PremiumPillButton label="Open Alerts" href="/app/notifications" tone="orange" />}
       >
         <div className="space-y-2">
@@ -44,7 +45,7 @@ export function DashboardAlertsPanel({ summary }: { summary: DashboardCommandCen
         </div>
       </GlowCard>
 
-      <GlowCard title="Care Plan + Compliance" subtitle="Status" accent="emerald">
+      <GlowCard title="Care Plan + Compliance" subtitle="Status" accent="emerald" icon={<FileClock className="h-4 w-4" />}>
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between rounded-xl border border-[#2c395b] bg-[#10192d] px-3 py-2">
             <span className="text-[#9ab0d9]">Overdue care plan reviews</span>
@@ -62,7 +63,7 @@ export function DashboardAlertsPanel({ summary }: { summary: DashboardCommandCen
         <PremiumPillButton label="Go to Care Plans" href="/app/care-plans" tone="emerald" />
       </GlowCard>
 
-      <GlowCard title="Upcoming + Planning" subtitle="Forward view" accent="blue">
+      <GlowCard title="Upcoming + Planning" subtitle="Forward view" accent="blue" icon={<CalendarDays className="h-4 w-4" />}>
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between rounded-xl border border-[#2c395b] bg-[#10192d] px-3 py-2">
             <span className="inline-flex items-center gap-2 text-[#9ab0d9]"><CalendarDays className="h-4 w-4 text-blue-300" />Tomorrow activities</span>
@@ -102,7 +103,7 @@ export function DashboardAlertsPanel({ summary }: { summary: DashboardCommandCen
         </div>
       </GlowCard>
 
-      <GlowCard title={summary.morale.title} subtitle="Morale / Idea" accent="rose">
+      <GlowCard title={summary.morale.title} subtitle="Morale / Idea" accent="rose" icon={<Handshake className="h-4 w-4" />}>
         <p className="text-sm leading-relaxed text-[#dce8ff]">{summary.morale.message}</p>
         <div className="rounded-xl border border-orange-300/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-100">
           {summary.morale.prompt}

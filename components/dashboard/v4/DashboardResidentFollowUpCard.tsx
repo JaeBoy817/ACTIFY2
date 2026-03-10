@@ -1,7 +1,7 @@
 import { UsersRound } from "lucide-react";
 
 import { GlowCard } from "@/components/dashboard/v4/GlowCard";
-import { MODULE_TONE } from "@/components/dashboard/v4/theme";
+import { moduleToneFor } from "@/components/dashboard/v4/theme";
 import { PremiumPillButton } from "@/components/dashboard/v4/PremiumPillButton";
 import type { DashboardCommandCenterSummary } from "@/lib/dashboard/getDashboardCommandCenterSummary";
 
@@ -22,6 +22,7 @@ export function DashboardResidentFollowUpCard({ summary }: { summary: DashboardC
       title="Resident Follow-Up Board"
       subtitle="Needs attention"
       accent="emerald"
+      icon={<UsersRound className="h-4 w-4" />}
       action={<PremiumPillButton label="Open Residents" href="/app/residents" tone="emerald" />}
     >
       {rows.length === 0 ? (
@@ -32,7 +33,7 @@ export function DashboardResidentFollowUpCard({ summary }: { summary: DashboardC
 
       <div className="grid gap-3 lg:grid-cols-2">
         {rows.map((row) => {
-          const tone = MODULE_TONE[row.categoryModule];
+          const tone = moduleToneFor(row.categoryModule);
           return (
             <article key={row.id} className="rounded-2xl border border-[#2c395b] bg-[#10192d] p-4">
               <div className="mb-2 flex items-center justify-between gap-2">

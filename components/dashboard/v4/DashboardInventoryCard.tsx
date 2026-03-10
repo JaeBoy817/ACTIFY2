@@ -11,6 +11,7 @@ export function DashboardInventoryCard({ summary }: { summary: DashboardCommandC
       title="Inventory / Prize Cart Pulse"
       subtitle="Budget + Stock"
       accent="rose"
+      icon={<Package className="h-4 w-4" />}
       action={<PremiumPillButton label="Open Budget/Stock" href="/app/dashboard/budget-stock" tone="rose" />}
     >
       <div className="grid gap-3 sm:grid-cols-3">

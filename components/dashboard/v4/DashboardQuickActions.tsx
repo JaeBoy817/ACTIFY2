@@ -1,17 +1,17 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Zap } from "lucide-react";
 
 import { GlowCard } from "@/components/dashboard/v4/GlowCard";
-import { MODULE_TONE } from "@/components/dashboard/v4/theme";
+import { moduleToneFor } from "@/components/dashboard/v4/theme";
 import { PremiumPillButton } from "@/components/dashboard/v4/PremiumPillButton";
 import type { DashboardCommandCenterSummary } from "@/lib/dashboard/getDashboardCommandCenterSummary";
 
 export function DashboardQuickActions({ summary }: { summary: DashboardCommandCenterSummary }) {
   return (
-    <GlowCard title="Quick Actions" subtitle="Command dock" accent="violet">
+    <GlowCard title="Quick Actions" subtitle="Command dock" accent="violet" icon={<Zap className="h-4 w-4" />}>
       <div className="flex flex-wrap gap-2">
         {summary.quickActions.map((action) => {
-          const tone = MODULE_TONE[action.module];
+          const tone = moduleToneFor(action.module);
           return (
             <PremiumPillButton
               key={action.id}

@@ -23,13 +23,13 @@ export function PremiumPillButton({
   className
 }: PremiumPillButtonProps) {
   const toneClass = {
-    neutral: "border-emerald-900/65 bg-[linear-gradient(180deg,#10231b_0%,#0d1d16_100%)] text-emerald-50 hover:border-emerald-600/55",
-    blue: "border-emerald-500/50 bg-[linear-gradient(180deg,#173328_0%,#13291f_100%)] text-emerald-100 hover:border-emerald-400/70",
-    sky: "border-teal-500/50 bg-[linear-gradient(180deg,#16342c_0%,#12281f_100%)] text-teal-100 hover:border-teal-400/70",
-    violet: "border-emerald-500/45 bg-[linear-gradient(180deg,#153126_0%,#11261d_100%)] text-emerald-100 hover:border-emerald-300/75",
-    emerald: "border-emerald-500/45 bg-[linear-gradient(180deg,#1a302a_0%,#142721_100%)] text-emerald-100 hover:border-emerald-400/70",
-    orange: "border-lime-500/45 bg-[linear-gradient(180deg,#25311f_0%,#1e2718_100%)] text-lime-100 hover:border-lime-400/75",
-    rose: "border-emerald-500/45 bg-[linear-gradient(180deg,#193025_0%,#14261e_100%)] text-emerald-100 hover:border-emerald-300/75"
+    neutral: "border-[#2b3f68] bg-[linear-gradient(180deg,#0f1a30_0%,#0b1426_100%)] text-[#d8e6ff] hover:border-[#47669f]",
+    blue: "border-blue-500/50 bg-[linear-gradient(180deg,#182a4b_0%,#11203b_100%)] text-blue-100 hover:border-blue-300/80",
+    sky: "border-sky-500/50 bg-[linear-gradient(180deg,#15344f_0%,#102a41_100%)] text-sky-100 hover:border-sky-300/80",
+    violet: "border-violet-500/50 bg-[linear-gradient(180deg,#2c1f4a_0%,#21173a_100%)] text-violet-100 hover:border-violet-300/80",
+    emerald: "border-emerald-500/50 bg-[linear-gradient(180deg,#173a38_0%,#122f2d_100%)] text-emerald-100 hover:border-emerald-300/80",
+    orange: "border-orange-500/50 bg-[linear-gradient(180deg,#472b1b_0%,#372012_100%)] text-orange-100 hover:border-orange-300/80",
+    rose: "border-rose-500/50 bg-[linear-gradient(180deg,#452036_0%,#33182a_100%)] text-rose-100 hover:border-rose-300/80"
   }[tone];
 
   const sizeClass = size === "md" ? "h-11 px-4 text-sm" : "h-9 px-3 text-xs";
@@ -42,7 +42,7 @@ export function PremiumPillButton({
   );
 
   const classes = cn(
-    "inline-flex items-center gap-2 rounded-full border font-semibold tracking-[0.02em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_-14px_rgba(16,185,129,0.5)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40",
+    "inline-flex items-center gap-2 rounded-full border font-semibold tracking-[0.02em] shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_10px_20px_-14px_rgba(37,99,235,0.55)] transition duration-200 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/50",
     sizeClass,
     toneClass,
     className

@@ -13,6 +13,7 @@ export function DashboardParticipationCard({ summary }: { summary: DashboardComm
       title="Participation + Attendance"
       subtitle="Momentum"
       accent="violet"
+      icon={<BarChart3 className="h-4 w-4" />}
       action={<PremiumPillButton label="View Analytics" href="/app/analytics" tone="violet" />}
     >
       <div className="grid gap-3 sm:grid-cols-2">
