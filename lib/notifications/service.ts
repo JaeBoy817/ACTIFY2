@@ -145,6 +145,10 @@ function isMissingTableError(error: unknown, tableName: string) {
   return metaTable.toLowerCase().includes(tableName.toLowerCase());
 }
 
+function isNotificationsTableUnavailable(error: unknown) {
+  return isMissingTableError(error, "AppNotification") || isMissingTableError(error, "app_notification");
+}
+
 async function createNotificationIfMissing(params: {
   dedupeKey: string;
   userId: string;
@@ -432,11 +436,19 @@ export async function listUserNotifications(userId: string, limit = 30) {
     return hit.value;
   }
 
-  const rows = await prisma.appNotification.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    take: limit
-  });
+  const rows = await prisma.appNotification
+    .findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return [] as AppNotification[];
+      }
+      console.error("[notifications] list failed", error);
+      return [] as AppNotification[];
+    });
 
   notificationListCache.set(cacheKey, {
     value: rows,
@@ -454,12 +466,20 @@ export async function getUnreadNotificationCount(userId: string) {
     return hit.value;
   }
 
-  const count = await prisma.appNotification.count({
-    where: {
-      userId,
-      readAt: null
-    }
-  });
+  const count = await prisma.appNotification
+    .count({
+      where: {
+        userId,
+        readAt: null
+      }
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return 0;
+      }
+      console.error("[notifications] unread count failed", error);
+      return 0;
+    });
 
   notificationUnreadCache.set(userId, {
     value: count,
@@ -470,53 +490,81 @@ export async function getUnreadNotificationCount(userId: string) {
 }
 
 export async function markNotificationRead(args: { userId: string; notificationId: string }) {
-  const result = await prisma.appNotification.updateMany({
-    where: {
-      id: args.notificationId,
-      userId: args.userId,
-      readAt: null
-    },
-    data: {
-      readAt: new Date()
-    }
-  });
+  const result = await prisma.appNotification
+    .updateMany({
+      where: {
+        id: args.notificationId,
+        userId: args.userId,
+        readAt: null
+      },
+      data: {
+        readAt: new Date()
+      }
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return { count: 0 };
+      }
+      throw error;
+    });
   invalidateNotificationCaches(args.userId);
   return result;
 }
 
 export async function markAllNotificationsRead(userId: string) {
-  const result = await prisma.appNotification.updateMany({
-    where: {
-      userId,
-      readAt: null
-    },
-    data: {
-      readAt: new Date()
-    }
-  });
+  const result = await prisma.appNotification
+    .updateMany({
+      where: {
+        userId,
+        readAt: null
+      },
+      data: {
+        readAt: new Date()
+      }
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return { count: 0 };
+      }
+      throw error;
+    });
   invalidateNotificationCaches(userId);
   return result;
 }
 
 export async function clearAllNotifications(userId: string) {
-  const result = await prisma.appNotification.deleteMany({
-    where: {
-      userId
-    }
-  });
+  const result = await prisma.appNotification
+    .deleteMany({
+      where: {
+        userId
+      }
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return { count: 0 };
+      }
+      throw error;
+    });
   invalidateNotificationCaches(userId);
   return result;
 }
 
 export async function clearReadNotifications(userId: string) {
-  const result = await prisma.appNotification.deleteMany({
-    where: {
-      userId,
-      readAt: {
-        not: null
+  const result = await prisma.appNotification
+    .deleteMany({
+      where: {
+        userId,
+        readAt: {
+          not: null
+        }
       }
-    }
-  });
+    })
+    .catch((error) => {
+      if (isNotificationsTableUnavailable(error)) {
+        return { count: 0 };
+      }
+      throw error;
+    });
   invalidateNotificationCaches(userId);
   return result;
 }

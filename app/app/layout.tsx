@@ -26,13 +26,15 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
 
-  const [settings, unreadNotificationCount] = await Promise.all([
+  const [settingsResult, unreadResult] = await Promise.allSettled([
     prisma.facilitySettings.findUnique({
       where: { facilityId: user.facilityId },
       select: { complianceJson: true }
     }),
     getUnreadNotificationCount(user.id)
   ]);
+  const settings = settingsResult.status === "fulfilled" ? settingsResult.value : null;
+  const unreadNotificationCount = unreadResult.status === "fulfilled" ? unreadResult.value : 0;
   const compliance = asComplianceDefaults(settings?.complianceJson);
 
   return (
