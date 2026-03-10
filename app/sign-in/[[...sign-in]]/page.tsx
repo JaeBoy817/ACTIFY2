@@ -4,23 +4,16 @@ import { ArrowRight, Building2, Mail, ShieldCheck, UserRound } from "lucide-reac
 
 import { MattePanel } from "@/components/public/PublicPrimitives";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
-import { isClerkConfigured } from "@/lib/clerk-config";
+import { isClerkBackendConfigured, isClerkConfigured } from "@/lib/clerk-config";
 
 function ClerkUnavailableCard() {
   return (
     <MattePanel className="border-zinc-700 bg-zinc-900 p-6 text-zinc-100">
       <h2 className="text-xl font-semibold">Authentication is currently unavailable</h2>
       <p className="mt-2 text-sm leading-6 text-zinc-300">
-        Clerk is not configured in this environment. You can still request access below and we will follow up.
+        Clerk is not configured in this environment. Add your Clerk keys and try again.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href="/request-access"
-          className="inline-flex items-center gap-2 rounded-xl border border-yellow-500 bg-yellow-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-400"
-        >
-          Request Access
-          <ArrowRight className="h-4 w-4" />
-        </Link>
         <Link
           href="/"
           className="inline-flex items-center rounded-xl border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-700"
@@ -45,7 +38,7 @@ export default function SignInPage() {
               workspace.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-zinc-300">
-              Access is managed by approved facility administrators. If you do not have an account, request access to join your team.
+              Continue to your dashboard, calendar, attendance, and resident workflows.
             </p>
           </div>
 
@@ -55,8 +48,8 @@ export default function SignInPage() {
               <p className="mt-2 text-sm text-zinc-200">Facility data stays protected with role-based access controls.</p>
             </div>
             <div className="rounded-2xl border border-zinc-700 bg-zinc-900/90 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400">Approval Required</p>
-              <p className="mt-2 text-sm text-zinc-200">New users must request access before account activation.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400">Fast Access</p>
+              <p className="mt-2 text-sm text-zinc-200">Create an account directly and start using Actify immediately.</p>
             </div>
           </div>
 
@@ -81,14 +74,14 @@ export default function SignInPage() {
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">Welcome Back</p>
               <h2 className="mt-1 text-2xl font-bold text-zinc-950">Sign in</h2>
-              <p className="mt-2 text-sm text-zinc-600">Use your approved account credentials to continue.</p>
+              <p className="mt-2 text-sm text-zinc-600">Use your account credentials to continue.</p>
             </div>
 
-            {isClerkConfigured ? (
+            {isClerkConfigured && isClerkBackendConfigured ? (
               <SignIn
                 path="/sign-in"
                 routing="path"
-                signUpUrl="/request-access"
+                signUpUrl="/sign-up"
                 forceRedirectUrl="/app"
                 appearance={actifyClerkAppearance}
               />
@@ -98,13 +91,13 @@ export default function SignInPage() {
 
             <div className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Need an account?</p>
-              <p className="mt-1">New users must submit an access request for admin approval.</p>
+              <p className="mt-1">Create one now and start your workspace setup.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
-                  href="/request-access"
+                  href="/sign-up"
                   className="inline-flex items-center gap-2 rounded-xl border border-yellow-500 bg-yellow-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-400"
                 >
-                  Request Access
+                  Create Account
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
