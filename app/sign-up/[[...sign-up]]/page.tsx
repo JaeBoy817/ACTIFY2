@@ -34,9 +34,15 @@ function ClerkUnavailableCard() {
 
 export default async function SignUpPage() {
   if (isClerkBackendConfigured) {
-    const { userId } = await auth();
-    if (userId) {
-      redirect("/dashboard");
+    try {
+      const { userId } = await auth();
+      if (userId) {
+        redirect("/dashboard");
+      }
+    } catch (error) {
+      console.error("[sign-up] auth precheck failed; rendering sign-up page", {
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   }
 

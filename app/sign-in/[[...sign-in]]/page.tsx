@@ -84,9 +84,15 @@ function DevAuthDebugCard({ redirectUrl, authFlag }: { redirectUrl: string; auth
 
 export default async function SignInPage({ searchParams }: { searchParams?: SearchParams }) {
   if (isClerkBackendConfigured) {
-    const { userId } = await auth();
-    if (userId) {
-      redirect("/dashboard");
+    try {
+      const { userId } = await auth();
+      if (userId) {
+        redirect("/dashboard");
+      }
+    } catch (error) {
+      console.error("[sign-in] auth precheck failed; rendering sign-in page", {
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   }
 
