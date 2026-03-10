@@ -37,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ActifyThemeShell className="actify-editorial-shell min-h-screen md:flex">
-      <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-max md:shrink-0 md:p-3">
+      <div className="relative z-30 w-full p-3 md:sticky md:top-0 md:h-screen md:w-[88px] md:shrink-0 md:px-2 md:py-3">
         <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
       </div>
       <div className="min-w-0 flex-1 pb-8 pr-3">
