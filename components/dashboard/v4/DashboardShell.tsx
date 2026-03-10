@@ -13,7 +13,7 @@ import { DarkSkeletonLoader } from "@/components/dashboard/v4/DarkSkeletonLoader
 
 export function DashboardShell({ summary }: { summary: DashboardCommandCenterSummary }) {
   return (
-    <div className="relative isolate -mx-2 overflow-hidden rounded-[2rem] border border-zinc-900 bg-[#050507] px-3 pb-6 pt-4 md:px-5">
+    <div className="relative isolate overflow-hidden rounded-[2rem] border border-zinc-900 bg-[#050507] px-3 pb-6 pt-4 md:px-5">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1300px_480px_at_12%_-18%,rgba(16,185,129,0.22),transparent_60%),radial-gradient(900px_300px_at_88%_0%,rgba(16,185,129,0.12),transparent_62%),radial-gradient(700px_280px_at_80%_80%,rgba(16,185,129,0.08),transparent_70%)]" />
       <div className="relative z-10 space-y-4">
         <DashboardTopBar summary={summary} />
@@ -42,7 +42,7 @@ export function DashboardShell({ summary }: { summary: DashboardCommandCenterSum
 
 export function DashboardShellSkeleton() {
   return (
-    <div className="relative isolate -mx-2 overflow-hidden rounded-[2rem] border border-zinc-900 bg-[#050507] px-3 pb-6 pt-4 md:px-5">
+    <div className="relative isolate overflow-hidden rounded-[2rem] border border-zinc-900 bg-[#050507] px-3 pb-6 pt-4 md:px-5">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1300px_480px_at_12%_-18%,rgba(16,185,129,0.2),transparent_60%),radial-gradient(900px_320px_at_90%_0%,rgba(16,185,129,0.12),transparent_62%)]" />
       <div className="relative z-10 space-y-4">
         <DarkSkeletonLoader className="h-36 rounded-[1.8rem]" />

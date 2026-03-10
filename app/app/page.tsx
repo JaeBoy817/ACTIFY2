@@ -18,5 +18,9 @@ export default async function DashboardPage() {
     timeZone: context.timeZone
   });
 
-  return <DashboardShell summary={summary} />;
+  return (
+    <div className="-mx-2 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[#050507] px-2 pb-6 pt-4 md:-mx-3 md:px-3">
+      <DashboardShell summary={summary} />
+    </div>
+  );
 }
