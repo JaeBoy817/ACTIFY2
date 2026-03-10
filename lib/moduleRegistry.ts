@@ -10,7 +10,6 @@ import {
   FolderOpen,
   Handshake,
   Landmark,
-  Layers,
   LayoutDashboard,
   Users,
   UsersRound
@@ -69,19 +68,9 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     href: "/app/calendar",
     icon: CalendarDays,
     accentGradientClasses: MODULE_VISUAL_TOKENS.calendar.accentGradientClasses,
-    description: "Build schedules from templates and keep your day organized.",
+    description: "Schedule activities and reuse saved patterns in one workspace.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "calendar"
-  },
-  {
-    key: "templates",
-    title: "Templates",
-    href: "/app/templates",
-    icon: Layers,
-    accentGradientClasses: MODULE_VISUAL_TOKENS.templates.accentGradientClasses,
-    description: "Reuse your best activities in one click.",
-    sidebarGroup: "daily-workflow",
-    moduleFlagKey: "templates"
   },
   {
     key: "attendance",
@@ -179,7 +168,7 @@ export const SIDEBAR_MODULE_GROUPS: readonly SidebarModuleGroup[] = [
     id: "daily-workflow",
     label: "Daily Workflow",
     icon: FolderOpen,
-    moduleKeys: ["dashboard", "calendar", "templates", "attendance", "notes"]
+    moduleKeys: ["dashboard", "calendar", "attendance", "notes"]
   },
   {
     id: "residents-outcomes",

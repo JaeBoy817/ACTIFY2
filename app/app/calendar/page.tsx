@@ -6,25 +6,35 @@ import { prisma } from "@/lib/prisma";
 import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
 
 type CalendarView = "week" | "day" | "month" | "agenda";
-type CalendarSection = "schedule" | "create" | "templates" | "settings";
+type CalendarSection = "schedule" | "create" | "library" | "settings";
 
-function parseInitialView(raw?: string): CalendarView {
-  if (raw === "day") return "day";
-  if (raw === "month") return "month";
-  if (raw === "agenda") return "agenda";
-  return "week";
+function firstParam(value?: string | string[]) {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }
 
-function parseInitialSection(raw?: string): CalendarSection {
-  if (raw === "create") return "create";
-  if (raw === "templates") return "templates";
-  if (raw === "settings") return "settings";
+function parseInitialView(raw?: string | string[]): CalendarView {
+  const value = firstParam(raw);
+  if (value === "day") return "day";
+  if (value === "month") return "month";
+  if (value === "agenda") return "agenda";
+  return "month";
+}
+
+function parseInitialSection(raw?: string | string[]): CalendarSection {
+  const value = firstParam(raw);
+  if (value === "create") return "create";
+  if (value === "library" || value === "templates") return "library";
+  if (value === "settings") return "settings";
   return "schedule";
 }
 
-function parseInitialDate(searchParams?: { date?: string; month?: string }, timeZone?: string) {
-  const candidate = searchParams?.date ?? searchParams?.month;
-  if (candidate && /^\d{4}-\d{2}-\d{2}$/.test(candidate.trim())) {
+function parseInitialDate(
+  searchParams?: { date?: string | string[]; month?: string | string[] },
+  timeZone?: string
+) {
+  const candidate = firstParam(searchParams?.date) ?? firstParam(searchParams?.month);
+  if (typeof candidate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(candidate.trim())) {
     return candidate;
   }
 
@@ -57,7 +67,12 @@ function getCachedCalendarTemplatesByFacility(facilityId: string) {
 export default async function CalendarPage({
   searchParams
 }: {
-  searchParams?: { date?: string; month?: string; view?: string; section?: string };
+  searchParams?: {
+    date?: string | string[];
+    month?: string | string[];
+    view?: string | string[];
+    section?: string | string[];
+  };
 }) {
   const context = await requireModulePage("calendar");
   const timeZone = resolveTimeZone(context.timeZone);

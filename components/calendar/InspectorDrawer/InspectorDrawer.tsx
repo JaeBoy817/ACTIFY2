@@ -28,6 +28,7 @@ type InspectorDrawerProps = {
   onTemplateSearchChange: (value: string) => void;
   onScheduleFromTemplate: (templateId: string) => void;
   onSaveActivityDraft: (draft: ScheduleFormState) => Promise<void>;
+  layout?: "overlay" | "inline";
 };
 
 export function InspectorDrawer(props: InspectorDrawerProps) {
@@ -49,30 +50,43 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
     onCreateForDay,
     onTemplateSearchChange,
     onScheduleFromTemplate,
-    onSaveActivityDraft
+    onSaveActivityDraft,
+    layout = "overlay"
   } = props;
 
   return (
     <aside
       className={cn(
-        "fixed inset-y-4 right-4 z-40 w-[360px] max-w-[calc(100vw-1.5rem)] rounded-2xl border border-white/35 bg-white/65 p-3 shadow-xl shadow-black/20 backdrop-blur-md transition-transform duration-200 ease-out",
-        open ? "translate-x-0" : "translate-x-[115%]"
+        "rounded-3xl border border-cyan-400/20 bg-slate-950/88 p-4 shadow-[0_30px_72px_-48px_rgba(56,189,248,0.95)]",
+        layout === "overlay" &&
+          "fixed inset-y-4 right-4 z-40 w-[380px] max-w-[calc(100vw-1.5rem)] transition-transform duration-200 ease-out",
+        layout === "overlay" && (open ? "translate-x-0" : "translate-x-[115%]"),
+        layout === "inline" && "sticky top-[104px]"
       )}
-      aria-hidden={!open}
+      aria-hidden={layout === "overlay" ? !open : false}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground">Inspector</p>
-        <Button type="button" variant="outline" size="icon" onClick={onClose} aria-label="Close inspector drawer">
-          <X className="h-4 w-4" />
-        </Button>
+        <p className="text-sm font-semibold text-slate-100">Day Context</p>
+        {layout === "overlay" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={onClose}
+            aria-label="Close inspector drawer"
+            className="border-cyan-300/25 bg-slate-900/80 text-slate-100 hover:border-cyan-300/55 hover:bg-slate-800/95"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
 
-      <div className="mb-3 grid grid-cols-3 gap-1 rounded-xl border border-white/35 bg-white/65 p-1">
+      <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl border border-cyan-300/20 bg-slate-900/80 p-1">
         <Button
           type="button"
           size="sm"
           variant={tab === "day" ? "default" : "ghost"}
-          className="justify-start"
+          className={cn("justify-start text-slate-200", tab === "day" && "bg-cyan-500/80 text-white")}
           onClick={() => onTabChange("day")}
         >
           <CalendarDays className="h-3.5 w-3.5" />
@@ -82,7 +96,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
           type="button"
           size="sm"
           variant={tab === "activity" ? "default" : "ghost"}
-          className="justify-start"
+          className={cn("justify-start text-slate-200", tab === "activity" && "bg-cyan-500/80 text-white")}
           onClick={() => onTabChange("activity")}
         >
           <PencilLine className="h-3.5 w-3.5" />
@@ -91,16 +105,16 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
         <Button
           type="button"
           size="sm"
-          variant={tab === "templates" ? "default" : "ghost"}
-          className="justify-start"
-          onClick={() => onTabChange("templates")}
+          variant={tab === "library" ? "default" : "ghost"}
+          className={cn("justify-start text-slate-200", tab === "library" && "bg-cyan-500/80 text-white")}
+          onClick={() => onTabChange("library")}
         >
           <Library className="h-3.5 w-3.5" />
-          Templates
+          Library
         </Button>
       </div>
 
-      <div className="max-h-[calc(100vh-150px)] overflow-auto pr-1">
+      <div className="max-h-[calc(100vh-170px)] overflow-auto pr-1">
         {tab === "day" ? (
           <DayTab
             selectedDateKey={selectedDateKey}
@@ -120,7 +134,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
             onSave={onSaveActivityDraft}
           />
         ) : null}
-        {tab === "templates" ? (
+        {tab === "library" ? (
           <TemplatesTab
             templates={templates}
             searchValue={templateSearchValue}

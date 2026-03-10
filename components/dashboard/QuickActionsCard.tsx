@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { ClipboardCheck, ClipboardPenLine, FileText, Package, UserPlus, Users } from "lucide-react";
+import { ClipboardCheck, ClipboardPenLine, Library, Package, UserPlus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { GlassCard } from "@/components/glass/GlassCard";
@@ -25,10 +25,10 @@ const actions: QuickAction[] = [
     colorClass: "from-rose-500/30 to-orange-300/10 text-rose-700"
   },
   {
-    href: "/app/templates/new",
-    label: "New Template",
-    hint: "Save workflow shortcuts",
-    icon: FileText,
+    href: "/app/calendar?section=library",
+    label: "Saved Patterns",
+    hint: "Reuse schedule shortcuts",
+    icon: Library,
     colorClass: "from-violet-500/30 to-fuchsia-300/10 text-violet-700"
   },
   {
@@ -71,7 +71,7 @@ export function QuickActionsCard({
     if (!moduleFlags) return true;
     if (action.href.startsWith("/app/attendance")) return moduleFlags.attendanceTracking;
     if (action.href.startsWith("/app/notes")) return moduleFlags.notes;
-    if (action.href.startsWith("/app/templates")) return moduleFlags.templates;
+    if (action.href.startsWith("/app/calendar?section=library")) return moduleFlags.calendar;
     if (action.href.startsWith("/app/residents")) return true;
     if (action.href.startsWith("/app/volunteers")) return moduleFlags.volunteers;
     if (action.href.includes("/budget-stock")) return moduleFlags.inventory;

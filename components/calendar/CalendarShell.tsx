@@ -10,6 +10,7 @@ import {
   useState,
   type DragEvent
 } from "react";
+import { CalendarDays, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 
 import { CalendarCommandBar } from "@/components/calendar/CalendarCommandBar";
 import { InspectorDrawer } from "@/components/calendar/InspectorDrawer/InspectorDrawer";
@@ -47,14 +48,14 @@ import { useCalendarUIStore, type CalendarSubsection } from "@/store/useCalendar
 const WeekView = dynamic(
   () => import("@/components/calendar/views/WeekView").then((mod) => mod.WeekView),
   {
-    loading: () => <div className="h-[520px] rounded-2xl border border-white/30 bg-white/40" />
+    loading: () => <div className="h-[520px] rounded-3xl border border-cyan-400/20 bg-slate-950/75" />
   }
 );
 
 const DayView = dynamic(
   () => import("@/components/calendar/views/DayView").then((mod) => mod.DayView),
   {
-    loading: () => <div className="h-[520px] rounded-2xl border border-white/30 bg-white/40" />
+    loading: () => <div className="h-[520px] rounded-3xl border border-cyan-400/20 bg-slate-950/75" />
   }
 );
 
@@ -134,6 +135,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
   const drawerTab = useCalendarUIStore((state) => state.drawerTab);
   const setDrawerTab = useCalendarUIStore((state) => state.setDrawerTab);
   const templateDockOpen = useCalendarUIStore((state) => state.templateDockOpen);
+  const setTemplateDockOpen = useCalendarUIStore((state) => state.setTemplateDockOpen);
   const toggleTemplateDockOpen = useCalendarUIStore((state) => state.toggleTemplateDockOpen);
   const templateDockMobileOpen = useCalendarUIStore((state) => state.templateDockMobileOpen);
   const setTemplateDockMobileOpen = useCalendarUIStore((state) => state.setTemplateDockMobileOpen);
@@ -162,6 +164,17 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
       initialSection
     });
   }, [initialize, initialDateKey, initialSection, initialView]);
+
+  useEffect(() => {
+    if (initialSection === "library") {
+      setTemplateDockOpen(true);
+      setDrawerTab("library");
+      return;
+    }
+    if (initialSection === "settings") {
+      setSettingsOpen(true);
+    }
+  }, [initialSection, setDrawerTab, setTemplateDockOpen]);
 
   const effectiveAnchorDateKey = anchorDateKey || initialDateKey;
   const effectiveView = viewMode || initialView;
@@ -215,6 +228,48 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
   }, [events, selectedActivityId]);
 
   const rangeLabel = useMemo(() => formatRangeLabel(effectiveView, effectiveAnchorDateKey, timeZone), [effectiveAnchorDateKey, effectiveView, timeZone]);
+  const todayDateKey = useMemo(() => zonedDateKey(new Date(), timeZone), [timeZone]);
+  const todayEventsCount = useMemo(
+    () => visibleEvents.filter((event) => zonedDateKey(new Date(event.startAt), timeZone) === todayDateKey).length,
+    [todayDateKey, timeZone, visibleEvents]
+  );
+  const completedInView = useMemo(
+    () => visibleEvents.filter((event) => new Date(event.endAt).getTime() < Date.now()).length,
+    [visibleEvents]
+  );
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: "Scheduled In View",
+        value: visibleEvents.length,
+        hint: rangeLabel,
+        icon: CalendarDays,
+        tint: "from-cyan-500/20 to-indigo-500/10 text-cyan-100"
+      },
+      {
+        label: "Today",
+        value: todayEventsCount,
+        hint: "Activities scheduled today",
+        icon: Clock3,
+        tint: "from-indigo-500/20 to-violet-500/10 text-indigo-100"
+      },
+      {
+        label: "Completed",
+        value: completedInView,
+        hint: "Activities already held",
+        icon: CheckCircle2,
+        tint: "from-emerald-500/22 to-teal-500/10 text-emerald-100"
+      },
+      {
+        label: "Saved Patterns",
+        value: templates.length,
+        hint: "Reusable activity patterns",
+        icon: Sparkles,
+        tint: "from-fuchsia-500/18 to-cyan-500/10 text-fuchsia-100"
+      }
+    ],
+    [completedInView, rangeLabel, templates.length, todayEventsCount, visibleEvents.length]
+  );
 
   const openDraftModal = useCallback((draft: ScheduleFormState, mode: "create" | "edit") => {
     setScheduleModalMode(mode);
@@ -514,7 +569,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
   }, [templateCategory, templateSearch, templates]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <CalendarCommandBar
         rangeLabel={rangeLabel}
         viewMode={effectiveView}
@@ -525,125 +580,185 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
         onNext={() => shiftRange(1)}
         onToday={() => setAnchorDateKey(zonedDateKey(new Date(), timeZone))}
         onOpenQuickAdd={openQuickAdd}
-        onOpenTemplates={() => {
+        onOpenLibrary={() => {
           if (window.innerWidth < 1024) {
             setTemplateDockMobileOpen(true);
             return;
           }
-          toggleTemplateDockOpen();
+          setTemplateDockOpen(true);
+          setDrawerTab("library");
         }}
         onOpenFilters={() => setFiltersOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      <div className={cn("grid gap-4", templateDockOpen ? "lg:grid-cols-[320px_minmax(0,1fr)]" : "grid-cols-1")}>
-        <TemplateDock
-          open={templateDockOpen}
-          templates={templates}
-          searchValue={templateSearch}
-          selectedCategory={templateCategory}
-          favoriteTemplateIds={favoriteTemplateIds}
-          locationFilter={filters.location}
-          eventLocations={locationOptions}
-          categoryFilters={filters.categories}
-          showOnlyMine={filters.showOnlyMine}
-          onSearchChange={setTemplateSearch}
-          onSelectCategory={setTemplateCategory}
-          onToggleFavorite={(templateId) =>
-            setFavoriteTemplateIds((current) =>
-              current.includes(templateId) ? current.filter((value) => value !== templateId) : [...current, templateId]
-            )
-          }
-          onScheduleTemplate={openTemplateSchedule}
-          onDragTemplateStart={(templateId, event) => {
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("application/x-actify-calendar", JSON.stringify({ type: "template", id: templateId }));
-          }}
-          onLocationFilterChange={(location) => setFilters({ location })}
-          onToggleEventCategoryFilter={(category) =>
-            setFilters({
-              categories: filters.categories.includes(category)
-                ? filters.categories.filter((value) => value !== category)
-                : [...filters.categories, category]
-            })
-          }
-          onShowOnlyMineChange={(showOnlyMine) => setFilters({ showOnlyMine })}
-          onResetFilters={resetFilters}
-        />
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <article
+              key={card.label}
+              className="rounded-3xl border border-cyan-300/20 bg-slate-950/76 p-4 shadow-[0_24px_52px_-40px_rgba(56,189,248,0.95)]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.15em] text-slate-300/85">{card.label}</p>
+                  <p className="text-2xl font-semibold text-slate-100">{card.value}</p>
+                  <p className="text-xs text-slate-400">{card.hint}</p>
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-gradient-to-br",
+                    card.tint
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+              </div>
+            </article>
+          );
+        })}
+      </section>
 
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="h-[520px] rounded-2xl border border-white/25 bg-white/40" />
-          ) : null}
-          {!isLoading && effectiveView === "month" ? (
-            <MonthView
-              anchorDateKey={effectiveAnchorDateKey}
-              events={visibleEvents}
-              templateById={templateById}
-              timeZone={timeZone}
-              hoveredDropDay={hoveredDropDay}
-              onHoverDropDay={setHoveredDropDay}
-              onDropTemplateOrEvent={(dayKey, event) => void handleDropToDay(dayKey, 10 * 60, event)}
-              onOpenDay={(dayKey) => {
-                openForDay(dayKey);
-                setDrawerTab("day");
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <div className={cn("grid gap-4", templateDockOpen ? "lg:grid-cols-[320px_minmax(0,1fr)]" : "grid-cols-1")}>
+            <TemplateDock
+              open={templateDockOpen}
+              templates={templates}
+              searchValue={templateSearch}
+              selectedCategory={templateCategory}
+              favoriteTemplateIds={favoriteTemplateIds}
+              locationFilter={filters.location}
+              eventLocations={locationOptions}
+              categoryFilters={filters.categories}
+              showOnlyMine={filters.showOnlyMine}
+              onSearchChange={setTemplateSearch}
+              onSelectCategory={setTemplateCategory}
+              onToggleFavorite={(templateId) =>
+                setFavoriteTemplateIds((current) =>
+                  current.includes(templateId) ? current.filter((value) => value !== templateId) : [...current, templateId]
+                )
+              }
+              onScheduleTemplate={openTemplateSchedule}
+              onDragTemplateStart={(templateId, event) => {
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData("application/x-actify-calendar", JSON.stringify({ type: "template", id: templateId }));
               }}
-              onOpenEvent={openEvent}
+              onLocationFilterChange={(location) => setFilters({ location })}
+              onToggleEventCategoryFilter={(category) =>
+                setFilters({
+                  categories: filters.categories.includes(category)
+                    ? filters.categories.filter((value) => value !== category)
+                    : [...filters.categories, category]
+                })
+              }
+              onShowOnlyMineChange={(showOnlyMine) => setFilters({ showOnlyMine })}
+              onResetFilters={resetFilters}
             />
-          ) : null}
-          {!isLoading && effectiveView === "week" ? (
-            <WeekView
-              mode="week"
-              days={weekDays}
-              events={visibleEvents}
-              timeZone={timeZone}
-              hoveredDropDay={hoveredDropDay}
-              onHoverDropDay={setHoveredDropDay}
-              onDropToDay={(dayKey, minutes, event) => void handleDropToDay(dayKey, minutes, event)}
-              onOpenEvent={openEvent}
-              onOpenDay={openForDay}
-              onCreateAt={openCreateAt}
-            />
-          ) : null}
-          {!isLoading && effectiveView === "day" ? (
-            <DayView
-              day={dayDate}
-              events={visibleEvents}
-              timeZone={timeZone}
-              hoveredDropDay={hoveredDropDay}
-              onHoverDropDay={setHoveredDropDay}
-              onDropToDay={(dayKey, minutes, event) => void handleDropToDay(dayKey, minutes, event)}
-              onOpenEvent={openEvent}
-              onOpenDay={openForDay}
-              onCreateAt={openCreateAt}
-            />
-          ) : null}
-          {!isLoading && effectiveView === "agenda" ? (
-            <AgendaView events={visibleEvents} timeZone={timeZone} onOpenEvent={openEvent} onOpenDay={openForDay} />
-          ) : null}
+
+            <div className="space-y-3">
+              {isLoading ? (
+                <div className="h-[560px] rounded-3xl border border-cyan-400/20 bg-slate-950/76" />
+              ) : null}
+              {!isLoading && effectiveView === "month" ? (
+                <MonthView
+                  anchorDateKey={effectiveAnchorDateKey}
+                  events={visibleEvents}
+                  templateById={templateById}
+                  timeZone={timeZone}
+                  hoveredDropDay={hoveredDropDay}
+                  onHoverDropDay={setHoveredDropDay}
+                  onDropTemplateOrEvent={(dayKey, event) => void handleDropToDay(dayKey, 10 * 60, event)}
+                  onOpenDay={(dayKey) => {
+                    openForDay(dayKey);
+                    setDrawerTab("day");
+                  }}
+                  onOpenEvent={openEvent}
+                />
+              ) : null}
+              {!isLoading && effectiveView === "week" ? (
+                <WeekView
+                  mode="week"
+                  days={weekDays}
+                  events={visibleEvents}
+                  timeZone={timeZone}
+                  hoveredDropDay={hoveredDropDay}
+                  onHoverDropDay={setHoveredDropDay}
+                  onDropToDay={(dayKey, minutes, event) => void handleDropToDay(dayKey, minutes, event)}
+                  onOpenEvent={openEvent}
+                  onOpenDay={openForDay}
+                  onCreateAt={openCreateAt}
+                />
+              ) : null}
+              {!isLoading && effectiveView === "day" ? (
+                <DayView
+                  day={dayDate}
+                  events={visibleEvents}
+                  timeZone={timeZone}
+                  hoveredDropDay={hoveredDropDay}
+                  onHoverDropDay={setHoveredDropDay}
+                  onDropToDay={(dayKey, minutes, event) => void handleDropToDay(dayKey, minutes, event)}
+                  onOpenEvent={openEvent}
+                  onOpenDay={openForDay}
+                  onCreateAt={openCreateAt}
+                />
+              ) : null}
+              {!isLoading && effectiveView === "agenda" ? (
+                <AgendaView events={visibleEvents} timeZone={timeZone} onOpenEvent={openEvent} onOpenDay={openForDay} />
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden xl:block">
+          <InspectorDrawer
+            layout="inline"
+            open
+            tab={drawerTab}
+            selectedDateKey={selectedDateKey}
+            selectedActivity={selectedActivity}
+            selectedDayEvents={selectedDayEvents}
+            templates={templates}
+            templateSearchValue={templateSearch}
+            timeZone={timeZone}
+            saving={saving}
+            onClose={() => undefined}
+            onTabChange={setDrawerTab}
+            onEditActivity={openEventEditorModal}
+            onDeleteActivity={(activityId) => void deleteActivity(activityId)}
+            onOpenActivity={openEvent}
+            onCreateForDay={(dateKey) => openCreateAt(dateKey, 10 * 60)}
+            onTemplateSearchChange={setTemplateSearch}
+            onScheduleFromTemplate={openTemplateSchedule}
+            onSaveActivityDraft={saveActivityDraftFromInspector}
+          />
         </div>
       </div>
 
-      <InspectorDrawer
-        open={drawerOpen}
-        tab={drawerTab}
-        selectedDateKey={selectedDateKey}
-        selectedActivity={selectedActivity}
-        selectedDayEvents={selectedDayEvents}
-        templates={templates}
-        templateSearchValue={templateSearch}
-        timeZone={timeZone}
-        saving={saving}
-        onClose={closeDrawer}
-        onTabChange={setDrawerTab}
-        onEditActivity={openEventEditorModal}
-        onDeleteActivity={(activityId) => void deleteActivity(activityId)}
-        onOpenActivity={openEvent}
-        onCreateForDay={(dateKey) => openCreateAt(dateKey, 10 * 60)}
-        onTemplateSearchChange={setTemplateSearch}
-        onScheduleFromTemplate={openTemplateSchedule}
-        onSaveActivityDraft={saveActivityDraftFromInspector}
-      />
+      <div className="xl:hidden">
+        <InspectorDrawer
+          layout="overlay"
+          open={drawerOpen}
+          tab={drawerTab}
+          selectedDateKey={selectedDateKey}
+          selectedActivity={selectedActivity}
+          selectedDayEvents={selectedDayEvents}
+          templates={templates}
+          templateSearchValue={templateSearch}
+          timeZone={timeZone}
+          saving={saving}
+          onClose={closeDrawer}
+          onTabChange={setDrawerTab}
+          onEditActivity={openEventEditorModal}
+          onDeleteActivity={(activityId) => void deleteActivity(activityId)}
+          onOpenActivity={openEvent}
+          onCreateForDay={(dateKey) => openCreateAt(dateKey, 10 * 60)}
+          onTemplateSearchChange={setTemplateSearch}
+          onScheduleFromTemplate={openTemplateSchedule}
+          onSaveActivityDraft={saveActivityDraftFromInspector}
+        />
+      </div>
 
       <ScheduleModal
         open={scheduleModalOpen}
@@ -664,28 +779,33 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
       />
 
       <Dialog open={templateDockMobileOpen} onOpenChange={setTemplateDockMobileOpen}>
-        <DialogContent className="border-white/35 bg-white/95 sm:max-w-md">
+        <DialogContent className="border-cyan-300/25 bg-slate-950/96 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Template Dock</DialogTitle>
+            <DialogTitle className="text-slate-100">Saved Patterns</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] space-y-2 overflow-auto">
             {filteredTemplates.map((template) => (
               <button
                 key={`mobile-template-${template.id}`}
                 type="button"
-                className="w-full rounded-xl border border-white/35 bg-white/75 p-3 text-left"
+                className="w-full rounded-2xl border border-cyan-300/20 bg-slate-900/85 p-3 text-left"
                 onClick={() => {
                   setTemplateDockMobileOpen(false);
                   openTemplateSchedule(template.id);
                 }}
               >
-                <p className="text-sm font-semibold text-foreground">{template.title}</p>
-                <p className="text-xs text-foreground/65">
+                <p className="text-sm font-semibold text-slate-100">{template.title}</p>
+                <p className="text-xs text-slate-300/85">
                   {template.category} · {template.difficulty}
                 </p>
               </button>
             ))}
-            <Button type="button" variant="outline" onClick={() => setTemplateDockMobileOpen(false)} className="w-full">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTemplateDockMobileOpen(false)}
+              className="w-full border-cyan-300/25 bg-slate-900/85 text-slate-100"
+            >
               Close
             </Button>
           </div>
@@ -693,17 +813,17 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
       </Dialog>
 
       <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <DialogContent className="border-white/40 bg-white/95 sm:max-w-sm">
+        <DialogContent className="border-cyan-300/25 bg-slate-950/96 sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Filters</DialogTitle>
+            <DialogTitle className="text-slate-100">Filters</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <label className="space-y-1 text-sm">
+            <label className="space-y-1 text-sm text-slate-200">
               Location
               <select
                 value={filters.location}
                 onChange={(event) => setFilters({ location: event.target.value })}
-                className="h-10 w-full rounded-md border border-white/35 bg-white/80 px-3 text-sm"
+                className="h-10 w-full rounded-md border border-cyan-300/20 bg-slate-900/85 px-3 text-sm text-slate-100"
               >
                 <option value="ALL">All locations</option>
                 {locationOptions.map((location) => (
@@ -714,7 +834,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
               </select>
             </label>
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-foreground/60">Categories</p>
+              <p className="text-xs uppercase tracking-wide text-slate-300/75">Categories</p>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((category) => {
                   const active = filters.categories.includes(category);
@@ -724,6 +844,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
                       type="button"
                       size="sm"
                       variant={active ? "default" : "outline"}
+                      className={active ? "bg-cyan-500/85 text-white" : "border-cyan-300/25 bg-slate-900/80 text-slate-100"}
                       onClick={() =>
                         setFilters({
                           categories: active
@@ -738,7 +859,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
                 })}
               </div>
             </div>
-            <label className="inline-flex items-center gap-2 rounded-lg border border-white/35 bg-white/75 px-3 py-2 text-sm">
+            <label className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/20 bg-slate-900/75 px-3 py-2 text-sm text-slate-100">
               <input
                 type="checkbox"
                 checked={filters.showOnlyMine}
@@ -746,7 +867,7 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
               />
               Show only my events
             </label>
-            <Button type="button" variant="outline" onClick={resetFilters}>
+            <Button type="button" variant="outline" onClick={resetFilters} className="border-cyan-300/25 bg-slate-900/80 text-slate-100">
               Clear filters
             </Button>
           </div>
@@ -754,19 +875,24 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
       </Dialog>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="border-white/35 bg-white/95 sm:max-w-md">
+        <DialogContent className="border-cyan-300/25 bg-slate-950/96 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Calendar Settings</DialogTitle>
+            <DialogTitle className="text-slate-100">Calendar Settings</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 text-sm text-foreground/75">
+          <div className="space-y-2 text-sm text-slate-300/85">
             <p>This workspace keeps all existing scheduling behavior and data.</p>
-            <p>Use the command bar, template dock, and inspector to keep actions in one place.</p>
+            <p>Use the command bar, saved patterns library, and day context panel to keep actions in one place.</p>
           </div>
           <DialogFooter className="flex justify-between">
-            <Button type="button" variant="outline" onClick={toggleTemplateDockOpen}>
-              {templateDockOpen ? "Hide template dock" : "Show template dock"}
+            <Button
+              type="button"
+              variant="outline"
+              className="border-cyan-300/25 bg-slate-900/80 text-slate-100"
+              onClick={toggleTemplateDockOpen}
+            >
+              {templateDockOpen ? "Hide saved patterns" : "Show saved patterns"}
             </Button>
-            <Button type="button" onClick={() => setSettingsOpen(false)}>
+            <Button type="button" onClick={() => setSettingsOpen(false)} className="bg-gradient-to-r from-cyan-500/85 to-indigo-500/85 text-white">
               Done
             </Button>
           </DialogFooter>

@@ -54,16 +54,16 @@ export function AgendaView({ events, timeZone, onOpenEvent, onOpenDay }: AgendaV
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => (rows[index]?.kind === "header" ? 40 : 84),
+    estimateSize: (index) => (rows[index]?.kind === "header" ? 42 : 90),
     overscan: 14
   });
 
   return (
-    <section className="rounded-2xl border border-white/20 bg-white/45 p-2 shadow-lg shadow-black/10">
-      <div ref={scrollRef} className="max-h-[74vh] overflow-auto rounded-xl">
+    <section className="rounded-3xl border border-cyan-400/20 bg-slate-950/78 p-2 shadow-[0_30px_70px_-45px_rgba(56,189,248,0.9)]">
+      <div ref={scrollRef} className="max-h-[74vh] overflow-auto rounded-2xl">
         {rows.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/40 bg-white/55 p-6 text-center text-sm text-foreground/65">
-            No activities in this range. Use <span className="font-semibold">Quick Add</span> to schedule one.
+          <div className="rounded-2xl border border-dashed border-cyan-300/25 bg-slate-900/65 p-6 text-center text-sm text-slate-300">
+            No activities in this range. Use <span className="font-semibold">New Activity</span> to schedule one.
           </div>
         ) : (
           <div className="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -81,7 +81,7 @@ export function AgendaView({ events, timeZone, onOpenEvent, onOpenDay }: AgendaV
                     <Button
                       type="button"
                       variant="ghost"
-                      className="h-8 w-full justify-start rounded-lg bg-white/70 text-left text-xs font-semibold uppercase tracking-wide text-foreground/70"
+                      className="h-8 w-full justify-start rounded-xl bg-slate-900/80 text-left text-xs font-semibold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/12"
                       onClick={() => onOpenDay(dayKey)}
                     >
                       {row.label}
@@ -99,15 +99,15 @@ export function AgendaView({ events, timeZone, onOpenEvent, onOpenDay }: AgendaV
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                   onClick={() => onOpenEvent(calendarEvent.id)}
                 >
-                  <div className="rounded-xl border border-white/35 bg-white/82 p-3 text-left shadow-sm">
+                  <div className="rounded-2xl border border-cyan-300/20 bg-slate-900/82 p-3 text-left">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-semibold text-foreground">{calendarEvent.title}</p>
-                      <Badge variant="outline" className="bg-white/75 text-[10px]">
+                      <p className="truncate text-sm font-semibold text-slate-100">{calendarEvent.title}</p>
+                      <Badge variant="outline" className="border-cyan-300/25 bg-cyan-500/10 text-[10px] text-cyan-100">
                         {new Date(calendarEvent.endAt).getTime() < Date.now() ? "Completed" : "Scheduled"}
                       </Badge>
                     </div>
-                    <p className="text-xs text-foreground/70">{formatEventTimeRange(calendarEvent, timeZone)}</p>
-                    <p className="text-xs text-foreground/60">{calendarEvent.location}</p>
+                    <p className="text-xs text-slate-300/90">{formatEventTimeRange(calendarEvent, timeZone)}</p>
+                    <p className="text-xs text-slate-400">{calendarEvent.location}</p>
                   </div>
                 </button>
               );

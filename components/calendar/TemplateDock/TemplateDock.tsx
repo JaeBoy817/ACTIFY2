@@ -2,8 +2,7 @@
 
 import { useDeferredValue, useMemo, useRef, useState, type DragEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Filter, GripVertical, Layers, Search, Star, StarOff } from "lucide-react";
-import Link from "next/link";
+import { Filter, GripVertical, Library, Search, Sparkles, Star, StarOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,7 @@ type TemplateDockProps = {
   onResetFilters: () => void;
 };
 
-type DockTab = "templates" | "filters";
+type DockTab = "library" | "filters";
 
 export function TemplateDock(props: TemplateDockProps) {
   const {
@@ -55,7 +54,7 @@ export function TemplateDock(props: TemplateDockProps) {
     onResetFilters
   } = props;
 
-  const [activeTab, setActiveTab] = useState<DockTab>("templates");
+  const [activeTab, setActiveTab] = useState<DockTab>("library");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const deferredSearch = useDeferredValue(searchValue.trim().toLowerCase());
 
@@ -75,45 +74,63 @@ export function TemplateDock(props: TemplateDockProps) {
   const virtualizer = useVirtualizer({
     count: filteredTemplates.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 104,
+    estimateSize: () => 110,
     overscan: 10
   });
 
   if (!open) return null;
 
   return (
-    <aside className="hidden rounded-2xl border border-white/20 bg-white/45 p-3 shadow-lg shadow-black/10 lg:block">
+    <aside className="hidden rounded-3xl border border-cyan-400/20 bg-slate-950/78 p-4 shadow-[0_24px_70px_-45px_rgba(56,189,248,0.9)] lg:block">
       <div className="flex items-center gap-2">
-        <Layers className="h-4 w-4 text-actifyBlue" />
-        <h2 className="text-sm font-semibold text-foreground">Template Dock</h2>
-        <Badge variant="outline" className="bg-white/75">
+        <Library className="h-4 w-4 text-cyan-300" />
+        <h2 className="text-sm font-semibold text-slate-100">Saved Patterns</h2>
+        <Badge variant="outline" className="border-cyan-300/30 bg-cyan-500/10 text-cyan-100">
           {filteredTemplates.length}
         </Badge>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button type="button" size="sm" variant={activeTab === "templates" ? "default" : "outline"} onClick={() => setActiveTab("templates")}>
-          Templates
+        <Button
+          type="button"
+          size="sm"
+          variant={activeTab === "library" ? "default" : "outline"}
+          className={activeTab === "library" ? "bg-gradient-to-r from-cyan-500/80 to-indigo-500/80 text-white" : "border-cyan-300/25 bg-slate-900/80 text-slate-200"}
+          onClick={() => setActiveTab("library")}
+        >
+          Library
         </Button>
-        <Button type="button" size="sm" variant={activeTab === "filters" ? "default" : "outline"} onClick={() => setActiveTab("filters")}>
+        <Button
+          type="button"
+          size="sm"
+          variant={activeTab === "filters" ? "default" : "outline"}
+          className={activeTab === "filters" ? "bg-gradient-to-r from-cyan-500/80 to-indigo-500/80 text-white" : "border-cyan-300/25 bg-slate-900/80 text-slate-200"}
+          onClick={() => setActiveTab("filters")}
+        >
           Filters
         </Button>
       </div>
 
-      {activeTab === "templates" ? (
+      {activeTab === "library" ? (
         <div className="mt-3 space-y-3">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/60" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-100/70" />
             <Input
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search templates"
-              className="bg-white/80 pl-9"
+              placeholder="Search saved patterns"
+              className="border-cyan-300/20 bg-slate-900/85 pl-9 text-slate-100 placeholder:text-slate-400"
             />
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            <Button type="button" size="sm" variant={selectedCategory === "ALL" ? "default" : "outline"} onClick={() => onSelectCategory("ALL")}>
+            <Button
+              type="button"
+              size="sm"
+              variant={selectedCategory === "ALL" ? "default" : "outline"}
+              className={selectedCategory === "ALL" ? "bg-cyan-500/80 text-white" : "border-cyan-300/25 bg-slate-900/75 text-slate-200"}
+              onClick={() => onSelectCategory("ALL")}
+            >
               All
             </Button>
             {templateCategories.map((category) => (
@@ -122,6 +139,7 @@ export function TemplateDock(props: TemplateDockProps) {
                 type="button"
                 size="sm"
                 variant={selectedCategory === category ? "default" : "outline"}
+                className={selectedCategory === category ? "bg-cyan-500/80 text-white" : "border-cyan-300/25 bg-slate-900/75 text-slate-200"}
                 onClick={() => onSelectCategory(category)}
               >
                 {category}
@@ -131,8 +149,8 @@ export function TemplateDock(props: TemplateDockProps) {
 
           <div ref={scrollRef} className="max-h-[62vh] overflow-y-auto pr-1">
             {filteredTemplates.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-white/40 bg-white/55 px-3 py-4 text-xs text-foreground/65">
-                No templates found. Try another keyword.
+              <p className="rounded-2xl border border-dashed border-cyan-300/25 bg-slate-900/60 px-3 py-4 text-xs text-slate-300">
+                No saved patterns found. Try another keyword.
               </p>
             ) : (
               <div className="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -149,19 +167,25 @@ export function TemplateDock(props: TemplateDockProps) {
                       <div
                         draggable
                         onDragStart={(event) => onDragTemplateStart(template.id, event)}
-                        className="rounded-xl border border-white/35 bg-white/82 p-3 text-left"
+                        className="rounded-2xl border border-cyan-300/20 bg-slate-900/86 p-3 text-left"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-semibold text-foreground">{template.title}</p>
-                            <p className="text-xs text-foreground/65">
+                            <p className="text-sm font-semibold text-slate-100">{template.title}</p>
+                            <p className="text-xs text-slate-300/90">
                               {template.category} · {template.difficulty}
                             </p>
                           </div>
-                          <GripVertical className="h-4 w-4 text-foreground/55" />
+                          <GripVertical className="h-4 w-4 text-cyan-200/70" />
                         </div>
                         <div className="mt-2 flex items-center gap-1">
-                          <Button type="button" size="sm" variant="outline" onClick={() => onScheduleTemplate(template.id)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-gradient-to-r from-cyan-500/85 to-indigo-500/85 text-white"
+                            onClick={() => onScheduleTemplate(template.id)}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
                             Schedule
                           </Button>
                           <Button
@@ -170,8 +194,9 @@ export function TemplateDock(props: TemplateDockProps) {
                             variant="ghost"
                             onClick={() => onToggleFavorite(template.id)}
                             aria-label={isFavorite ? "Remove favorite" : "Mark favorite"}
+                            className="text-slate-200 hover:bg-cyan-500/15"
                           >
-                            {isFavorite ? <Star className="h-4 w-4 text-amber-500" /> : <StarOff className="h-4 w-4 text-foreground/60" />}
+                            {isFavorite ? <Star className="h-4 w-4 text-amber-400" /> : <StarOff className="h-4 w-4 text-slate-400" />}
                           </Button>
                         </div>
                       </div>
@@ -181,22 +206,18 @@ export function TemplateDock(props: TemplateDockProps) {
               </div>
             )}
           </div>
-
-          <Button asChild type="button" variant="outline" size="sm" className="w-full">
-            <Link href="/app/templates">Manage Templates</Link>
-          </Button>
         </div>
       ) : (
         <div className="mt-3 space-y-3">
           <label className="space-y-1 text-sm">
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground/70">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-300">
               <Filter className="h-3.5 w-3.5" />
               Location
             </span>
             <select
               value={locationFilter}
               onChange={(event) => onLocationFilterChange(event.target.value)}
-              className="h-10 w-full rounded-md border border-white/35 bg-white/80 px-3 text-sm"
+              className="h-10 w-full rounded-md border border-cyan-300/20 bg-slate-900/80 px-3 text-sm text-slate-100"
             >
               <option value="ALL">All locations</option>
               {eventLocations.map((location) => (
@@ -208,7 +229,7 @@ export function TemplateDock(props: TemplateDockProps) {
           </label>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/65">Categories</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-300/90">Categories</p>
             <div className="flex flex-wrap gap-1.5">
               {templateCategories.map((category) => {
                 const active = categoryFilters.includes(category);
@@ -218,6 +239,7 @@ export function TemplateDock(props: TemplateDockProps) {
                     type="button"
                     size="sm"
                     variant={active ? "default" : "outline"}
+                    className={active ? "bg-cyan-500/85 text-white" : "border-cyan-300/25 bg-slate-900/75 text-slate-200"}
                     onClick={() => onToggleEventCategoryFilter(category)}
                   >
                     {category}
@@ -227,12 +249,12 @@ export function TemplateDock(props: TemplateDockProps) {
             </div>
           </div>
 
-          <label className="inline-flex items-center gap-2 rounded-lg border border-white/35 bg-white/70 px-3 py-2 text-sm">
+          <label className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/25 bg-slate-900/70 px-3 py-2 text-sm text-slate-200">
             <input type="checkbox" checked={showOnlyMine} onChange={(event) => onShowOnlyMineChange(event.target.checked)} />
             Show only my events
           </label>
 
-          <Button type="button" variant="outline" onClick={onResetFilters}>
+          <Button type="button" variant="outline" onClick={onResetFilters} className="border-cyan-300/25 bg-slate-900/80 text-slate-100">
             Clear filters
           </Button>
         </div>

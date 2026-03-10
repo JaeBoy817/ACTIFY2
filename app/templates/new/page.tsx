@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function TemplatesNewRedirectPage() {
-  redirect("/app/templates/new");
+  redirect("/app/calendar?section=library");
 }
-

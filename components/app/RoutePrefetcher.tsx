@@ -9,7 +9,6 @@ const prefetchTargets = [
   "/app/calendar",
   "/app/attendance",
   "/app/notes",
-  "/app/templates",
   "/app/care-plans",
   "/app/analytics",
   "/app/volunteers",

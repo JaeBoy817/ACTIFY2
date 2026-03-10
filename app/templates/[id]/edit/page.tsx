@@ -7,6 +7,5 @@ export default function TemplatesEditRedirectPage({
     id: string;
   };
 }) {
-  redirect(`/app/templates/${encodeURIComponent(params.id)}/edit`);
+  redirect(`/app/calendar?section=library&patternId=${encodeURIComponent(params.id)}`);
 }
-

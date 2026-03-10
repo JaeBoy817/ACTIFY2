@@ -1,6 +1,6 @@
 export type CalendarViewMode = "month" | "week" | "day" | "agenda";
 
-export type CalendarDrawerTab = "day" | "activity" | "templates";
+export type CalendarDrawerTab = "day" | "activity" | "library";
 
 export type CalendarTemplateLite = {
   id: string;

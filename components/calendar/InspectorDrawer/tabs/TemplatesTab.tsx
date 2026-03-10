@@ -1,8 +1,7 @@
 "use client";
 
 import { useDeferredValue, useMemo } from "react";
-import { Search } from "lucide-react";
-import Link from "next/link";
+import { Search, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,33 +30,40 @@ export function TemplatesTab({ templates, searchValue, onSearchChange, onSchedul
   return (
     <section className="space-y-3">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/60" />
-        <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search templates" className="bg-white/80 pl-9" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-100/70" />
+        <Input
+          value={searchValue}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search saved patterns"
+          className="border-cyan-300/25 bg-slate-900/80 pl-9 text-slate-100 placeholder:text-slate-400"
+        />
       </div>
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/35 bg-white/60 px-3 py-4 text-sm text-foreground/65">
-            No templates found.
+          <p className="rounded-xl border border-dashed border-cyan-300/25 bg-slate-900/55 px-3 py-4 text-sm text-slate-300">
+            No saved patterns found.
           </p>
         ) : (
           filtered.map((template) => (
-            <div key={template.id} className="rounded-xl border border-white/35 bg-white/75 p-3">
-              <p className="text-sm font-semibold text-foreground">{template.title}</p>
-              <p className="text-xs text-foreground/65">
+            <div key={template.id} className="rounded-2xl border border-cyan-300/20 bg-slate-900/80 p-3">
+              <p className="text-sm font-semibold text-slate-100">{template.title}</p>
+              <p className="text-xs text-slate-300/85">
                 {template.category} · {template.difficulty}
               </p>
-              <Button type="button" size="sm" className="mt-2" onClick={() => onScheduleTemplate(template.id)}>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 bg-gradient-to-r from-cyan-500/85 to-indigo-500/85 text-white"
+                onClick={() => onScheduleTemplate(template.id)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
                 Schedule
               </Button>
             </div>
           ))
         )}
       </div>
-
-      <Button asChild type="button" variant="outline" className="w-full">
-        <Link href="/app/templates">Manage templates</Link>
-      </Button>
     </section>
   );
 }

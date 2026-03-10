@@ -35,7 +35,17 @@ function getMonthDays(anchorDateKey: string, timeZone: string) {
 }
 
 export function MonthView(props: MonthViewProps) {
-  const { anchorDateKey, events, templateById, timeZone, hoveredDropDay, onHoverDropDay, onDropTemplateOrEvent, onOpenDay, onOpenEvent } = props;
+  const {
+    anchorDateKey,
+    events,
+    templateById,
+    timeZone,
+    hoveredDropDay,
+    onHoverDropDay,
+    onDropTemplateOrEvent,
+    onOpenDay,
+    onOpenEvent
+  } = props;
   const { monthStart, rows } = useMemo(() => getMonthDays(anchorDateKey, timeZone), [anchorDateKey, timeZone]);
 
   const eventsByDay = useMemo(() => {
@@ -59,10 +69,10 @@ export function MonthView(props: MonthViewProps) {
   }
 
   return (
-    <section className="rounded-2xl border border-white/20 bg-white/45 shadow-lg shadow-black/10">
-      <div className="grid grid-cols-7 gap-2 border-b border-white/30 p-3 text-center text-xs font-semibold text-foreground/70">
+    <section className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950/78 shadow-[0_30px_70px_-45px_rgba(56,189,248,0.9)]">
+      <div className="grid grid-cols-7 gap-2 border-b border-cyan-300/18 p-3 text-center text-xs font-semibold text-slate-300">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
-          <div key={weekday} className="rounded-lg border border-white/30 bg-white/50 px-2 py-1.5">
+          <div key={weekday} className="rounded-xl border border-cyan-300/18 bg-slate-900/76 px-2 py-2">
             {weekday}
           </div>
         ))}
@@ -92,16 +102,16 @@ export function MonthView(props: MonthViewProps) {
               onDrop={(event) => onDropTemplateOrEvent(dayKey, event)}
               aria-label={`Open ${format(day, "EEEE MMMM d")} details`}
               className={cn(
-                "min-h-[136px] rounded-xl border p-2 text-left transition",
-                "border-white/30 bg-white/65 shadow-sm",
-                outsideMonth && "opacity-60",
-                today && "ring-2 ring-actifyBlue/35",
-                hoveredDropDay === dayKey && "bg-actifyMint/18"
+                "min-h-[154px] rounded-2xl border p-2 text-left transition",
+                "border-cyan-300/18 bg-slate-900/82",
+                outsideMonth && "opacity-55",
+                today && "ring-2 ring-cyan-400/60",
+                hoveredDropDay === dayKey && "bg-cyan-500/10"
               )}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">{format(day, "d")}</p>
-                <Badge variant="outline" className="bg-white/75 text-[10px]">
+                <p className="text-sm font-semibold text-slate-100">{format(day, "d")}</p>
+                <Badge variant="outline" className="border-cyan-300/25 bg-cyan-500/12 px-1.5 text-[10px] text-cyan-100">
                   {dayEvents.length} {dayEvents.length === 1 ? "activity" : "activities"}
                 </Badge>
               </div>
@@ -114,10 +124,10 @@ export function MonthView(props: MonthViewProps) {
                       event.stopPropagation();
                       onOpenEvent(calendarEvent.id);
                     }}
-                    className="block w-full rounded-lg border border-white/35 bg-white/80 px-2 py-1 text-left"
+                    className="block w-full rounded-xl border border-cyan-300/18 bg-slate-800/80 px-2 py-1.5 text-left"
                   >
-                    <p className="truncate text-xs font-medium text-foreground">{calendarEvent.title}</p>
-                    <p className="truncate text-[11px] text-foreground/65">{formatEventTimeRange(calendarEvent, timeZone)}</p>
+                    <p className="truncate text-xs font-medium text-slate-100">{calendarEvent.title}</p>
+                    <p className="truncate text-[11px] text-slate-300/90">{formatEventTimeRange(calendarEvent, timeZone)}</p>
                   </button>
                 ))}
                 {overflow > 0 ? (
@@ -125,7 +135,7 @@ export function MonthView(props: MonthViewProps) {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-xs"
+                    className="h-7 px-2 text-xs text-cyan-100 hover:bg-cyan-500/15"
                     onClick={(event) => {
                       event.stopPropagation();
                       onOpenDay(dayKey);
@@ -135,7 +145,7 @@ export function MonthView(props: MonthViewProps) {
                   </Button>
                 ) : null}
                 {dayEvents.length > 0 ? (
-                  <p className="truncate text-[10px] uppercase tracking-wide text-foreground/55">
+                  <p className="truncate text-[10px] uppercase tracking-wide text-slate-400">
                     {eventCategory(dayEvents[0], templateById)}
                   </p>
                 ) : null}

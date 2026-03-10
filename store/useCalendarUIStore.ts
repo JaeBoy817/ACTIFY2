@@ -3,8 +3,8 @@
 import { create } from "zustand";
 
 export type CalendarViewMode = "week" | "day" | "month" | "agenda";
-export type CalendarSubsection = "schedule" | "create" | "templates" | "settings";
-export type CalendarDrawerTab = "day" | "activity" | "templates";
+export type CalendarSubsection = "schedule" | "create" | "library" | "settings";
+export type CalendarDrawerTab = "day" | "activity" | "library";
 
 type CalendarFilterState = {
   location: string;
@@ -57,7 +57,7 @@ export const useCalendarUIStore = create<CalendarUIState>((set, get) => ({
   selectedActivityId: null,
   drawerOpen: false,
   drawerTab: "day",
-  templateDockOpen: true,
+  templateDockOpen: false,
   templateDockMobileOpen: false,
   commandSearch: "",
   templateSearch: "",
