@@ -1,63 +1,95 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search, Settings, Sparkles, type LucideIcon } from "lucide-react";
-import Link from "next/link";
+import { Search, Sparkles, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
-import { GlassSidebar } from "@/components/glass/GlassSidebar";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { MobileSidebarDrawer } from "@/components/app/sidepanel/MobileSidebarDrawer";
+import { SidebarExpandedPanel } from "@/components/app/sidepanel/SidebarExpandedPanel";
+import { SidebarRail } from "@/components/app/sidepanel/SidebarRail";
+import { SidebarShell } from "@/components/app/sidepanel/SidebarShell";
+import type { SidebarGroup } from "@/components/app/sidepanel/types";
 import { Input } from "@/components/ui/input";
-import { asModuleFlags, type ModuleFlags } from "@/lib/module-flags";
+import { asModuleFlags } from "@/lib/module-flags";
 import { getModuleRegistryItem, SIDEBAR_MODULE_GROUPS } from "@/lib/moduleRegistry";
-import { cn } from "@/lib/utils";
 
-type SidebarLink = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  accentGradientClasses: string;
-  moduleKey?: keyof ModuleFlags["modules"];
-};
+const SIDEBAR_EXPANDED_STORAGE_KEY = "actify.sidebar.expanded";
 
-type SidebarGroup = {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  links: SidebarLink[];
-};
+function withOneToOneLink(groups: SidebarGroup[]) {
+  return groups.map((group) => {
+    if (group.id !== "daily-workflow") return group;
 
-const groupedLinks: SidebarGroup[] = SIDEBAR_MODULE_GROUPS.map((group) => ({
-  id: group.id,
-  label: group.label,
-  icon: group.icon,
-  links: group.moduleKeys
-    .map((moduleKey) => getModuleRegistryItem(moduleKey))
-    .filter((module): module is NonNullable<typeof module> => Boolean(module))
-    .map((module) => ({
-      href: module.href,
-      label: module.title,
-      icon: module.icon,
-      accentGradientClasses: module.accentGradientClasses,
-      moduleKey: module.moduleFlagKey
-    }))
-}));
+    const notesIndex = group.links.findIndex((link) => link.href === "/app/notes");
+    if (notesIndex === -1) return group;
 
-const settingsLink = { href: "/app/settings", label: "Settings", icon: Settings };
+    const existing = group.links.some((link) => link.href === "/app/notes/one-to-one");
+    if (existing) return group;
+
+    const nextLinks = [...group.links];
+    nextLinks.splice(notesIndex + 1, 0, {
+      href: "/app/notes/one-to-one",
+      label: "1:1 Notes",
+      icon: UserRound,
+      accentGradientClasses: "from-orange-300 to-orange-500 text-zinc-950",
+      moduleKey: "notes"
+    });
+
+    return { ...group, links: nextLinks };
+  });
+}
+
+const groupedLinks: SidebarGroup[] = withOneToOneLink(
+  SIDEBAR_MODULE_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    icon: group.icon,
+    links: group.moduleKeys
+      .map((moduleKey) => getModuleRegistryItem(moduleKey))
+      .filter((module): module is NonNullable<typeof module> => Boolean(module))
+      .map((module) => ({
+        href: module.href,
+        label: module.title,
+        icon: module.icon,
+        accentGradientClasses: module.accentGradientClasses,
+        moduleKey: module.moduleFlagKey
+      }))
+  }))
+);
 
 export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   const pathname = usePathname();
   const router = useRouter();
   const moduleFlags = useMemo(() => asModuleFlags(moduleFlagsRaw), [moduleFlagsRaw]);
+
   const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
+    if (saved === "0" || saved === "1") {
+      setExpanded(saved === "1");
+    }
+  }, []);
+
+  const setExpandedPersisted = useCallback((next: boolean) => {
+    setExpanded(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, next ? "1" : "0");
+    }
+  }, []);
 
   const visibleGroups = useMemo(
     () =>
       groupedLinks
         .map((group) => ({
           ...group,
-          links: group.links.filter((link) => (link.moduleKey ? moduleFlags.modules[link.moduleKey] : true))
+          links: group.links.filter((link) => {
+            if (!link.moduleKey) return true;
+            const moduleKey = link.moduleKey as keyof typeof moduleFlags.modules;
+            return moduleFlags.modules[moduleKey];
+          })
         }))
         .filter((group) => group.links.length > 0),
     [moduleFlags]
@@ -74,23 +106,6 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
       .filter((group) => group.links.length > 0);
   }, [search, visibleGroups]);
 
-  const activeGroupId = useMemo(
-    () =>
-      visibleGroups.find((group) =>
-        group.links.some((link) =>
-          link.href === "/app" ? pathname === "/app" : pathname === link.href || pathname.startsWith(`${link.href}/`)
-        )
-      )?.id ?? "",
-    [pathname, visibleGroups]
-  );
-
-  const [openGroup, setOpenGroup] = useState<string>(activeGroupId || visibleGroups[0]?.id || "");
-
-  useEffect(() => {
-    if (!activeGroupId) return;
-    setOpenGroup(activeGroupId);
-  }, [activeGroupId]);
-
   const prefetchRoute = useCallback(
     (href: string) => {
       router.prefetch(href);
@@ -105,122 +120,77 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
     window.sessionStorage.setItem("actify-nav-start", String(performance.now()));
   }, []);
 
+  const handleNavigate = useCallback(
+    (href: string) => {
+      markNavigationStart(href);
+      setMobileOpen(false);
+    },
+    [markNavigationStart]
+  );
+
+  const hasMatches = filteredGroups.some((group) => group.links.length > 0);
+
   return (
-    <GlassSidebar variant="dense" className="actify-shell-solid flex h-full w-full flex-col gap-3 overflow-hidden">
-      <div className="space-y-3">
-        <Link href="/app" className="inline-flex items-center">
-          <ActifyLogo variant="lockup" size={34} />
-        </Link>
+    <div className="h-full">
+      <MobileSidebarDrawer
+        open={mobileOpen}
+        onOpenChange={setMobileOpen}
+        groups={filteredGroups}
+        pathname={pathname}
+        onPrefetch={prefetchRoute}
+        onNavigate={handleNavigate}
+      />
 
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new Event("actify:open-command-palette"))}
-          className="inline-flex w-full items-center justify-between rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.11em] text-zinc-100 transition hover:bg-zinc-800"
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-            Command Center
-          </span>
-          <span className="rounded border border-zinc-600 bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-200">⌘K</span>
-        </button>
-
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/55" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Find module"
-            className="h-10 pl-9"
+      <div className="hidden h-full md:block">
+        <SidebarShell expanded={expanded}>
+          <SidebarRail
+            groups={visibleGroups}
+            pathname={pathname}
+            expanded={expanded}
+            onToggle={() => setExpandedPersisted(!expanded)}
+            onPrefetch={prefetchRoute}
+            onNavigate={handleNavigate}
           />
-        </div>
-      </div>
-
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-        <Accordion type="single" collapsible value={openGroup} onValueChange={setOpenGroup} className="space-y-2">
-          {filteredGroups.map((group) => {
-            const GroupIcon = group.icon;
-            const groupActive = group.links.some((link) =>
-              link.href === "/app" ? pathname === "/app" : pathname === link.href || pathname.startsWith(`${link.href}/`)
-            );
-            return (
-              <AccordionItem key={group.id} value={group.id} className="border-none">
-                <AccordionTrigger
-                  className={cn(
-                    "sidebar-group-trigger rounded-xl border px-3 py-2 text-sm hover:no-underline",
-                    groupActive
-                      ? "actify-nav-active border-zinc-700 bg-zinc-900 text-zinc-100"
-                      : "border-zinc-700/70 bg-zinc-900/70 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                  )}
+          <SidebarExpandedPanel
+            groups={filteredGroups}
+            pathname={pathname}
+            visible={expanded}
+            onPrefetch={prefetchRoute}
+            onNavigate={handleNavigate}
+            topContent={
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new Event("actify:open-command-palette"))}
+                  className="inline-flex h-10 w-full items-center justify-between rounded-full border border-emerald-700/70 bg-[#123428] px-3 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-[#184132] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/45"
                 >
-                  <span className="flex items-center gap-2">
-                    <GroupIcon className="actify-nav-icon h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{group.label}</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+                    Command
                   </span>
-                </AccordionTrigger>
-                <AccordionContent className="sidebar-dropdown-content pb-1 pt-1">
-                  <div className="space-y-1">
-                    {group.links.map((link) => {
-                      const active =
-                        link.href === "/app"
-                          ? pathname === "/app"
-                          : pathname === link.href || pathname.startsWith(`${link.href}/`);
-                      const Icon = link.icon;
-                      return (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          onMouseEnter={() => prefetchRoute(link.href)}
-                          onFocus={() => prefetchRoute(link.href)}
-                          onTouchStart={() => prefetchRoute(link.href)}
-                          onClick={() => markNavigationStart(link.href)}
-                          className={cn(
-                            "sidebar-nav-link actify-nav-item ml-1.5 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            active
-                              ? "actify-nav-active border-zinc-700 bg-zinc-800 text-zinc-100"
-                              : "border-transparent bg-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-zinc-100"
-                          )}
-                        >
-                          <span className={cn("inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br", link.accentGradientClasses)}>
-                            <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0 text-zinc-950" aria-hidden="true" />
-                          </span>
-                          <span>{link.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
-        </Accordion>
-      </nav>
-
-      <div className="border-t border-zinc-700 pt-3">
-        {(() => {
-          const Icon = settingsLink.icon;
-          const active = pathname === settingsLink.href || pathname.startsWith(`${settingsLink.href}/`);
-          return (
-            <Link
-              href={settingsLink.href}
-              onMouseEnter={() => prefetchRoute(settingsLink.href)}
-              onFocus={() => prefetchRoute(settingsLink.href)}
-              onTouchStart={() => prefetchRoute(settingsLink.href)}
-              onClick={() => markNavigationStart(settingsLink.href)}
-              className={cn(
-                "sidebar-nav-link actify-nav-item flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active
-                  ? "actify-nav-active border-zinc-700 bg-zinc-800 text-zinc-100"
-                  : "border-transparent bg-transparent text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-zinc-100"
-              )}
-            >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-slate-300 to-slate-500">
-                <Icon className="actify-nav-icon h-3.5 w-3.5 shrink-0 text-zinc-950" aria-hidden="true" />
-              </span>
-              <span>{settingsLink.label}</span>
-            </Link>
-          );
-        })()}
+                  <span className="rounded-md border border-emerald-700/80 bg-[#0f2a20] px-1.5 py-0.5 text-[10px]">
+                    ⌘K
+                  </span>
+                </button>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-100/60" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Find module"
+                    className="h-10 rounded-full border-emerald-700/70 bg-[#0f2a20] pl-9 text-emerald-50 placeholder:text-emerald-100/55"
+                  />
+                </div>
+                {search && !hasMatches ? (
+                  <p className="rounded-lg border border-dashed border-emerald-700/70 bg-[#0f2a20] px-3 py-2 text-xs text-emerald-100/75">
+                    No modules match “{search}”.
+                  </p>
+                ) : null}
+              </div>
+            }
+          />
+        </SidebarShell>
       </div>
-    </GlassSidebar>
+    </div>
   );
 }
