@@ -64,6 +64,19 @@ function getCachedCalendarTemplatesByFacility(facilityId: string) {
   );
 }
 
+async function getCalendarTemplatesSafe(facilityId: string) {
+  try {
+    return await getCachedCalendarTemplatesByFacility(facilityId)();
+  } catch (error) {
+    // Keep calendar available even if template data is temporarily unavailable.
+    console.error("[calendar] failed to load templates", {
+      facilityId,
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+    return [];
+  }
+}
+
 export default async function CalendarPage({
   searchParams
 }: {
@@ -80,7 +93,7 @@ export default async function CalendarPage({
   const initialSection = parseInitialSection(searchParams?.section);
   const initialDateKey = parseInitialDate(searchParams, timeZone);
 
-  const templates = await getCachedCalendarTemplatesByFacility(context.facilityId)();
+  const templates = await getCalendarTemplatesSafe(context.facilityId);
 
   return (
     <CalendarShell
