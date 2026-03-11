@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { MobileSidebarDrawer } from "@/components/app/sidepanel/MobileSidebarDrawer";
@@ -10,46 +9,21 @@ import type { SidebarGroup } from "@/components/app/sidepanel/types";
 import { asModuleFlags } from "@/lib/module-flags";
 import { getModuleRegistryItem, SIDEBAR_MODULE_GROUPS } from "@/lib/moduleRegistry";
 
-function withOneToOneLink(groups: SidebarGroup[]) {
-  return groups.map((group) => {
-    if (group.id !== "daily-workflow") return group;
-
-    const notesIndex = group.links.findIndex((link) => link.href === "/app/notes");
-    if (notesIndex === -1) return group;
-
-    const existing = group.links.some((link) => link.href === "/app/notes/one-to-one");
-    if (existing) return group;
-
-    const nextLinks = [...group.links];
-    nextLinks.splice(notesIndex + 1, 0, {
-      href: "/app/notes/one-to-one",
-      label: "1:1 Notes",
-      icon: UserRound,
-      accentGradientClasses: "from-orange-300 to-orange-500 text-zinc-950",
-      moduleKey: "notes"
-    });
-
-    return { ...group, links: nextLinks };
-  });
-}
-
-const groupedLinks: SidebarGroup[] = withOneToOneLink(
-  SIDEBAR_MODULE_GROUPS.map((group) => ({
-    id: group.id,
-    label: group.label,
-    icon: group.icon,
-    links: group.moduleKeys
-      .map((moduleKey) => getModuleRegistryItem(moduleKey))
-      .filter((module): module is NonNullable<typeof module> => Boolean(module))
-      .map((module) => ({
-        href: module.href,
-        label: module.title,
-        icon: module.icon,
-        accentGradientClasses: module.accentGradientClasses,
-        moduleKey: module.moduleFlagKey
-      }))
-  }))
-);
+const groupedLinks: SidebarGroup[] = SIDEBAR_MODULE_GROUPS.map((group) => ({
+  id: group.id,
+  label: group.label,
+  icon: group.icon,
+  links: group.moduleKeys
+    .map((moduleKey) => getModuleRegistryItem(moduleKey))
+    .filter((module): module is NonNullable<typeof module> => Boolean(module))
+    .map((module) => ({
+      href: module.href,
+      label: module.title,
+      icon: module.icon,
+      accentGradientClasses: module.accentGradientClasses,
+      moduleKey: module.moduleFlagKey
+    }))
+}));
 
 export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   const pathname = usePathname();

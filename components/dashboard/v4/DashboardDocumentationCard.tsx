@@ -14,19 +14,19 @@ export function DashboardDocumentationCard({ summary }: { summary: DashboardComm
   return (
     <GlowCard
       title="Documentation Progress"
-      subtitle="Notes + 1:1"
+      subtitle="Progress + 1:1"
       accent="rose"
       icon={<FileCheck2 className="h-4 w-4" />}
-      action={<PremiumPillButton label="Open Notes" href="/app/notes" tone="violet" />}
+      action={<PremiumPillButton label="Open Documentation" href="/app/documentation" tone="violet" />}
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-[#2c395b] bg-[#111a2e] p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">Notes completed today</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">Progress notes today</p>
           <p className="mt-1 text-3xl font-black text-white">{summary.notesHub.notesCreatedToday}</p>
           <p className="mt-1 text-xs text-[#8ea3cc]">Includes group and resident entries.</p>
         </div>
         <div className="rounded-2xl border border-[#2c395b] bg-[#111a2e] p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">1:1 notes completed</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">1:1 entries today</p>
           <p className="mt-1 text-3xl font-black text-white">{summary.notesHub.oneToOneCreatedToday}</p>
           <p className="mt-1 text-xs text-[#8ea3cc]">Logged today for resident follow-up.</p>
         </div>
@@ -49,9 +49,9 @@ export function DashboardDocumentationCard({ summary }: { summary: DashboardComm
       </div>
 
       <div className="space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">Recent note activity</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#91a7d2]">Recent documentation activity</p>
         {summary.notesHub.recentActivity.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[#36486f] bg-[#10192d] px-3 py-2 text-xs text-[#8fa4cd]">No recent note activity.</p>
+          <p className="rounded-xl border border-dashed border-[#36486f] bg-[#10192d] px-3 py-2 text-xs text-[#8fa4cd]">No recent documentation activity.</p>
         ) : null}
         {summary.notesHub.recentActivity.slice(0, 5).map((note) => (
           <Link
@@ -66,9 +66,9 @@ export function DashboardDocumentationCard({ summary }: { summary: DashboardComm
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <PremiumPillButton label="New Note" href="/app/notes/new?type=general" tone="violet" />
-        <PremiumPillButton label="New 1:1 Note" href="/app/notes/new?type=1on1" tone="orange" />
-        <PremiumPillButton label="Continue Draft" href="/app/notes" tone="neutral" />
+        <PremiumPillButton label="New Progress Note" href="/app/documentation/progress-notes/new" tone="violet" />
+        <PremiumPillButton label="New 1:1 Note" href="/app/documentation/one-to-one/new" tone="orange" />
+        <PremiumPillButton label="Continue Draft" href="/app/documentation" tone="neutral" />
       </div>
 
       <div className="inline-flex items-center gap-2 text-xs text-[#8ca3ce]">

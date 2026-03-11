@@ -420,7 +420,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
             <Link href={`/app/residents/${resident.id}/care-plan`}>Care Plan</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={`/app/notes/one-to-one?residentId=${resident.id}`}>1:1 Notes</Link>
+            <Link href={`/app/documentation/one-to-one?residentId=${resident.id}`}>1:1 Documentation</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/app/residents">Back to residents</Link>
@@ -447,7 +447,7 @@ export default async function ResidentProfilePage({ params }: { params: { id: st
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Notes (recent)</CardTitle>
+            <CardTitle className="text-base">Documentation (recent)</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{resident.progressNotes.length}</p>

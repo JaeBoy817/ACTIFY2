@@ -74,7 +74,7 @@ function toFocusState(snapshot: OneOnOneQueueSnapshotDTO): FocusState {
       reason: item.reason,
       lastOneOnOneAt: item.lastOneOnOneAt,
       daysSinceLastOneOnOne: item.daysSinceLastOneOnOne,
-      href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(item.residentId)}`
+      href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(item.residentId)}`
     }))
   };
 }

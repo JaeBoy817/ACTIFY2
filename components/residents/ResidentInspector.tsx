@@ -115,9 +115,9 @@ export function ResidentInspector({
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button asChild size="sm" className="justify-start shadow-lg shadow-actifyBlue/25">
-            <Link href={`/app/notes/new?residentId=${resident.id}&type=ONE_TO_ONE`}>
+            <Link href={`/app/documentation/one-to-one/new?residentId=${resident.id}`}>
               <HeartHandshake className="mr-1 h-4 w-4" />
-              Start 1:1 Note
+              Start 1:1 Documentation
             </Link>
           </Button>
           <Button
@@ -214,11 +214,11 @@ export function ResidentInspector({
         </AccordionItem>
 
         <AccordionItem value="notes" className="border-b border-white/20">
-          <AccordionTrigger>Recent Notes</AccordionTrigger>
+          <AccordionTrigger>Recent Documentation</AccordionTrigger>
           <AccordionContent>
             <div className="rounded-xl bg-white/45 p-3 shadow-lg shadow-black/10">
               {resident.recentNotes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent 1:1 notes yet.</p>
+                <p className="text-sm text-muted-foreground">No recent 1:1 documentation yet.</p>
               ) : (
                 <ul className="space-y-2">
                   {resident.recentNotes.map((note) => (
@@ -230,8 +230,8 @@ export function ResidentInspector({
                 </ul>
               )}
               <div className="mt-3 text-xs text-foreground/65">
-                <Link href={`/app/notes/one-to-one?residentId=${resident.id}`} className="underline underline-offset-2">
-                  View all notes
+                <Link href={`/app/documentation/one-to-one?residentId=${resident.id}`} className="underline underline-offset-2">
+                  View all documentation
                 </Link>
               </div>
             </div>

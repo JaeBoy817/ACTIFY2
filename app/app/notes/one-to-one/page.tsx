@@ -7,7 +7,7 @@ export default function OneToOneNotesRedirectPage({
 }) {
   const residentId = searchParams?.residentId?.trim();
   if (residentId) {
-    redirect(`/app/notes/new?type=1on1&residentId=${encodeURIComponent(residentId)}`);
+    redirect(`/app/documentation/one-to-one/new?residentId=${encodeURIComponent(residentId)}`);
   }
-  redirect("/app/notes/new?type=1on1");
+  redirect("/app/documentation/one-to-one");
 }

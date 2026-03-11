@@ -95,7 +95,7 @@ const roleLabels: Record<Role, string> = {
 const sectionLabels: Record<string, string> = {
   calendarEdit: "Edit calendar",
   attendanceEdit: "Edit attendance",
-  notesCreateEdit: "Create/Edit notes",
+  notesCreateEdit: "Create/Edit documentation",
   reportsExport: "Export reports",
   inventoryManage: "Manage inventory",
   prizeCartManage: "Manage prize cart",
@@ -123,8 +123,8 @@ const notificationTriggerOptions = [
 
 const moduleLabels: Record<string, string> = {
   attendanceTracking: "Attendance Tracking",
-  oneToOneNotes: "1:1 Notes",
-  groupNotes: "Group Notes",
+  oneToOneNotes: "1:1 Documentation",
+  groupNotes: "Progress Documentation",
   carePlanBuilder: "Care Plan Builder",
   activityTemplatesLibrary: "Templates Library",
   residentCouncil: "Resident Council",
@@ -136,7 +136,7 @@ const moduleLabels: Record<string, string> = {
   documentESignature: "Document eSignature",
   templates: "Templates (Legacy)",
   calendar: "Calendar (Legacy)",
-  notes: "Notes (Legacy)",
+  notes: "Documentation",
   reports: "Reports",
   goals: "Goals",
   analytics: "Analytics",
@@ -1372,7 +1372,7 @@ export function SettingsTabs({
                         onCheckedChange={(value) => rolesForm.setValue("roles.enabled", value, { shouldValidate: true })}
                       />
                       <GlassToggleRow
-                        label="Notes require supervisor approval"
+                        label="Documentation requires supervisor approval"
                         checked={rolesForm.watch("roles.notesRequireSupervisorApproval")}
                         onCheckedChange={(value) => rolesForm.setValue("roles.notesRequireSupervisorApproval", value, { shouldValidate: true })}
                       />
@@ -2340,7 +2340,7 @@ export function SettingsTabs({
                         <SelectContent>
                           <SelectItem value="DASHBOARD">Dashboard</SelectItem>
                           <SelectItem value="CALENDAR">Calendar</SelectItem>
-                          <SelectItem value="NOTES">Notes</SelectItem>
+                          <SelectItem value="NOTES">Documentation</SelectItem>
                           <SelectItem value="RESIDENTS">Residents</SelectItem>
                         </SelectContent>
                       </Select>

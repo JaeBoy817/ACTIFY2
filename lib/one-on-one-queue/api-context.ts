@@ -64,7 +64,7 @@ export async function requireOneOnOneQueueApiContext(options: { writable?: boole
 
   const modules = asModuleFlags(user.facility.moduleFlags);
   if (!modules.modules.notes) {
-    throw new OneOnOneQueueApiError("Notes module is disabled.", 403);
+    throw new OneOnOneQueueApiError("Documentation module is disabled.", 403);
   }
 
   if (options.writable && !canWrite(user.role as Role)) {

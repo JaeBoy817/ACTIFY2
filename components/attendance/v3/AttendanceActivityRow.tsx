@@ -93,7 +93,7 @@ export function AttendanceActivityRow({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <AttendanceQuickActionButton label="Continue" onClick={onContinue} tone="blue" />
         <AttendanceQuickActionButton label="View Residents" icon={UsersRound} onClick={onOpen} tone="sky" />
-        <AttendanceQuickActionButton label="Add Note" icon={NotebookPen} href={`/app/notes?activityId=${encodeURIComponent(session.id)}`} tone="violet" />
+        <AttendanceQuickActionButton label="Add Documentation" icon={NotebookPen} href={`/app/documentation/progress-notes/new?activityId=${encodeURIComponent(session.id)}`} tone="violet" />
         <Link
           href={`/app/calendar/${encodeURIComponent(session.id)}/attendance`}
           className="inline-flex h-8 items-center rounded-full border border-[#334d78] bg-[#12213c] px-3 text-xs font-semibold text-[#d9e7ff] transition hover:border-[#4e6fa7] hover:bg-[#16294a]"
@@ -104,4 +104,3 @@ export function AttendanceActivityRow({
     </article>
   );
 }
-

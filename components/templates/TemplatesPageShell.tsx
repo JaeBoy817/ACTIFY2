@@ -227,7 +227,7 @@ export function TemplatesPageShell({
   }
 
   function handleUseNoteTemplate(templateId: string) {
-    router.push(`/app/notes/new?templateId=${encodeURIComponent(templateId)}`);
+    router.push(`/app/documentation/progress-notes/new?templateId=${encodeURIComponent(templateId)}`);
   }
 
   function handleEditTemplate(template: UnifiedTemplate) {

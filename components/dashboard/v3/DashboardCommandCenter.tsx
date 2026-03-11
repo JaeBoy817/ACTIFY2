@@ -419,10 +419,10 @@ export function DashboardCommandCenter({ summary }: DashboardCommandCenterProps)
             </div>
           </DashboardCard>
 
-          <DashboardCard title="Notes + Documentation Hub" subtitle="Still missing" icon={<FileText className="h-5 w-5" />}>
+          <DashboardCard title="Documentation Hub" subtitle="Still missing" icon={<FileText className="h-5 w-5" />}>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-[#111722] p-3">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Notes today</p>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">Progress notes today</p>
                 <p className="mt-1 text-2xl font-black text-white">{summary.notesHub.notesCreatedToday}</p>
               </div>
               <div className="rounded-xl bg-[#111722] p-3">
@@ -451,9 +451,9 @@ export function DashboardCommandCenter({ summary }: DashboardCommandCenterProps)
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/app/notes/new?type=general" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">New Note</Link>
-              <Link href="/app/notes/new?type=1on1" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">New 1:1 Note</Link>
-              <Link href="/app/notes" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">View Recent Notes</Link>
+              <Link href="/app/documentation/progress-notes/new" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">New Progress Note</Link>
+              <Link href="/app/documentation/one-to-one/new" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">New 1:1 Note</Link>
+              <Link href="/app/documentation" className="rounded-lg border border-white/15 bg-[#1b2433] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/30">View Documentation</Link>
             </div>
           </DashboardCard>
         </div>

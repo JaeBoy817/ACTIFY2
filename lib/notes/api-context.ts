@@ -36,7 +36,7 @@ export function asNotesApiErrorResponse(error: unknown) {
     return Response.json({ error: error.message }, { status: 400 });
   }
 
-  return Response.json({ error: "Unexpected notes API error." }, { status: 500 });
+  return Response.json({ error: "Unexpected documentation API error." }, { status: 500 });
 }
 
 export async function requireNotesApiContext(options: { writable?: boolean } = {}) {
@@ -63,11 +63,11 @@ export async function requireNotesApiContext(options: { writable?: boolean } = {
 
   const modules = asModuleFlags(user.facility.moduleFlags).modules;
   if (!modules.notes) {
-    throw new NotesApiError("Notes module is disabled.", 403);
+    throw new NotesApiError("Documentation module is disabled.", 403);
   }
 
   if (options.writable && !canWrite(user.role as Role)) {
-    throw new NotesApiError("Read-only role cannot modify notes.", 403);
+    throw new NotesApiError("Read-only role cannot modify documentation entries.", 403);
   }
 
   return {

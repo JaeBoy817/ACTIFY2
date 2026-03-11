@@ -60,7 +60,7 @@ export function DashboardResidentFollowUpCard({ summary }: { summary: DashboardC
 
       <div className="inline-flex items-center gap-2 text-xs text-[#90a7d1]">
         <UsersRound className="h-3.5 w-3.5" />
-        Aggregated from Notes, 1:1, Attendance, Care Plan, and Residents modules.
+        Aggregated from Documentation, 1:1, Attendance, Care Plan, and Residents modules.
       </div>
     </GlowCard>
   );

@@ -19,16 +19,28 @@ type QuickAction = {
 
 const BASE_ACTIONS: QuickAction[] = [
   {
-    id: "new-note",
-    title: "New Note",
-    href: "/app/notes/new?type=general",
-    subtitle: "Start documentation quickly"
+    id: "new-progress-note",
+    title: "New Progress Note",
+    href: "/app/documentation/progress-notes/new",
+    subtitle: "Start group or activity documentation quickly"
   },
   {
     id: "new-1to1",
     title: "New 1:1 Note",
-    href: "/app/notes/new?type=1on1",
+    href: "/app/documentation/one-to-one/new",
     subtitle: "Resident-focused note flow"
+  },
+  {
+    id: "new-uda",
+    title: "New UDA",
+    href: "/app/documentation/uda/new",
+    subtitle: "Structured resident assessment update"
+  },
+  {
+    id: "new-mds",
+    title: "New MDS Entry",
+    href: "/app/documentation/mds/new",
+    subtitle: "Deadline-aware MDS support charting"
   },
   {
     id: "attendance-quick",
@@ -102,7 +114,7 @@ export function GlobalCommandPalette() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Jump to module, note, or workflow"
+              placeholder="Jump to module, documentation, or workflow"
               className="bg-white/80 pl-9"
             />
           </div>

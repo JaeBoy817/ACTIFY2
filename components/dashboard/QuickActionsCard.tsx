@@ -18,9 +18,9 @@ type QuickAction = {
 
 const actions: QuickAction[] = [
   {
-    href: "/app/notes/new?type=general",
-    label: "New Note",
-    hint: "General documentation",
+    href: "/app/documentation/progress-notes/new",
+    label: "New Progress Note",
+    hint: "Chart activity progress quickly",
     icon: ClipboardPenLine,
     colorClass: "from-rose-500/30 to-orange-300/10 text-rose-700"
   },
@@ -70,7 +70,7 @@ export function QuickActionsCard({
   const visibleActions = actions.filter((action) => {
     if (!moduleFlags) return true;
     if (action.href.startsWith("/app/attendance")) return moduleFlags.attendanceTracking;
-    if (action.href.startsWith("/app/notes")) return moduleFlags.notes;
+    if (action.href.startsWith("/app/documentation")) return moduleFlags.notes;
     if (action.href.startsWith("/app/calendar?section=library")) return moduleFlags.calendar;
     if (action.href.startsWith("/app/residents")) return true;
     if (action.href.startsWith("/app/volunteers")) return moduleFlags.volunteers;

@@ -238,7 +238,7 @@ export function toCsv(data: Awaited<ReturnType<typeof getMonthlyReportData>>) {
     ["Attendance", "Refused", data.attendanceCounts.refused].join(","),
     ["Attendance", "No Show", data.attendanceCounts.noShow].join(","),
     ["Attendance", "Engagement Avg", data.engagementAvg].join(","),
-    ["Notes", "1:1 Totals", data.oneToOneTotal].join(",")
+    ["Documentation", "1:1 Totals", data.oneToOneTotal].join(",")
   ];
 
   data.topPrograms.forEach((program) => {

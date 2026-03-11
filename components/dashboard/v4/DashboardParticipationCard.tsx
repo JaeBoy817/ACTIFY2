@@ -82,7 +82,7 @@ export function DashboardParticipationCard({ summary }: { summary: DashboardComm
 
       <div className="inline-flex items-center gap-2 text-xs text-[#8ca3cf]">
         <BarChart3 className="h-3.5 w-3.5" />
-        Daily, weekly, and monthly trend signal from attendance + notes modules.
+        Daily, weekly, and monthly trend signal from attendance + documentation modules.
       </div>
     </GlowCard>
   );

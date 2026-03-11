@@ -387,7 +387,7 @@ export function OneOnOneSpotlight({
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Button asChild size="sm" variant="outline" className="bg-white/80">
-                          <Link href={`/app/notes/one-to-one?residentId=${encodeURIComponent(item.residentId)}`}>
+                          <Link href={`/app/documentation/one-to-one?residentId=${encodeURIComponent(item.residentId)}`}>
                             <CalendarClock className="mr-1 h-3.5 w-3.5" />
                             Log 1:1 Note
                           </Link>
@@ -484,7 +484,7 @@ export function OneOnOneSpotlight({
                       </div>
                     </div>
                     <Button asChild size="sm" variant="outline" className="bg-white/80">
-                      <Link href={`/app/notes/one-to-one?residentId=${encodeURIComponent(resident.residentId)}`}>
+                      <Link href={`/app/documentation/one-to-one?residentId=${encodeURIComponent(resident.residentId)}`}>
                         Log 1:1 Note
                       </Link>
                     </Button>

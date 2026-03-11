@@ -84,11 +84,11 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
   },
   {
     key: "notes",
-    title: "Notes",
-    href: "/app/notes",
+    title: "Documentation",
+    href: "/app/documentation",
     icon: ClipboardPenLine,
     accentGradientClasses: MODULE_VISUAL_TOKENS.notes.accentGradientClasses,
-    description: "Capture progress and 1:1 outcomes quickly.",
+    description: "Chart progress, 1:1 visits, UDA, and MDS in one workflow.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "notes"
   },

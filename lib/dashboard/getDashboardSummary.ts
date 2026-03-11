@@ -403,7 +403,7 @@ async function computeDashboardSummary(args: {
       label: "1:1 Due Today",
       value: oneOnOneDueCount,
       helper: `${oneOnOneSnapshot.coverage.residentsWithOneOnOneThisMonth}/${oneOnOneSnapshot.coverage.totalEligibleResidents} this month`,
-      href: "/app/notes/new?type=1on1",
+      href: "/app/documentation/one-to-one",
       icon: "oneOnOne"
     },
     {
@@ -441,7 +441,7 @@ async function computeDashboardSummary(args: {
     reason: item.reason,
     lastOneOnOneAt: item.lastOneOnOneAt ? item.lastOneOnOneAt.toISOString() : null,
     daysSinceLastOneOnOne: item.daysSinceLastOneOnOne,
-    href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(item.residentId)}`
+    href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(item.residentId)}`
   }));
 
   const recentFeed = [
@@ -450,7 +450,7 @@ async function computeDashboardSummary(args: {
       title: `${note.type === "ONE_TO_ONE" ? "1:1" : "General"} note · ${note.resident.firstName} ${note.resident.lastName}`,
       subtitle: `Room ${note.resident.room} · ${note.createdByUser.name}`,
       timestamp: note.createdAt,
-      href: `/app/notes/new?noteId=${encodeURIComponent(note.id)}&type=${note.type === "ONE_TO_ONE" ? "1on1" : "general"}`,
+      href: `/app/documentation/${note.type === "ONE_TO_ONE" ? "one-to-one" : "progress-notes"}/${encodeURIComponent(note.id)}`,
       type: "note" as const
     })),
     ...recentResidents.map((resident) => ({
@@ -490,7 +490,7 @@ async function computeDashboardSummary(args: {
       id: "one-on-one-due",
       title: "1:1 notes due",
       detail: `${oneOnOneDueCount} residents remain in today’s 1:1 queue.`,
-      href: "/app/notes/new?type=1on1",
+      href: "/app/documentation/one-to-one",
       tone: oneOnOneDueCount >= 6 ? "warn" : "default"
     });
   }
@@ -668,7 +668,7 @@ async function computeDashboardSummary(args: {
     recentItems: recentFeed,
     alerts: alerts.slice(0, 6),
     links: {
-      focusViewAll: "/app/notes/new?type=1on1",
+      focusViewAll: "/app/documentation/one-to-one",
       activityFeed: "/app/dashboard/activity-feed",
       dashboardSettings: "/app/dashboard/settings"
     },

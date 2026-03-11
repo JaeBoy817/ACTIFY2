@@ -115,9 +115,9 @@ function toCardState(snapshot: OneOnOneQueueSnapshotDTO): OneToOneCardState {
       reason: item.reason,
       lastOneOnOneAt: item.lastOneOnOneAt,
       daysSinceLastOneOnOne: item.daysSinceLastOneOnOne,
-      href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(item.residentId)}`
+      href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(item.residentId)}`
     })),
-    viewAllHref: "/app/notes/new?type=1on1"
+    viewAllHref: "/app/documentation/one-to-one"
   };
 }
 
@@ -249,14 +249,13 @@ export function OneToOneNotesCardClient({
     }
 
     const params = new URLSearchParams({
-      type: "1on1",
       residentId: selectedResidentId
     });
     if (selectedTemplateId) {
       params.set("templateId", selectedTemplateId);
     }
 
-    router.push(`/app/notes/new?${params.toString()}`);
+    router.push(`/app/documentation/one-to-one/new?${params.toString()}`);
     setQuickAddOpen(false);
   };
 
@@ -402,7 +401,7 @@ export function OneToOneNotesCardClient({
         </div>
         {recentNotes.length > visibleRecentNotes.length ? (
           <div className="mt-2">
-            <Link href="/app/notes?type=1on1" className="inline-flex items-center gap-1 text-xs font-medium text-actifyBlue hover:underline">
+            <Link href="/app/documentation/one-to-one" className="inline-flex items-center gap-1 text-xs font-medium text-actifyBlue hover:underline">
               View more recent 1:1 notes
               <ArrowRight className="h-3 w-3" />
             </Link>

@@ -545,7 +545,7 @@ async function computeDashboardHomeSummary(args: {
       id: "one-on-one-due",
       title: "1:1 notes due",
       detail: `${oneOnOneDueCount} residents remain in today’s queue.`,
-      href: "/app/notes/new?type=1on1",
+      href: "/app/documentation/one-to-one/new",
       tone: oneOnOneDueCount >= 6 ? "warn" : "default"
     });
   }
@@ -689,9 +689,9 @@ async function computeDashboardHomeSummary(args: {
         reason: item.reason,
         lastOneOnOneAt: item.lastOneOnOneAt ? item.lastOneOnOneAt.toISOString() : null,
         daysSinceLastOneOnOne: item.daysSinceLastOneOnOne,
-        href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(item.residentId)}`
+        href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(item.residentId)}`
       })),
-      viewAllHref: "/app/notes/new?type=1on1"
+      viewAllHref: "/app/documentation/one-to-one"
     },
     recentOneToOneNotes: recentOneOnOneNotes.map((note) => ({
       id: note.id,
@@ -705,8 +705,8 @@ async function computeDashboardHomeSummary(args: {
         minute: "2-digit"
       }),
       createdBy: note.createdByUser.name,
-      continueHref: `/app/notes/new?type=1on1&noteId=${encodeURIComponent(note.id)}`,
-      duplicateHref: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(note.resident.id)}`
+      continueHref: `/app/documentation/one-to-one/${encodeURIComponent(note.id)}`,
+      duplicateHref: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(note.resident.id)}`
     })),
     alerts: {
       count: alerts.length,

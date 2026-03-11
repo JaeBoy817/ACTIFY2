@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function NotesNewRedirectPage() {
-  redirect("/app/notes/new");
+  redirect("/app/documentation/progress-notes/new");
 }

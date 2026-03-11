@@ -288,8 +288,8 @@ function pickMoraleCard(now: Date) {
 function defaultQuickActions(): DashboardQuickAction[] {
   return [
     { id: "new-activity", label: "New Activity", href: "/app/calendar?quickAdd=1", module: "calendar" },
-    { id: "new-note", label: "New Note", href: "/app/notes/new?type=general", module: "notes" },
-    { id: "new-1on1", label: "New 1:1 Note", href: "/app/notes/new?type=1on1", module: "oneToOne" },
+    { id: "new-note", label: "New Progress Note", href: "/app/documentation/progress-notes/new", module: "notes" },
+    { id: "new-1on1", label: "New 1:1 Note", href: "/app/documentation/one-to-one/new", module: "oneToOne" },
     { id: "attendance", label: "Add Attendance", href: "/app/attendance", module: "attendance" },
     { id: "search-resident", label: "Search Resident", href: "/app/residents", module: "residents" },
     { id: "update-care-plan", label: "Update Care Plan", href: "/app/care-plans", module: "carePlan" },
@@ -332,7 +332,7 @@ function buildFallbackCommandCenterSummary(args: {
     attendanceHref: "/app/attendance",
     openHref: item.href,
     editHref: item.href,
-    noteHref: "/app/notes/new?type=general"
+    noteHref: "/app/documentation/progress-notes/new"
   }));
 
   const missions: DashboardMission[] = [
@@ -349,7 +349,7 @@ function buildFallbackCommandCenterSummary(args: {
       id: "mission-1on1",
       title: "Complete 1:1 Visits",
       detail: `${args.base.oneToOne.missingThisMonthCount} residents still need 1:1 this month.`,
-      href: "/app/notes/new?type=1on1",
+      href: "/app/documentation/one-to-one/new",
       ctaLabel: "Start 1:1",
       module: "oneToOne",
       priority: args.base.oneToOne.missingThisMonthCount > 0 ? "high" : "low"
@@ -358,7 +358,7 @@ function buildFallbackCommandCenterSummary(args: {
       id: "mission-documentation",
       title: "Document Today’s Activities",
       detail: `${Math.max(0, args.base.dailyMetrics.programsToday - args.base.dailyMetrics.attendanceSessionsCompleted)} sessions still need documentation.`,
-      href: "/app/notes/new?type=general",
+      href: "/app/documentation/progress-notes/new",
       ctaLabel: "Add note",
       module: "notes",
       priority: "medium"
@@ -576,7 +576,7 @@ function buildEmergencyCommandCenterSummary(args: {
         residentsWithNoteThisMonth: 0,
         totalEligibleResidents: 0,
         items: [],
-        viewAllHref: "/app/notes/new?type=1on1"
+        viewAllHref: "/app/documentation/one-to-one"
       },
       recentOneToOneNotes: [],
       alerts: {
@@ -1189,7 +1189,7 @@ async function computeDashboardCommandCenterSummary(args: {
       attendanceHref: `/app/attendance?activityId=${encodeURIComponent(activity.id)}`,
       openHref: `/app/calendar?view=day&date=${encodeURIComponent(activity.startAt.toISOString())}`,
       editHref: `/app/calendar?activityId=${encodeURIComponent(activity.id)}`,
-      noteHref: `/app/notes/new?type=general&activityId=${encodeURIComponent(activity.id)}`
+      noteHref: `/app/documentation/progress-notes/new?activityId=${encodeURIComponent(activity.id)}`
     };
   });
 
@@ -1283,7 +1283,7 @@ async function computeDashboardCommandCenterSummary(args: {
       },
       secondaryAction: {
         label: "Add 1:1 note",
-        href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(row.residentId)}`
+        href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(row.residentId)}`
       }
     }));
 
@@ -1332,7 +1332,7 @@ async function computeDashboardCommandCenterSummary(args: {
       chips: ["Behavioral trend"],
       primaryAction: {
         label: "Start 1:1 note",
-        href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(row.residentId)}`
+        href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(row.residentId)}`
       },
       secondaryAction: {
         label: "Open care plan",
@@ -1346,7 +1346,7 @@ async function computeDashboardCommandCenterSummary(args: {
       title: "Needs 1:1 this month",
       description: "Residents with no logged 1:1 note in the current month.",
       module: "oneToOne",
-      viewAllHref: "/app/notes/new?type=1on1",
+      viewAllHref: "/app/documentation/one-to-one",
       items: residentsMissingOneToOneMonth.slice(0, 8).map((resident) => ({
         id: `1on1-${resident.id}`,
         residentId: resident.id,
@@ -1362,7 +1362,7 @@ async function computeDashboardCommandCenterSummary(args: {
         chips: ["1:1 pending"],
         primaryAction: {
           label: "Start note",
-          href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(resident.id)}`
+          href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(resident.id)}`
         },
         secondaryAction: {
           label: "Resident profile",
@@ -1429,7 +1429,7 @@ async function computeDashboardCommandCenterSummary(args: {
       title: "Recent resistant/withdrawn trend",
       description: "Residents with recurring resistant or withdrawn response markers.",
       module: "notes",
-      viewAllHref: "/app/notes?type=1on1",
+      viewAllHref: "/app/documentation/one-to-one",
       items: resistantTrendItems
     },
     {
@@ -1451,7 +1451,7 @@ async function computeDashboardCommandCenterSummary(args: {
         chips: ["Follow-up"],
         primaryAction: {
           label: "Add follow-up note",
-          href: `/app/notes/new?type=1on1&residentId=${encodeURIComponent(resident.id)}`
+          href: `/app/documentation/one-to-one/new?residentId=${encodeURIComponent(resident.id)}`
         },
         secondaryAction: {
           label: "Open resident",
@@ -1517,7 +1517,7 @@ async function computeDashboardCommandCenterSummary(args: {
         hour: "numeric",
         minute: "2-digit"
       }),
-      href: `/app/notes/new?type=${note.type === "ONE_TO_ONE" ? "1on1" : "general"}&noteId=${encodeURIComponent(note.id)}`
+      href: `/app/documentation/${note.type === "ONE_TO_ONE" ? "one-to-one" : "progress-notes"}/${encodeURIComponent(note.id)}`
     }))
   };
 
@@ -1619,7 +1619,7 @@ async function computeDashboardCommandCenterSummary(args: {
       id: "mission-1on1",
       title: "Complete 1:1 Visits",
       detail: `${base.oneToOne.missingThisMonthCount} residents still need a monthly 1:1 note.`,
-      href: "/app/notes/new?type=1on1",
+      href: "/app/documentation/one-to-one/new",
       ctaLabel: "Start 1:1",
       module: "oneToOne",
       priority: base.oneToOne.missingThisMonthCount > 0 ? "high" : "low"
@@ -1628,7 +1628,7 @@ async function computeDashboardCommandCenterSummary(args: {
       id: "mission-documentation",
       title: "Document Today’s Activities",
       detail: `${notesHub.groupDocumentationMissingCount} activities still missing group documentation.`,
-      href: "/app/notes/new?type=general",
+      href: "/app/documentation/progress-notes/new",
       ctaLabel: "Add note",
       module: "notes",
       priority: notesHub.groupDocumentationMissingCount > 0 ? "high" : "medium"
@@ -1664,8 +1664,8 @@ async function computeDashboardCommandCenterSummary(args: {
 
   const quickActions: DashboardQuickAction[] = [
     { id: "new-activity", label: "New Activity", href: "/app/calendar?quickAdd=1", module: "calendar" },
-    { id: "new-note", label: "New Note", href: "/app/notes/new?type=general", module: "notes" },
-    { id: "new-1on1", label: "New 1:1 Note", href: "/app/notes/new?type=1on1", module: "oneToOne" },
+    { id: "new-note", label: "New Progress Note", href: "/app/documentation/progress-notes/new", module: "notes" },
+    { id: "new-1on1", label: "New 1:1 Note", href: "/app/documentation/one-to-one/new", module: "oneToOne" },
     { id: "attendance", label: "Add Attendance", href: "/app/attendance", module: "attendance" },
     { id: "search-resident", label: "Search Resident", href: "/app/residents", module: "residents" },
     { id: "update-care-plan", label: "Update Care Plan", href: "/app/care-plans", module: "carePlan" },
