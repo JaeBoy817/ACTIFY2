@@ -3,7 +3,19 @@ import { z } from "zod";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
 import { prisma } from "@/lib/prisma";
-import { attachDocumentationMeta, inferDocumentationDueDate, inferDocumentationKind, inferDocumentationPriority, inferDocumentationStatus, stripDocumentationMeta } from "@/lib/documentation/meta";
+import {
+  attachDocumentationMeta,
+  inferDocumentationAssignedStaff,
+  inferDocumentationAssessmentType,
+  inferDocumentationDueDate,
+  inferDocumentationKind,
+  inferDocumentationNoMajorChange,
+  inferDocumentationPriority,
+  inferDocumentationReviewDate,
+  inferDocumentationSectionProgress,
+  inferDocumentationStatus,
+  stripDocumentationMeta
+} from "@/lib/documentation/meta";
 import type { DocumentationKind, DocumentationPriority, DocumentationStatus } from "@/lib/documentation/types";
 
 const listSchema = z.object({
@@ -24,7 +36,13 @@ const createSchema = z.object({
   response: z.enum(["POSITIVE", "NEUTRAL", "RESISTANT"]).default("NEUTRAL"),
   dueDate: z.string().trim().optional().nullable(),
   occurredAt: z.string().trim().optional().nullable(),
-  sectionProgress: z.number().min(0).max(100).optional().nullable()
+  sectionProgress: z.number().min(0).max(100).optional().nullable(),
+  assessmentType: z.enum(["ANNUAL", "QUARTERLY", "SECTION_F"]).optional().nullable(),
+  reviewDate: z.string().trim().optional().nullable(),
+  assignedStaff: z.string().trim().max(120).optional().nullable(),
+  noMajorChange: z.boolean().optional().nullable(),
+  sectionStates: z.record(z.enum(["NO_CHANGE", "UPDATED", "SIGNIFICANT_CHANGE"])).optional().nullable(),
+  carryForwardFromId: z.string().trim().optional().nullable()
 });
 
 function mapNoteToEntry(note: {
@@ -57,6 +75,13 @@ function mapNoteToEntry(note: {
     createdAtIso: note.createdAt.toISOString(),
     authorName: note.createdByUser.name,
     dueDateIso: inferDocumentationDueDate(note.narrative),
+    reviewDateIso: inferDocumentationReviewDate(note.narrative),
+    assessmentType: inferDocumentationAssessmentType(note.narrative),
+    assignedStaff: inferDocumentationAssignedStaff(note.narrative),
+    sectionProgress: inferDocumentationSectionProgress(note.narrative),
+    noMajorChange: inferDocumentationNoMajorChange(note.narrative),
+    residentUnit: null,
+    residentBirthDateIso: null,
     hasFollowUp: Boolean(note.followUp && note.followUp.trim().length > 0),
     participationLevel: note.participationLevel,
     moodAffect: note.moodAffect,
@@ -154,7 +179,13 @@ export async function POST(request: Request) {
       status,
       dueDate,
       priority,
-      sectionProgress: parsed.data.sectionProgress ?? null
+      sectionProgress: parsed.data.sectionProgress ?? null,
+      assessmentType: parsed.data.assessmentType ?? null,
+      reviewDate: parsed.data.reviewDate?.trim() || null,
+      assignedStaff: parsed.data.assignedStaff?.trim() || null,
+      noMajorChange: parsed.data.noMajorChange ?? null,
+      sectionStates: parsed.data.sectionStates ?? null,
+      carryForwardFromId: parsed.data.carryForwardFromId?.trim() || null
     });
 
     const createdAt = parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : new Date();

@@ -1,9 +1,11 @@
 import type { ProgressNoteType } from "@prisma/client";
 
 import type {
+  DocumentationAssessmentType,
   DocumentationKind,
   DocumentationMeta,
   DocumentationPriority,
+  DocumentationSectionChangeState,
   DocumentationStatus
 } from "@/lib/documentation/types";
 
@@ -21,6 +23,30 @@ function isDocumentationStatus(value: string): value is DocumentationStatus {
 
 function isDocumentationPriority(value: string): value is DocumentationPriority {
   return value === "LOW" || value === "MEDIUM" || value === "HIGH";
+}
+
+function isDocumentationAssessmentType(value: string): value is DocumentationAssessmentType {
+  return value === "ANNUAL" || value === "QUARTERLY" || value === "SECTION_F";
+}
+
+function isDocumentationSectionChangeState(value: string): value is DocumentationSectionChangeState {
+  return value === "NO_CHANGE" || value === "UPDATED" || value === "SIGNIFICANT_CHANGE";
+}
+
+function parseSectionStates(value: unknown): Record<string, DocumentationSectionChangeState> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) return null;
+
+  const parsed: Record<string, DocumentationSectionChangeState> = {};
+  for (const [key, raw] of entries) {
+    if (typeof key !== "string" || !key.trim()) continue;
+    if (typeof raw !== "string" || !isDocumentationSectionChangeState(raw)) continue;
+    parsed[key] = raw;
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : null;
 }
 
 export function parseDocumentationMeta(narrative: string): DocumentationMeta | null {
@@ -42,7 +68,16 @@ export function parseDocumentationMeta(narrative: string): DocumentationMeta | n
       dueDate: typeof parsed.dueDate === "string" ? parsed.dueDate : null,
       priority: parsed.priority && isDocumentationPriority(parsed.priority) ? parsed.priority : undefined,
       template: typeof parsed.template === "string" ? parsed.template : null,
-      sectionProgress: typeof parsed.sectionProgress === "number" ? parsed.sectionProgress : null
+      sectionProgress: typeof parsed.sectionProgress === "number" ? parsed.sectionProgress : null,
+      assessmentType:
+        typeof parsed.assessmentType === "string" && isDocumentationAssessmentType(parsed.assessmentType)
+          ? parsed.assessmentType
+          : null,
+      reviewDate: typeof parsed.reviewDate === "string" ? parsed.reviewDate : null,
+      assignedStaff: typeof parsed.assignedStaff === "string" ? parsed.assignedStaff : null,
+      noMajorChange: typeof parsed.noMajorChange === "boolean" ? parsed.noMajorChange : null,
+      sectionStates: parseSectionStates(parsed.sectionStates),
+      carryForwardFromId: typeof parsed.carryForwardFromId === "string" ? parsed.carryForwardFromId : null
     };
   } catch {
     return null;
@@ -92,3 +127,34 @@ export function inferDocumentationDueDate(narrative: string): string | null {
   return meta?.dueDate ?? null;
 }
 
+export function inferDocumentationAssessmentType(narrative: string): DocumentationAssessmentType | null {
+  const meta = parseDocumentationMeta(narrative);
+  return meta?.assessmentType ?? null;
+}
+
+export function inferDocumentationReviewDate(narrative: string): string | null {
+  const meta = parseDocumentationMeta(narrative);
+  return meta?.reviewDate ?? null;
+}
+
+export function inferDocumentationAssignedStaff(narrative: string): string | null {
+  const meta = parseDocumentationMeta(narrative);
+  return meta?.assignedStaff ?? null;
+}
+
+export function inferDocumentationSectionProgress(narrative: string): number | null {
+  const meta = parseDocumentationMeta(narrative);
+  return typeof meta?.sectionProgress === "number" ? meta.sectionProgress : null;
+}
+
+export function inferDocumentationNoMajorChange(narrative: string): boolean | null {
+  const meta = parseDocumentationMeta(narrative);
+  return typeof meta?.noMajorChange === "boolean" ? meta.noMajorChange : null;
+}
+
+export function inferDocumentationSectionStates(
+  narrative: string
+): Record<string, DocumentationSectionChangeState> | null {
+  const meta = parseDocumentationMeta(narrative);
+  return meta?.sectionStates ?? null;
+}

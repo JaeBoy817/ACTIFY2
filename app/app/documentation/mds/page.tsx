@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 
+import { ClinicalAssessmentQueue } from "@/components/documentation/clinical/ClinicalAssessmentQueue";
 import { DocumentationShell } from "@/components/documentation/DocumentationShell";
-import { DocumentationTypeWorkspace } from "@/components/documentation/DocumentationTypeWorkspace";
-import { getDocumentationBaseContext, getDocumentationRowsForKind } from "@/app/app/documentation/_lib";
+import { getClinicalAssessmentQueueData, getDocumentationBaseContext } from "@/app/app/documentation/_lib";
 
 export default async function MdsDocumentationPage() {
   const { context } = await getDocumentationBaseContext();
-  const rows = await getDocumentationRowsForKind(context.facilityId, "MDS");
+  const queue = await getClinicalAssessmentQueueData({
+    facilityId: context.facilityId,
+    kind: "MDS"
+  });
 
   return (
     <DocumentationShell
-      title="MDS"
-      description="Deadline-aware activity MDS support entries with resident preferences, barriers, and observed response summaries."
+      title="MDS Section F"
+      description="Activity preferences, routine, and participation support workflow for Section F-aligned documentation."
       actions={
         <Link
           href="/app/documentation/mds/new"
@@ -23,7 +26,13 @@ export default async function MdsDocumentationPage() {
         </Link>
       }
     >
-      <DocumentationTypeWorkspace kind="MDS" rows={rows} newHref="/app/documentation/mds/new" />
+      <ClinicalAssessmentQueue
+        kind="MDS"
+        rows={queue.rows}
+        unitOptions={queue.unitOptions}
+        staffOptions={queue.staffOptions}
+        newEntryHref="/app/documentation/mds/new"
+      />
     </DocumentationShell>
   );
 }

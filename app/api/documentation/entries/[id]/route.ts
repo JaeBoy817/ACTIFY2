@@ -5,9 +5,15 @@ import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "
 import { prisma } from "@/lib/prisma";
 import {
   attachDocumentationMeta,
+  inferDocumentationAssignedStaff,
+  inferDocumentationAssessmentType,
   inferDocumentationDueDate,
   inferDocumentationKind,
+  inferDocumentationNoMajorChange,
   inferDocumentationPriority,
+  inferDocumentationReviewDate,
+  inferDocumentationSectionProgress,
+  inferDocumentationSectionStates,
   inferDocumentationStatus,
   stripDocumentationMeta
 } from "@/lib/documentation/meta";
@@ -24,7 +30,13 @@ const patchSchema = z.object({
   cuesRequired: z.enum(["NONE", "VERBAL", "VISUAL", "HAND_OVER_HAND"]).default("VERBAL"),
   response: z.enum(["POSITIVE", "NEUTRAL", "RESISTANT"]).default("NEUTRAL"),
   dueDate: z.string().trim().optional().nullable(),
-  sectionProgress: z.number().min(0).max(100).optional().nullable()
+  sectionProgress: z.number().min(0).max(100).optional().nullable(),
+  assessmentType: z.enum(["ANNUAL", "QUARTERLY", "SECTION_F"]).optional().nullable(),
+  reviewDate: z.string().trim().optional().nullable(),
+  assignedStaff: z.string().trim().max(120).optional().nullable(),
+  noMajorChange: z.boolean().optional().nullable(),
+  sectionStates: z.record(z.enum(["NO_CHANGE", "UPDATED", "SIGNIFICANT_CHANGE"])).optional().nullable(),
+  carryForwardFromId: z.string().trim().optional().nullable()
 });
 
 function mapEntry(note: {
@@ -54,9 +66,16 @@ function mapEntry(note: {
     residentId: note.residentId,
     residentName: `${note.resident.firstName} ${note.resident.lastName}`,
     residentRoom: note.resident.room,
+    residentUnit: null,
+    residentBirthDateIso: null,
     createdAtIso: note.createdAt.toISOString(),
     authorName: note.createdByUser.name,
     dueDateIso: inferDocumentationDueDate(note.narrative),
+    reviewDateIso: inferDocumentationReviewDate(note.narrative),
+    assessmentType: inferDocumentationAssessmentType(note.narrative),
+    assignedStaff: inferDocumentationAssignedStaff(note.narrative),
+    sectionProgress: inferDocumentationSectionProgress(note.narrative),
+    noMajorChange: inferDocumentationNoMajorChange(note.narrative),
     hasFollowUp: Boolean(note.followUp && note.followUp.trim().length > 0),
     participationLevel: note.participationLevel,
     moodAffect: note.moodAffect,
@@ -104,6 +123,14 @@ export async function GET(
         type: note.type as "GROUP" | "ONE_TO_ONE"
       }),
       narrativeBody: stripDocumentationMeta(note.narrative),
+      meta: {
+        assessmentType: inferDocumentationAssessmentType(note.narrative),
+        reviewDateIso: inferDocumentationReviewDate(note.narrative),
+        assignedStaff: inferDocumentationAssignedStaff(note.narrative),
+        sectionProgress: inferDocumentationSectionProgress(note.narrative),
+        noMajorChange: inferDocumentationNoMajorChange(note.narrative),
+        sectionStates: inferDocumentationSectionStates(note.narrative)
+      },
       followUpTitle: note.followUp
     });
   } catch (error) {
@@ -154,7 +181,16 @@ export async function PATCH(
       status: parsed.data.status as DocumentationStatus,
       dueDate: parsed.data.dueDate?.trim() || null,
       priority: parsed.data.priority as DocumentationPriority,
-      sectionProgress: parsed.data.sectionProgress ?? null
+      sectionProgress: parsed.data.sectionProgress ?? null,
+      assessmentType: parsed.data.assessmentType ?? inferDocumentationAssessmentType(existing.narrative),
+      reviewDate: parsed.data.reviewDate?.trim() || inferDocumentationReviewDate(existing.narrative),
+      assignedStaff: parsed.data.assignedStaff?.trim() || inferDocumentationAssignedStaff(existing.narrative),
+      noMajorChange:
+        typeof parsed.data.noMajorChange === "boolean"
+          ? parsed.data.noMajorChange
+          : inferDocumentationNoMajorChange(existing.narrative),
+      sectionStates: parsed.data.sectionStates ?? inferDocumentationSectionStates(existing.narrative),
+      carryForwardFromId: parsed.data.carryForwardFromId?.trim() || null
     });
 
     const updated = await prisma.progressNote.update({

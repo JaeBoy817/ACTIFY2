@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
 
-import { DocumentationEntryEditor } from "@/components/documentation/DocumentationEntryEditor";
+import { UdaAssessmentEditor } from "@/components/documentation/clinical/UdaAssessmentEditor";
 import { DocumentationShell } from "@/components/documentation/DocumentationShell";
-import { getDocumentationBaseContext, getDocumentationEntryForEditor } from "@/app/app/documentation/_lib";
+import {
+  getClinicalAssessmentEntryForEditor,
+  getClinicalAssessmentHistoryForResident,
+  getDocumentationBaseContext
+} from "@/app/app/documentation/_lib";
 
 export default async function UdaDetailPage({
   params
@@ -10,22 +14,28 @@ export default async function UdaDetailPage({
   params: { id: string };
 }) {
   const { context, residents } = await getDocumentationBaseContext();
-  const entry = await getDocumentationEntryForEditor({
+  const entry = await getClinicalAssessmentEntryForEditor({
     facilityId: context.facilityId,
     id: params.id,
-    expectedKind: "UDA"
+    kind: "UDA"
   });
 
   if (!entry) {
     notFound();
   }
 
+  const history = await getClinicalAssessmentHistoryForResident({
+    facilityId: context.facilityId,
+    residentId: entry.residentId,
+    kind: "UDA"
+  });
+
   return (
     <DocumentationShell
-      title="UDA Detail"
-      description="Update structured assessment sections and finalize the resident UDA entry."
+      title="UDA Assessment Detail"
+      description="Review, update, and finalize annual or quarterly activity assessments with resident history context."
     >
-      <DocumentationEntryEditor kind="UDA" residents={residents} initial={entry} />
+      <UdaAssessmentEditor residents={residents} history={history} initial={entry} />
     </DocumentationShell>
   );
 }

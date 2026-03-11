@@ -4,6 +4,10 @@ export type DocumentationStatus = "DRAFT" | "IN_PROGRESS" | "READY_REVIEW" | "CO
 
 export type DocumentationPriority = "LOW" | "MEDIUM" | "HIGH";
 
+export type DocumentationAssessmentType = "ANNUAL" | "QUARTERLY" | "SECTION_F";
+
+export type DocumentationSectionChangeState = "NO_CHANGE" | "UPDATED" | "SIGNIFICANT_CHANGE";
+
 export type DocumentationMeta = {
   kind: DocumentationKind;
   status?: DocumentationStatus;
@@ -11,6 +15,12 @@ export type DocumentationMeta = {
   priority?: DocumentationPriority;
   template?: string | null;
   sectionProgress?: number | null;
+  assessmentType?: DocumentationAssessmentType | null;
+  reviewDate?: string | null;
+  assignedStaff?: string | null;
+  noMajorChange?: boolean | null;
+  sectionStates?: Record<string, DocumentationSectionChangeState> | null;
+  carryForwardFromId?: string | null;
 };
 
 export type DocumentationListRow = {
@@ -23,9 +33,16 @@ export type DocumentationListRow = {
   residentId: string;
   residentName: string;
   residentRoom: string;
+  residentUnit: string | null;
+  residentBirthDateIso: string | null;
   createdAtIso: string;
   authorName: string;
   dueDateIso: string | null;
+  reviewDateIso: string | null;
+  assessmentType: DocumentationAssessmentType | null;
+  assignedStaff: string | null;
+  sectionProgress: number | null;
+  noMajorChange: boolean | null;
   hasFollowUp: boolean;
 };
 
@@ -35,4 +52,3 @@ export type DocumentationOverviewCounts = {
   completedCount: number;
   dueSoonCount: number;
 };
-

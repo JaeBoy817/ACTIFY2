@@ -2,9 +2,14 @@ import { startOfMonth } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import {
+  inferDocumentationAssignedStaff,
+  inferDocumentationAssessmentType,
   inferDocumentationDueDate,
+  inferDocumentationNoMajorChange,
   inferDocumentationKind,
   inferDocumentationPriority,
+  inferDocumentationReviewDate,
+  inferDocumentationSectionProgress,
   inferDocumentationStatus,
   stripDocumentationMeta
 } from "@/lib/documentation/meta";
@@ -51,7 +56,13 @@ export async function getDocumentationRows(params: {
           id: true,
           firstName: true,
           lastName: true,
-          room: true
+          room: true,
+          birthDate: true,
+          unit: {
+            select: {
+              name: true
+            }
+          }
         }
       },
       createdByUser: {
@@ -85,9 +96,16 @@ export async function getDocumentationRows(params: {
         residentId: note.residentId,
         residentName: `${note.resident.firstName} ${note.resident.lastName}`,
         residentRoom: note.resident.room,
+        residentUnit: note.resident.unit?.name ?? null,
+        residentBirthDateIso: note.resident.birthDate ? note.resident.birthDate.toISOString() : null,
         createdAtIso: note.createdAt.toISOString(),
         authorName: note.createdByUser.name,
         dueDateIso,
+        reviewDateIso: inferDocumentationReviewDate(note.narrative),
+        assessmentType: inferDocumentationAssessmentType(note.narrative),
+        assignedStaff: inferDocumentationAssignedStaff(note.narrative),
+        sectionProgress: inferDocumentationSectionProgress(note.narrative),
+        noMajorChange: inferDocumentationNoMajorChange(note.narrative),
         hasFollowUp: Boolean(note.followUp && note.followUp.trim().length > 0)
       } satisfies DocumentationListRow;
     })
@@ -135,4 +153,3 @@ export function getDocumentationOverview(rows: DocumentationListRow[]) {
     statusColumns
   };
 }
-
