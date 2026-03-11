@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Command, Sparkles } from "lucide-react";
+import { Command, Search, Sparkles } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import { TopContentHeader } from "@/components/app/TopContentHeader";
 import { MODULE_REGISTRY, SIDEBAR_MODULE_GROUPS } from "@/lib/moduleRegistry";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 function findActiveModule(pathname: string) {
   return (
@@ -42,35 +42,18 @@ export function AppRouteHeader() {
   }
 
   return (
-    <section className="nb-surface nb-panel relative overflow-hidden rounded-3xl border p-5">
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-3xl bg-gradient-to-r",
-          activeModule.accentGradientClasses
-        )}
-      />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]",
-              activeModule.accentGradientClasses
-            )}
-          >
-            <Icon className="h-5 w-5 text-zinc-950" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Workspace</p>
-            <h1 className="font-[var(--font-display)] text-3xl leading-none text-zinc-950">{activeModule.title}</h1>
-            <p className="max-w-2xl text-sm text-zinc-600">{activeModule.description}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <TopContentHeader
+      eyebrow="Workspace"
+      title={activeModule.title}
+      subtitle={activeModule.description}
+      icon={Icon}
+      accentGradientClasses={activeModule.accentGradientClasses}
+      actions={
+        <>
           <Button
             type="button"
             variant="outline"
-            className="h-9 border-zinc-300 bg-zinc-100"
+            className="h-9 border-[#3d5e8c] bg-[#0f1d35] text-[#d8e6ff] hover:bg-[#152a4a] hover:text-white"
             onClick={() => {
               window.dispatchEvent(new Event("actify:open-command-palette"));
             }}
@@ -78,31 +61,50 @@ export function AppRouteHeader() {
             <Command className="h-4 w-4" />
             Command
           </Button>
-          <Badge variant="outline" className="inline-flex items-center gap-1 border-zinc-300 bg-white text-zinc-700">
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+          <Badge variant="outline" className="inline-flex items-center gap-1 border-[#3d5e8c] bg-[#0f1d35] text-[#bdd0f0]">
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
             Actify 1.0
           </Badge>
-        </div>
-      </div>
+        </>
+      }
+    >
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new Event("actify:open-command-palette"));
+          }}
+          className="flex h-10 w-full items-center justify-between rounded-xl border border-[#2f456e] bg-[#0f1a30] px-3 text-left text-sm text-[#9fb4da] transition hover:border-[#4c6ea7] hover:bg-[#13203a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/35"
+          aria-label={`Search ${activeModule.title}`}
+        >
+          <span className="inline-flex items-center gap-2 truncate">
+            <Search className="h-4 w-4 shrink-0 text-[#9bb3db]" />
+            Search {activeModule.title.toLowerCase()}...
+          </span>
+          <span className="ml-2 rounded-md border border-[#35537f] bg-[#10213f] px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#c5d6f4]">
+            CMD K
+          </span>
+        </button>
 
-      {related.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Quick jump</p>
-          {related.map((module) => {
-            const RelatedIcon = module.icon;
-            return (
-              <Link
-                key={module.key}
-                href={module.href}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:-translate-y-px hover:bg-zinc-50"
-              >
-                <RelatedIcon className="h-3.5 w-3.5" />
-                {module.title}
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
-    </section>
+        {related.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.12em] text-[#93a9d1]">Quick jump</p>
+            {related.map((module) => {
+              const RelatedIcon = module.icon;
+              return (
+                <Link
+                  key={module.key}
+                  href={module.href}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#3d5e8c] bg-[#0f1d35] px-3 py-1.5 text-xs font-semibold text-[#d8e6ff] transition hover:-translate-y-px hover:border-[#4f76ad] hover:bg-[#142744]"
+                >
+                  <RelatedIcon className="h-3.5 w-3.5" />
+                  {module.title}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </TopContentHeader>
   );
 }
