@@ -1765,6 +1765,39 @@ body {
     #f2efe8;
 }
 
+.actify-app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.actify-app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1300px circle at 12% -8%, rgba(59, 130, 246, 0.16), transparent 48%),
+    radial-gradient(1100px circle at 92% 8%, rgba(139, 92, 246, 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(4, 8, 20, 0.08) 0%, rgba(4, 8, 20, 0.26) 100%);
+}
+
+.actify-shell-sidebar-layer {
+  position: relative;
+  z-index: 45;
+  pointer-events: auto;
+}
+
+.actify-shell-header-layer {
+  position: relative;
+  z-index: 40;
+}
+
+.actify-shell-content-layer {
+  position: relative;
+  z-index: 20;
+}
+
 .actify-page-shell {
   isolation: isolate;
 }

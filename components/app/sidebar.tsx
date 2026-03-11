@@ -96,7 +96,7 @@ export function AppSidebar({ moduleFlagsRaw }: { moduleFlagsRaw?: unknown }) {
   );
 
   return (
-    <div className="h-full">
+    <div className="relative z-10 h-full">
       <MobileSidebarDrawer
         open={mobileOpen}
         onOpenChange={setMobileOpen}
