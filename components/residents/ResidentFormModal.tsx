@@ -164,123 +164,174 @@ export function ResidentFormModal({
           <section className="rounded-2xl border border-[#2f4a77] bg-[#0f1d37] p-3">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#95add8]">Basic Info</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Input
-                placeholder="First name"
-                value={form.firstName}
-                onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                placeholder="Last name"
-                value={form.lastName}
-                onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                placeholder="Preferred name"
-                value={form.preferredName}
-                onChange={(event) => setForm((prev) => ({ ...prev, preferredName: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                placeholder="Room"
-                value={form.room}
-                onChange={(event) => setForm((prev) => ({ ...prev, room: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Select value={form.unitId} onValueChange={(value) => setForm((prev) => ({ ...prev, unitId: value }))}>
-                <SelectTrigger className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]">
-                  <SelectValue placeholder="Unit / Hall" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No unit</SelectItem>
-                  {units.map((unit) => (
-                    <SelectItem key={unit.id} value={unit.id}>
-                      {unit.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={form.status}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as FormState["status"] }))}
-              >
-                <SelectTrigger className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="date"
-                value={form.birthDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, birthDate: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                type="date"
-                value={form.admissionDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, admissionDate: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                type="date"
-                value={form.mdsManualDueDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, mdsManualDueDate: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">First Name</p>
+                <Input
+                  placeholder="First name"
+                  value={form.firstName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Last Name</p>
+                <Input
+                  placeholder="Last name"
+                  value={form.lastName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Preferred Name</p>
+                <Input
+                  placeholder="Preferred name"
+                  value={form.preferredName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, preferredName: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Room Number</p>
+                <Input
+                  placeholder="Room"
+                  value={form.room}
+                  onChange={(event) => setForm((prev) => ({ ...prev, room: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Unit / Hall</p>
+                <Select value={form.unitId} onValueChange={(value) => setForm((prev) => ({ ...prev, unitId: value }))}>
+                  <SelectTrigger className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]">
+                    <SelectValue placeholder="Unit / Hall" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No unit</SelectItem>
+                    {units.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Resident Status</p>
+                <Select
+                  value={form.status}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as FormState["status"] }))}
+                >
+                  <SelectTrigger className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-[#365281] bg-[#10203c] p-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#95add8]">Dates & Assessment Anchor</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Birthday</p>
+                  <Input
+                    type="date"
+                    value={form.birthDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, birthDate: event.target.value }))}
+                    className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Admission Date</p>
+                  <Input
+                    type="date"
+                    value={form.admissionDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, admissionDate: event.target.value }))}
+                    className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Manual MDS Due Date</p>
+                  <Input
+                    type="date"
+                    value={form.mdsManualDueDate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, mdsManualDueDate: event.target.value }))}
+                    className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 
           <section className="rounded-2xl border border-[#2f4a77] bg-[#0f1d37] p-3">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#95add8]">Activity Profile</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                placeholder="Best time of day"
-                value={form.bestTimesOfDay}
-                onChange={(event) => setForm((prev) => ({ ...prev, bestTimesOfDay: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Input
-                placeholder="Tags (comma separated)"
-                value={form.tags}
-                onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
-                className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Textarea
-                rows={3}
-                placeholder="Interests and preferences"
-                value={form.preferences}
-                onChange={(event) => setForm((prev) => ({ ...prev, preferences: event.target.value }))}
-                className="sm:col-span-2 border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Textarea
-                rows={3}
-                placeholder="Safety notes"
-                value={form.safetyNotes}
-                onChange={(event) => setForm((prev) => ({ ...prev, safetyNotes: event.target.value }))}
-                className="sm:col-span-2 border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <Textarea
-                rows={3}
-                placeholder="Additional resident notes"
-                value={form.notes}
-                onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-                className="sm:col-span-2 border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
-              />
-              <label className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-[#3b5d90] bg-[#122341] px-3 py-2 text-sm text-[#dbe8ff]">
-                <input
-                  type="checkbox"
-                  checked={form.followUpFlag}
-                  onChange={(event) => setForm((prev) => ({ ...prev, followUpFlag: event.target.checked }))}
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Best Time of Day</p>
+                <Input
+                  placeholder="Best time of day"
+                  value={form.bestTimesOfDay}
+                  onChange={(event) => setForm((prev) => ({ ...prev, bestTimesOfDay: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
                 />
-                Flag follow-up for this resident
-              </label>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Tags</p>
+                <Input
+                  placeholder="Tags (comma separated)"
+                  value={form.tags}
+                  onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Interests & Preferences</p>
+                <Textarea
+                  rows={3}
+                  placeholder="Interests and preferences"
+                  value={form.preferences}
+                  onChange={(event) => setForm((prev) => ({ ...prev, preferences: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Safety Notes</p>
+                <Textarea
+                  rows={3}
+                  placeholder="Safety notes"
+                  value={form.safetyNotes}
+                  onChange={(event) => setForm((prev) => ({ ...prev, safetyNotes: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Additional Resident Notes</p>
+                <Textarea
+                  rows={3}
+                  placeholder="Additional resident notes"
+                  value={form.notes}
+                  onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+                  className="border-[#3b5d90] bg-[#122341] text-[#dbe8ff]"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#95add8]">Follow-Up Flag</p>
+                <label className="flex items-center gap-2 rounded-lg border border-[#3b5d90] bg-[#122341] px-3 py-2 text-sm text-[#dbe8ff]">
+                  <input
+                    type="checkbox"
+                    checked={form.followUpFlag}
+                    onChange={(event) => setForm((prev) => ({ ...prev, followUpFlag: event.target.checked }))}
+                  />
+                  Flag follow-up for this resident
+                </label>
+              </div>
             </div>
           </section>
         </div>

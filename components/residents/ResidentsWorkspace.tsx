@@ -958,14 +958,17 @@ export function ResidentsWorkspace({
           ) : null}
 
           <div className="grid gap-3 lg:grid-cols-12">
-            <label className="relative flex h-10 items-center rounded-xl border border-[#35517f] bg-[#11203c] px-3 lg:col-span-4">
-              <Search className="h-4 w-4 text-[#8ca5d2]" />
+            <label className="group relative flex h-11 items-center rounded-xl border border-[#2f456e] bg-[#0f1a30] px-3 transition focus-within:border-[#4c6ea7] focus-within:bg-[#13203a] lg:col-span-4">
+              <Search className="h-4 w-4 shrink-0 text-[#9bb3db]" />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search name, room, preferred name, status, admission date"
-                className="h-full border-none bg-transparent pl-2 text-sm text-[#dce8ff] placeholder:text-[#8ea7d4] focus-visible:ring-0"
+                placeholder="Search residents by name, room, status, or admission date"
+                className="h-full flex-1 border-none bg-transparent px-2 text-sm text-[#dce8ff] placeholder:text-[#9fb4da] focus-visible:ring-0"
               />
+              <span className="ml-2 hidden rounded-md border border-[#35537f] bg-[#10213f] px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#c5d6f4] lg:inline-flex">
+                LIVE
+              </span>
             </label>
 
             <div className="lg:col-span-2">
