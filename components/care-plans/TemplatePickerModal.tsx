@@ -55,28 +55,28 @@ export function TemplatePickerModal({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="glass-panel-strong border-white/20 text-black shadow-lg shadow-actifyBlue/20 hover:bg-white/20 hover:text-black hover:shadow-xl hover:shadow-actifyBlue/25">
+        <Button className="h-9 rounded-full border border-[#4a71ad] bg-[#244b86] px-4 text-xs font-semibold text-white shadow-[0_16px_28px_-20px_rgba(37,99,235,0.75)] hover:bg-[#2b5a9f]">
           Create Care Plan
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-panel sm:max-w-xl">
+      <DialogContent className="rounded-2xl border border-[#2d446f] bg-[linear-gradient(180deg,#0d172c_0%,#0b1427_100%)] text-[#dce8ff] sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Create Care Plan</DialogTitle>
-          <DialogDescription>Select resident and optional template to prefill the wizard.</DialogDescription>
+          <DialogTitle className="text-white">Create Care Plan</DialogTitle>
+          <DialogDescription className="text-[#9fb8e2]">Select resident and optional template to prefill the wizard.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <label className="text-sm font-medium text-foreground">
+          <label className="text-sm font-medium text-[#dce8ff]">
             Resident
             <Input
-              className="mt-1"
+              className="mt-1 border-[#345483] bg-[#10203b] text-[#dce8ff] placeholder:text-[#8ea9d6]"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search resident or room"
             />
           </label>
           <Select value={residentId} onValueChange={setResidentId}>
-            <SelectTrigger>
+            <SelectTrigger className="border-[#345483] bg-[#10203b] text-[#dce8ff]">
               <SelectValue placeholder="Select resident" />
             </SelectTrigger>
             <SelectContent>
@@ -89,10 +89,10 @@ export function TemplatePickerModal({
             </SelectContent>
           </Select>
 
-          <label className="text-sm font-medium text-foreground">
+          <label className="text-sm font-medium text-[#dce8ff]">
             Template (optional)
             <Select value={templateKey} onValueChange={setTemplateKey}>
-              <SelectTrigger className="mt-1">
+              <SelectTrigger className="mt-1 border-[#345483] bg-[#10203b] text-[#dce8ff]">
                 <SelectValue placeholder="No template" />
               </SelectTrigger>
               <SelectContent>
@@ -108,10 +108,10 @@ export function TemplatePickerModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" className="border-[#375787] bg-[#10203b] text-[#d6e5ff] hover:bg-[#14284a]" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleContinue} disabled={!residentId}>
+          <Button className="border border-[#4a71ad] bg-[#244b86] text-white hover:bg-[#2b5a9f]" onClick={handleContinue} disabled={!residentId}>
             Continue
           </Button>
         </DialogFooter>
