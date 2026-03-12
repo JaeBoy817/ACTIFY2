@@ -5,14 +5,28 @@ export const residentListContextQuery = Prisma.validator<Prisma.ResidentDefaultA
     id: true,
     firstName: true,
     lastName: true,
+    preferredName: true,
     room: true,
+    unitId: true,
+    unit: {
+      select: {
+        id: true,
+        name: true
+      }
+    },
     status: true,
     birthDate: true,
+    admissionDate: true,
+    mdsManualDueDate: true,
+    bestTimesOfDay: true,
+    notes: true,
     preferences: true,
     safetyNotes: true,
     tags: true,
     lastOneOnOneAt: true,
     followUpFlag: true,
+    createdAt: true,
+    updatedAt: true,
     carePlans: {
       where: { status: "ACTIVE" },
       orderBy: { updatedAt: "desc" },
@@ -36,4 +50,3 @@ export const residentListContextQuery = Prisma.validator<Prisma.ResidentDefaultA
 });
 
 export type ResidentListContextRow = Prisma.ResidentGetPayload<typeof residentListContextQuery>;
-

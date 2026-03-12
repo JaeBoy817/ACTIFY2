@@ -2,7 +2,9 @@ import { ResidentStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
+import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
+import { statusIsActive } from "@/lib/resident-status";
 import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
@@ -11,12 +13,18 @@ const patchResidentSchema = z
   .object({
     firstName: z.string().trim().min(1).optional(),
     lastName: z.string().trim().min(1).optional(),
+    preferredName: z.string().trim().max(120).nullable().optional(),
     room: z.string().trim().min(1).optional(),
     status: z.nativeEnum(ResidentStatus).optional(),
+    unitId: z.string().trim().min(1).nullable().optional(),
     birthDate: z.string().trim().max(32).nullable().optional(),
+    admissionDate: z.string().trim().max(32).nullable().optional(),
+    mdsManualDueDate: z.string().trim().max(32).nullable().optional(),
+    bestTimesOfDay: z.string().trim().max(300).nullable().optional(),
+    notes: z.string().trim().max(4000).nullable().optional(),
     preferences: z.string().trim().max(2000).nullable().optional(),
     safetyNotes: z.string().trim().max(2000).nullable().optional(),
-    tags: z.array(z.string().trim().min(1)).max(20).optional(),
+    tags: z.array(z.string().trim().min(1)).max(20).nullable().optional(),
     followUpFlag: z.boolean().optional(),
     lastOneOnOneAt: z.string().datetime().nullable().optional()
   })
@@ -24,28 +32,19 @@ const patchResidentSchema = z
     message: "At least one field is required."
   });
 
-function isWritableStatus(status: ResidentStatus) {
-  return (
-    status === ResidentStatus.ACTIVE ||
-    status === ResidentStatus.BED_BOUND ||
-    status === ResidentStatus.HOSPITALIZED ||
-    status === ResidentStatus.DISCHARGED
-  );
-}
+function parseDateInput(value: string | null | undefined, fieldLabel: string) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
 
-function isResidentActive(status: ResidentStatus) {
-  return status === ResidentStatus.ACTIVE || status === ResidentStatus.BED_BOUND;
-}
-
-function parseBirthDateInput(value?: string | null) {
-  if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
+
   const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
   const parsed = dateOnlyPattern.test(trimmed) ? new Date(`${trimmed}T12:00:00.000Z`) : new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) {
-    throw new ResidentsApiError("Invalid birth date.", 400);
+    throw new ResidentsApiError(`Invalid ${fieldLabel}.`, 400);
   }
+
   return parsed;
 }
 
@@ -62,10 +61,6 @@ export async function PATCH(
       throw new ResidentsApiError("Invalid resident update payload.", 400, {
         details: parsed.error.flatten()
       });
-    }
-
-    if (parsed.data.status && !isWritableStatus(parsed.data.status)) {
-      throw new ResidentsApiError("Unsupported resident status.", 400);
     }
 
     const existing = await prisma.resident.findFirst({
@@ -87,20 +82,41 @@ export async function PATCH(
       data: {
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
+        preferredName: parsed.data.preferredName,
         room: parsed.data.room,
         status: parsed.data.status,
-        isActive: parsed.data.status ? isResidentActive(parsed.data.status) : undefined,
-        birthDate: parsed.data.birthDate !== undefined ? parseBirthDateInput(parsed.data.birthDate) : undefined,
+        isActive: parsed.data.status ? statusIsActive(parsed.data.status) : undefined,
+        unitId: parsed.data.unitId,
+        birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
+        admissionDate: parseDateInput(parsed.data.admissionDate, "admission date"),
+        mdsManualDueDate: parseDateInput(parsed.data.mdsManualDueDate, "MDS manual due date"),
+        bestTimesOfDay: parsed.data.bestTimesOfDay,
+        notes: parsed.data.notes,
         preferences: parsed.data.preferences,
         safetyNotes: parsed.data.safetyNotes,
-        tags: parsed.data.tags ? serializeResidentTags(parsed.data.tags) : undefined,
+        tags:
+          parsed.data.tags !== undefined
+            ? parsed.data.tags
+              ? serializeResidentTags(parsed.data.tags)
+              : null
+            : undefined,
         followUpFlag: parsed.data.followUpFlag,
         lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
       },
       ...residentListContextQuery
     });
 
-    return Response.json({ resident: toResidentListRow(updated) });
+    const [completionByResident, attendanceByResident] = await Promise.all([
+      getAssessmentCompletionMapForFacility(context.facilityId),
+      getAttendanceSummaryMapForFacility(context.facilityId)
+    ]);
+
+    return Response.json({
+      resident: toResidentListRow(updated, {
+        completionByResident,
+        attendanceByResident
+      })
+    });
   } catch (error) {
     return asResidentsApiErrorResponse(error);
   }

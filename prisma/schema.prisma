@@ -386,8 +386,11 @@ model Resident {
   status                          ResidentStatus                   @default(ACTIVE)
   firstName                       String
   lastName                        String
+  preferredName                   String?
   room                            String
   birthDate                       DateTime?
+  admissionDate                   DateTime?
+  mdsManualDueDate                DateTime?
   preferences                     String?
   safetyNotes                     String?
   tags                            String?
@@ -419,7 +422,9 @@ model Resident {
   @@index([facilityId])
   @@index([facilityId, room])
   @@index([facilityId, birthDate])
+  @@index([facilityId, admissionDate])
   @@index([unitId])
+  @@index([mdsManualDueDate])
   @@index([status])
   @@index([followUpFlag])
   @@index([lastOneOnOneAt])

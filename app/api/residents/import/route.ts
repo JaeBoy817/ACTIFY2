@@ -1,8 +1,10 @@
-import { ResidentStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
+import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
+import { statusIsActive } from "@/lib/resident-status";
+import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { normalizeResidentStatusForImport } from "@/lib/residents/types";
 
@@ -17,10 +19,6 @@ const importRowSchema = z.object({
 const importSchema = z.object({
   rows: z.array(importRowSchema).min(1).max(500)
 });
-
-function isResidentActive(status: ResidentStatus) {
-  return status === ResidentStatus.ACTIVE || status === ResidentStatus.BED_BOUND;
-}
 
 export async function POST(request: Request) {
   try {
@@ -66,7 +64,7 @@ export async function POST(request: Request) {
               lastName: row.lastName,
               room: row.room,
               status: mappedStatus,
-              isActive: isResidentActive(mappedStatus),
+              isActive: statusIsActive(mappedStatus),
               preferences: row.notes || undefined,
               notes: row.notes || undefined
             }
@@ -83,7 +81,7 @@ export async function POST(request: Request) {
             lastName: row.lastName,
             room: row.room,
             status: mappedStatus,
-            isActive: isResidentActive(mappedStatus),
+            isActive: statusIsActive(mappedStatus),
             preferences: row.notes || null,
             notes: row.notes || null
           },
@@ -103,29 +101,14 @@ export async function POST(request: Request) {
         id: { in: importedResidents },
         facilityId: context.facilityId
       },
-      include: {
-        carePlans: {
-          where: { status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-          select: {
-            focusAreas: true,
-            nextReviewDate: true
-          }
-        },
-        progressNotes: {
-          where: { type: "ONE_TO_ONE" },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-          select: {
-            id: true,
-            createdAt: true,
-            narrative: true
-          }
-        }
-      },
+      ...residentListContextQuery,
       orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
     });
+
+    const [completionByResident, attendanceByResident] = await Promise.all([
+      getAssessmentCompletionMapForFacility(context.facilityId),
+      getAttendanceSummaryMapForFacility(context.facilityId)
+    ]);
 
     return Response.json({
       summary: {
@@ -134,7 +117,12 @@ export async function POST(request: Request) {
         skipped,
         processed: parsed.data.rows.length
       },
-      residents: rows.map(toResidentListRow)
+      residents: rows.map((resident) =>
+        toResidentListRow(resident, {
+          completionByResident,
+          attendanceByResident
+        })
+      )
     });
   } catch (error) {
     return asResidentsApiErrorResponse(error);

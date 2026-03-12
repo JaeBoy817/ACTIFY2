@@ -1,9 +1,16 @@
 import type { ResidentStatus } from "@prisma/client";
 import { formatInTimeZone, resolveTimeZone } from "@/lib/timezone";
+import type { ResidentAssessmentSchedule } from "@/lib/residents/assessment-due";
 
 export const RESIDENT_SORT_OPTIONS = [
   { value: "ROOM", label: "Room" },
-  { value: "NAME", label: "Name" },
+  { value: "NAME", label: "Last Name (A-Z)" },
+  { value: "ADMISSION_NEWEST", label: "Admission Date (Newest)" },
+  { value: "ADMISSION_OLDEST", label: "Admission Date (Oldest)" },
+  { value: "NEXT_DUE", label: "Next Due Date" },
+  { value: "MOST_OVERDUE", label: "Most Overdue" },
+  { value: "PARTICIPATION_HIGH", label: "Highest Participation" },
+  { value: "PARTICIPATION_LOW", label: "Lowest Participation" },
   { value: "NEEDS_1TO1", label: "Needs 1:1" },
   { value: "RECENTLY_SEEN", label: "Recently Seen" }
 ] as const;
@@ -14,7 +21,14 @@ export const RESIDENT_FILTER_OPTIONS = [
   { value: "ALL", label: "All" },
   { value: "ACTIVE", label: "Active" },
   { value: "BED_BOUND", label: "Bed Bound" },
-  { value: "HOSPITAL", label: "Hospital" }
+  { value: "HOSPITAL", label: "Hospital" },
+  { value: "ON_LEAVE", label: "On Leave" },
+  { value: "DISCHARGED", label: "Discharged" },
+  { value: "OVERDUE", label: "Overdue" },
+  { value: "DUE_SOON", label: "Due Soon" },
+  { value: "QUARTERLY_DUE", label: "Quarterly Due" },
+  { value: "ANNUAL_DUE", label: "Annual Due" },
+  { value: "MDS_DUE", label: "MDS Due" }
 ] as const;
 
 export type ResidentFilterKey = (typeof RESIDENT_FILTER_OPTIONS)[number]["value"];
@@ -25,16 +39,38 @@ export type ResidentListRow = {
   id: string;
   firstName: string;
   lastName: string;
+  preferredName: string | null;
   room: string;
+  unitId: string | null;
+  unitName: string | null;
   status: ResidentStatus;
   birthDate: string | null;
+  admissionDate: string | null;
+  mdsManualDueDate: string | null;
   preferences: string | null;
   safetyNotes: string | null;
+  bestTimesOfDay: string | null;
+  notes: string | null;
   tags: string[];
   lastOneOnOneAt: string | null;
   followUpFlag: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
   carePlanAreas: string[];
   carePlanNextReviewAt: string | null;
+  attendanceSnapshot: {
+    total30d: number;
+    engaged30d: number;
+    refused30d: number;
+    noShow30d: number;
+    participationPercent30d: number | null;
+  };
+  assessmentSchedule: ResidentAssessmentSchedule;
+  assessmentFlags: {
+    overdueCount: number;
+    dueSoonCount: number;
+    documentationCurrent: boolean;
+  };
   recentNotes: Array<{
     id: string;
     createdAt: string;
@@ -45,9 +81,23 @@ export type ResidentListRow = {
 export type ResidentUpsertPayload = {
   firstName: string;
   lastName: string;
+  preferredName?: string | null;
   room: string;
-  status: "ACTIVE" | "BED_BOUND" | "HOSPITALIZED" | "DISCHARGED";
+  status:
+    | "ACTIVE"
+    | "BED_BOUND"
+    | "HOSPITALIZED"
+    | "DISCHARGED"
+    | "ON_LEAVE"
+    | "TRANSFERRED"
+    | "DECEASED"
+    | "OTHER";
+  unitId?: string | null;
   birthDate?: string | null;
+  admissionDate?: string | null;
+  mdsManualDueDate?: string | null;
+  bestTimesOfDay?: string | null;
+  notes?: string | null;
   preferences?: string | null;
   safetyNotes?: string | null;
   tags?: string[];
@@ -85,6 +135,10 @@ export function normalizeResidentStatusForImport(statusInput: string) {
   if (normalized === "ACTIVE") return "ACTIVE" as const;
   if (normalized === "BED BOUND" || normalized === "BED_BOUND") return "BED_BOUND" as const;
   if (normalized === "HOSPITAL" || normalized === "HOSPITALIZED") return "HOSPITALIZED" as const;
+  if (normalized === "ON LEAVE" || normalized === "ON_LEAVE" || normalized === "LOA") return "ON_LEAVE" as const;
+  if (normalized === "TRANSFERRED" || normalized === "TRANSFER") return "TRANSFERRED" as const;
+  if (normalized === "DECEASED") return "DECEASED" as const;
+  if (normalized === "OTHER") return "OTHER" as const;
   if (normalized === "DISCHARGED") return "DISCHARGED" as const;
   return null;
 }

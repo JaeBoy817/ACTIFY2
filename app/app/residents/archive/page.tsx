@@ -1,43 +1,36 @@
 import { ResidentsArchiveWorkspace } from "@/components/residents/ResidentsArchiveWorkspace";
 import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
+import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
+import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 
 export default async function ResidentsArchivePage() {
   const context = await getFacilityContextWithSubscription();
 
-  const residents = await prisma.resident.findMany({
-    where: {
-      facilityId: context.facilityId,
-      status: "DISCHARGED"
-    },
-    include: {
-      carePlans: {
-        where: { status: "ACTIVE" },
-        orderBy: { updatedAt: "desc" },
-        take: 1,
-        select: {
-          focusAreas: true,
-          nextReviewDate: true
-        }
+  const [residents, completionByResident, attendanceByResident] = await Promise.all([
+    prisma.resident.findMany({
+      where: {
+        facilityId: context.facilityId,
+        status: "DISCHARGED"
       },
-      progressNotes: {
-        where: { type: "ONE_TO_ONE" },
-        orderBy: { createdAt: "desc" },
-        take: 3,
-        select: {
-          id: true,
-          createdAt: true,
-          narrative: true
-        }
-      }
-    },
-    orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
-  });
+      ...residentListContextQuery,
+      orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+    }),
+    getAssessmentCompletionMapForFacility(context.facilityId),
+    getAttendanceSummaryMapForFacility(context.facilityId)
+  ]);
 
   return (
     <div className="residents-page-gradient min-h-screen">
-      <ResidentsArchiveWorkspace initialResidents={residents.map(toResidentListRow)} />
+      <ResidentsArchiveWorkspace
+        initialResidents={residents.map((resident) =>
+          toResidentListRow(resident, {
+            completionByResident,
+            attendanceByResident
+          })
+        )}
+      />
     </div>
   );
 }

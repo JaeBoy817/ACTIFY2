@@ -1,7 +1,9 @@
 import { ResidentStatus } from "@prisma/client";
 
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
+import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
+import { residentListContextQuery } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 
 export async function POST(
@@ -29,30 +31,20 @@ export async function POST(
         status: ResidentStatus.ACTIVE,
         isActive: true
       },
-      include: {
-        carePlans: {
-          where: { status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-          select: {
-            focusAreas: true,
-            nextReviewDate: true
-          }
-        },
-        progressNotes: {
-          where: { type: "ONE_TO_ONE" },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-          select: {
-            id: true,
-            createdAt: true,
-            narrative: true
-          }
-        }
-      }
+      ...residentListContextQuery
     });
 
-    return Response.json({ resident: toResidentListRow(updated) });
+    const [completionByResident, attendanceByResident] = await Promise.all([
+      getAssessmentCompletionMapForFacility(context.facilityId),
+      getAttendanceSummaryMapForFacility(context.facilityId)
+    ]);
+
+    return Response.json({
+      resident: toResidentListRow(updated, {
+        completionByResident,
+        attendanceByResident
+      })
+    });
   } catch (error) {
     return asResidentsApiErrorResponse(error);
   }

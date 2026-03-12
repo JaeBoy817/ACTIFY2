@@ -27,11 +27,12 @@ const ResidentsWorkspaceClient = dynamic(
 
 export function ResidentsWorkspaceLazy({
   initialResidents,
+  initialUnits,
   canEdit
 }: {
   initialResidents: ResidentListRow[];
+  initialUnits: Array<{ id: string; name: string }>;
   canEdit: boolean;
 }) {
-  return <ResidentsWorkspaceClient initialResidents={initialResidents} canEdit={canEdit} />;
+  return <ResidentsWorkspaceClient initialResidents={initialResidents} initialUnits={initialUnits} canEdit={canEdit} />;
 }
-

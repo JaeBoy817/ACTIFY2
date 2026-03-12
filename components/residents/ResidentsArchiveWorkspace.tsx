@@ -65,7 +65,7 @@ export function ResidentsArchiveWorkspace({
             </p>
           </div>
           <Button asChild variant="outline" className="bg-white/70 shadow-lg shadow-black/10">
-            <Link href="/residents">
+            <Link href="/app/residents">
               <ArrowLeft className="mr-1 h-4 w-4" />
               Back to Residents
             </Link>
