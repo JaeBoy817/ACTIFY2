@@ -13,6 +13,7 @@ import {
 } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
+import { ensureResidentExtendedColumns } from "@/lib/residents/ensure-columns";
 
 const createResidentSchema = z.object({
   firstName: z.string().trim().min(1),
@@ -138,6 +139,19 @@ export async function POST(request: Request) {
       })
       .catch(async (error) => {
         if (!isResidentSchemaDriftError(error)) throw error;
+
+        const healed = await ensureResidentExtendedColumns();
+        if (healed) {
+          try {
+            return await prisma.resident.create({
+              data: createPayload,
+              ...residentListContextQuery
+            });
+          } catch (retryError) {
+            if (!isResidentSchemaDriftError(retryError)) throw retryError;
+          }
+        }
+
         const legacyCreated = await prisma.resident.create({
           data: {
             facilityId: context.facilityId,

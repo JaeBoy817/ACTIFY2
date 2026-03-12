@@ -13,6 +13,7 @@ import {
 } from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
+import { ensureResidentExtendedColumns } from "@/lib/residents/ensure-columns";
 
 const patchResidentSchema = z
   .object({
@@ -117,6 +118,25 @@ export async function PATCH(
       })
       .catch(async (error) => {
         if (!isResidentSchemaDriftError(error)) throw error;
+
+        const healed = await ensureResidentExtendedColumns();
+        if (healed) {
+          try {
+            await prisma.resident.update({
+              where: {
+                id: existing.id
+              },
+              data: updateData,
+              select: {
+                id: true
+              }
+            });
+            return;
+          } catch (retryError) {
+            if (!isResidentSchemaDriftError(retryError)) throw retryError;
+          }
+        }
+
         await prisma.resident.update({
           where: {
             id: existing.id
@@ -158,6 +178,25 @@ export async function PATCH(
       })
       .catch(async (error) => {
         if (!isResidentSchemaDriftError(error)) throw error;
+
+        const healed = await ensureResidentExtendedColumns();
+        if (healed) {
+          try {
+            const healedRow = await prisma.resident.findFirst({
+              where: {
+                id: existing.id,
+                facilityId: context.facilityId
+              },
+              ...residentListContextQuery
+            });
+            if (healedRow) {
+              return healedRow;
+            }
+          } catch (retryError) {
+            if (!isResidentSchemaDriftError(retryError)) throw retryError;
+          }
+        }
+
         const legacyUpdated = await prisma.resident.findFirst({
           where: {
             id: existing.id,
