@@ -400,6 +400,7 @@ export function ResidentsWorkspace({
   const [importOpen, setImportOpen] = useState(false);
   const [editingResident, setEditingResident] = useState<ResidentListRow | null>(null);
   const [isMarking, startMarkingTransition] = useTransition();
+  const [quickFilterOpen, setQuickFilterOpen] = useState(false);
 
   const deferredSearch = useDeferredValue(search);
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
@@ -435,6 +436,33 @@ export function ResidentsWorkspace({
 
     return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
   }, [residents]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (search.trim()) count += 1;
+    if (filter !== "ACTIVE") count += 1;
+    if (unitFilter !== "all") count += 1;
+    if (admissionMonthFilter !== "all") count += 1;
+    if (participationFilter !== "all") count += 1;
+    if (sortBy !== "ROOM") count += 1;
+    return count;
+  }, [admissionMonthFilter, filter, participationFilter, search, sortBy, unitFilter]);
+
+  function clearFilters() {
+    setSearch("");
+    setFilter("ACTIVE");
+    setUnitFilter("all");
+    setAdmissionMonthFilter("all");
+    setParticipationFilter("all");
+    setSortBy("ROOM");
+  }
+
+  function toggleQuickFilter(value: ResidentFilterKey) {
+    setFilter((current) => {
+      if (current === value) return "ACTIVE";
+      return value;
+    });
+  }
 
   const visibleResidents = useMemo(() => {
     const token = deferredSearch.trim().toLowerCase();
@@ -869,8 +897,68 @@ export function ResidentsWorkspace({
         </section>
 
         <section className="rounded-2xl border border-[#213457] bg-[linear-gradient(180deg,#0f1a2f_0%,#0b1426_100%)] p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto]">
-            <label className="relative flex h-10 items-center rounded-xl border border-[#35517f] bg-[#11203c] px-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Resident Search & Filters</p>
+              <p className="text-sm text-[#c7d9f8]">Search by resident, room, status, unit, admission month, and participation.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeFilterCount > 0 ? (
+                <Badge className="border-cyan-300/40 bg-cyan-500/16 text-cyan-100">{activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}</Badge>
+              ) : (
+                <Badge className="border-[#3a5688] bg-[#11203a] text-[#c6d9fa]">Default view</Badge>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 border-[#395b90] bg-[#122342] text-xs text-[#d4e5ff] hover:bg-[#193055]"
+                onClick={() => setQuickFilterOpen((current) => !current)}
+              >
+                <Filter className="mr-1 h-3.5 w-3.5" />
+                Quick Filters
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 border-[#395b90] bg-[#122342] text-xs text-[#d4e5ff] hover:bg-[#193055]"
+                onClick={clearFilters}
+                disabled={activeFilterCount === 0}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+
+          {quickFilterOpen ? (
+            <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-[#2c4674] bg-[#0d1a31] p-2.5">
+              {[
+                { value: "ACTIVE", label: "Active" },
+                { value: "OVERDUE", label: "Overdue" },
+                { value: "DUE_SOON", label: "Due Soon" },
+                { value: "QUARTERLY_DUE", label: "Quarterly Due" },
+                { value: "ANNUAL_DUE", label: "Annual Due" },
+                { value: "MDS_DUE", label: "MDS Due" },
+                { value: "DISCHARGED", label: "Discharged" }
+              ].map((quick) => (
+                <button
+                  key={quick.value}
+                  type="button"
+                  onClick={() => toggleQuickFilter(quick.value as ResidentFilterKey)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    filter === quick.value
+                      ? "border-cyan-300/55 bg-cyan-500/18 text-cyan-100"
+                      : "border-[#375888] bg-[#10203b] text-[#cce0ff] hover:bg-[#163055]"
+                  )}
+                >
+                  {quick.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 lg:grid-cols-12">
+            <label className="relative flex h-10 items-center rounded-xl border border-[#35517f] bg-[#11203c] px-3 lg:col-span-4">
               <Search className="h-4 w-4 text-[#8ca5d2]" />
               <Input
                 value={search}
@@ -880,77 +968,87 @@ export function ResidentsWorkspace({
               />
             </label>
 
-            <Select value={filter} onValueChange={(value) => setFilter(value as ResidentFilterKey)}>
-              <SelectTrigger className="h-10 w-[180px] border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                <Filter className="mr-1 h-4 w-4 text-[#9ab1da]" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RESIDENT_FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="lg:col-span-2">
+              <Select value={filter} onValueChange={(value) => setFilter(value as ResidentFilterKey)}>
+                <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
+                  <Filter className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESIDENT_FILTER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={unitFilter} onValueChange={setUnitFilter}>
-              <SelectTrigger className="h-10 w-[170px] border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                <SelectValue placeholder="Unit / Hall" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Units</SelectItem>
-                {initialUnits.map((unit) => (
-                  <SelectItem key={unit.id} value={unit.id}>
-                    {unit.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="lg:col-span-2">
+              <Select value={unitFilter} onValueChange={setUnitFilter}>
+                <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
+                  <SelectValue placeholder="Unit / Hall" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Units</SelectItem>
+                  {initialUnits.map((unit) => (
+                    <SelectItem key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={admissionMonthFilter} onValueChange={setAdmissionMonthFilter}>
-              <SelectTrigger className="h-10 w-[190px] border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                <CalendarClock className="mr-1 h-4 w-4 text-[#9ab1da]" />
-                <SelectValue placeholder="Admission Month" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Admission Months</SelectItem>
-                {monthOptions.map((month) => (
-                  <SelectItem key={month} value={month}>
-                    {new Date(`${month}-01T12:00:00.000Z`).toLocaleDateString(undefined, {
-                      month: "long",
-                      year: "numeric"
-                    })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="lg:col-span-2">
+              <Select value={admissionMonthFilter} onValueChange={setAdmissionMonthFilter}>
+                <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
+                  <CalendarClock className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <SelectValue placeholder="Admission Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Admission Months</SelectItem>
+                  {monthOptions.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {new Date(`${month}-01T12:00:00.000Z`).toLocaleDateString(undefined, {
+                        month: "long",
+                        year: "numeric"
+                      })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={participationFilter} onValueChange={(value) => setParticipationFilter(value as ParticipationBand)}>
-              <SelectTrigger className="h-10 w-[170px] border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                <SelectValue placeholder="Participation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Participation</SelectItem>
-                <SelectItem value="high">High (70%+)</SelectItem>
-                <SelectItem value="moderate">Moderate (40-69%)</SelectItem>
-                <SelectItem value="low">Low (&lt;40%)</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="lg:col-span-2">
+              <Select value={participationFilter} onValueChange={(value) => setParticipationFilter(value as ParticipationBand)}>
+                <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
+                  <SelectValue placeholder="Participation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Participation</SelectItem>
+                  <SelectItem value="high">High (70%+)</SelectItem>
+                  <SelectItem value="moderate">Moderate (40-69%)</SelectItem>
+                  <SelectItem value="low">Low (&lt;40%)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={sortBy} onValueChange={(value) => setSortBy(value as ResidentSortKey)}>
-              <SelectTrigger className="h-10 w-[190px] border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                <ArrowDownWideNarrow className="mr-1 h-4 w-4 text-[#9ab1da]" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RESIDENT_SORT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="lg:col-span-2">
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as ResidentSortKey)}>
+                <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
+                  <ArrowDownWideNarrow className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESIDENT_SORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </section>
 

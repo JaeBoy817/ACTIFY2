@@ -22,7 +22,9 @@ export default async function ResidentsArchivePage() {
     .findMany({
       where: {
         facilityId: context.facilityId,
-        status: "DISCHARGED"
+        status: {
+          in: ["DISCHARGED", "TRANSFERRED", "DECEASED", "OTHER"]
+        }
       },
       ...residentListContextQuery,
       orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
@@ -32,7 +34,9 @@ export default async function ResidentsArchivePage() {
       const legacyRows = await prisma.resident.findMany({
         where: {
           facilityId: context.facilityId,
-          status: "DISCHARGED"
+          status: {
+            in: ["DISCHARGED", "TRANSFERRED", "DECEASED", "OTHER"]
+          }
         },
         ...residentListContextLegacyQuery,
         orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
