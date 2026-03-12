@@ -4,9 +4,11 @@ import { CarePlanWizard } from "@/components/care-plans/CarePlanWizard";
 import { getResidentCarePlan, updateCarePlan } from "@/app/app/care-plans/_actions/actions";
 
 export default async function ResidentCarePlanEditPage({
-  params
+  params,
+  searchParams
 }: {
   params: { id: string };
+  searchParams?: { template?: string };
 }) {
   const data = await getResidentCarePlan(params.id);
   if (!data) {
@@ -30,6 +32,7 @@ export default async function ResidentCarePlanEditPage({
       mode="edit"
       residentName={data.resident.name}
       residentStatus={data.resident.status}
+      mergeTemplateKey={searchParams?.template ?? null}
       existingPlan={{
         focusAreasList: data.plan.focusAreasList,
         goals: data.plan.goals.map((goal) => ({

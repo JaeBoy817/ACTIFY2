@@ -51,6 +51,7 @@ type Props = {
   residentName: string;
   residentStatus: string;
   templateKey?: string | null;
+  mergeTemplateKey?: string | null;
   existingPlan?: ExistingPlanPrefill | null;
   submitAction: (formData: FormData) => Promise<void> | void;
 };
@@ -130,11 +131,63 @@ function buildFromExisting(existing: ExistingPlanPrefill): CarePlanWizardDraft {
   };
 }
 
+function mergeTemplateIntoDraft(base: CarePlanWizardDraft, templateKey: string): CarePlanWizardDraft {
+  const template = CARE_PLAN_TEMPLATE_BY_KEY[templateKey];
+  if (!template) return base;
+
+  const focusAreas = Array.from(new Set([...base.focusAreas, ...template.defaultFocusAreas])) as CarePlanWizardDraft["focusAreas"];
+
+  const existingGoalTemplateKeys = new Set(base.goals.map((goal) => goal.templateKey).filter(Boolean));
+  const mergedGoals = [...base.goals];
+  for (const goal of template.defaultGoalTemplates) {
+    if (existingGoalTemplateKeys.has(goal.templateKey)) continue;
+    mergedGoals.push({
+      id: `goal-${Math.random().toString(36).slice(2)}`,
+      templateKey: goal.templateKey,
+      customText: null,
+      baseline: goal.baseline,
+      target: goal.target,
+      timeframeDays: goal.timeframeDays
+    });
+  }
+
+  const interventionSignature = (item: { title: string; type: string }) => `${item.type}::${item.title}`.toLowerCase();
+  const existingInterventionSignatures = new Set(
+    base.interventions.map((item) => interventionSignature(item))
+  );
+  const mergedInterventions = [...base.interventions];
+  for (const intervention of template.defaultInterventions) {
+    if (existingInterventionSignatures.has(interventionSignature(intervention))) continue;
+    mergedInterventions.push({
+      id: makeInterventionId(),
+      title: intervention.title,
+      type: intervention.type,
+      bedBoundFriendly: intervention.bedBoundFriendly ?? false,
+      dementiaFriendly: intervention.dementiaFriendly ?? false,
+      lowVisionFriendly: intervention.lowVisionFriendly ?? false,
+      hardOfHearingFriendly: intervention.hardOfHearingFriendly ?? false
+    });
+  }
+
+  const mergedBarriers = Array.from(new Set([...(base.barriers ?? []), ...(template.suggestedBarriers ?? [])]));
+  const mergedSupports = Array.from(new Set([...(base.supports ?? []), ...(template.suggestedSupports ?? [])]));
+
+  return {
+    ...base,
+    focusAreas,
+    goals: mergedGoals,
+    interventions: mergedInterventions,
+    barriers: mergedBarriers,
+    supports: mergedSupports
+  };
+}
+
 export function CarePlanWizard({
   mode,
   residentName,
   residentStatus,
   templateKey,
+  mergeTemplateKey,
   existingPlan,
   submitAction
 }: Props) {
@@ -144,13 +197,19 @@ export function CarePlanWizard({
   const [step, setStep] = useState<WizardStep>(0);
 
   const initialDraft = useMemo(() => {
-    if (existingPlan) return buildFromExisting(existingPlan);
+    if (existingPlan) {
+      const fromExisting = buildFromExisting(existingPlan);
+      if (mergeTemplateKey) {
+        return mergeTemplateIntoDraft(fromExisting, mergeTemplateKey);
+      }
+      return fromExisting;
+    }
     if (templateKey) {
       const fromTemplate = buildFromTemplate(templateKey);
       if (fromTemplate) return fromTemplate;
     }
     return defaultDraft();
-  }, [existingPlan, templateKey]);
+  }, [existingPlan, mergeTemplateKey, templateKey]);
 
   const [draft, setDraft] = useState<CarePlanWizardDraft>(initialDraft);
   const [errors, setErrors] = useState<Record<number, string | null>>({});

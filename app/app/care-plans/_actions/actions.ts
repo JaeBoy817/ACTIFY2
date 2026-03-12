@@ -5,6 +5,7 @@ import { type Prisma, type ReviewResult } from "@prisma/client";
 
 import { logAudit } from "@/lib/audit";
 import { focusAreaLabel } from "@/lib/care-plans/enums";
+import { stripDocumentationMeta } from "@/lib/documentation/meta";
 import {
   type CarePlanReviewPayload,
   type CarePlanWizardPayload,
@@ -23,6 +24,7 @@ import {
 import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { buildResidentCompletionsMap, getResidentAssessmentSchedule } from "@/lib/residents/assessment-due";
 
 type DashboardStatusFilter = "ALL" | "NO_PLAN" | "ACTIVE" | "DUE_SOON" | "OVERDUE" | "ARCHIVED";
 
@@ -142,6 +144,56 @@ function parseReviewPayload(payload: unknown): CarePlanReviewPayload {
 
 function addDays(base: Date, days: number) {
   return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function startOfCurrentMonth(base: Date) {
+  return new Date(base.getFullYear(), base.getMonth(), 1);
+}
+
+function titleCase(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatAge(birthDate: Date | null, now: Date) {
+  if (!birthDate) return null;
+  let age = now.getFullYear() - birthDate.getFullYear();
+  const monthDiff = now.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age : null;
+}
+
+function parseResidentTags(value: string | null | undefined) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function participationTrendLabel(trend: CarePlanTrend) {
+  if (trend === "UP") return "Improving";
+  if (trend === "DOWN") return "Needs attention";
+  return "Stable";
+}
+
+function formatDueLabelFromIso(iso: string | null, now: Date) {
+  if (!iso) return "Not scheduled";
+  const due = new Date(iso);
+  if (Number.isNaN(due.getTime())) return "Not scheduled";
+  const deltaDays = Math.ceil((due.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  if (deltaDays < 0) return `Overdue by ${Math.abs(deltaDays)}d`;
+  if (deltaDays === 0) return "Due today";
+  if (deltaDays === 1) return "Due tomorrow";
+  return `Due in ${deltaDays}d`;
 }
 
 export async function getCarePlansDashboardData(
@@ -715,5 +767,352 @@ export async function exportCarePlanPdf(carePlanId: string) {
     goals: carePlan.goals,
     interventions: carePlan.interventions,
     reviews: carePlan.reviews
+  };
+}
+
+export async function getResidentActivitiesCarePlanData(residentId: string) {
+  const context = await getFacilityContextWithSubscription("carePlan");
+  const now = new Date();
+  const thirtyDaysAgo = addDays(now, -30);
+  const sevenDaysAgo = addDays(now, -7);
+  const monthStart = startOfCurrentMonth(now);
+
+  const base = await getResidentCarePlan(residentId);
+  if (!base) return null;
+
+  const [residentMeta, notes, attendanceRows] = await Promise.all([
+    prisma.resident.findFirst({
+      where: {
+        id: residentId,
+        facilityId: context.facilityId
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        preferredName: true,
+        room: true,
+        status: true,
+        birthDate: true,
+        admissionDate: true,
+        mdsManualDueDate: true,
+        preferences: true,
+        safetyNotes: true,
+        bestTimesOfDay: true,
+        notes: true,
+        tags: true,
+        lastOneOnOneAt: true,
+        followUpFlag: true,
+        createdAt: true,
+        unit: { select: { name: true } }
+      }
+    }),
+    prisma.progressNote.findMany({
+      where: {
+        residentId,
+        resident: {
+          facilityId: context.facilityId
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 220,
+      select: {
+        id: true,
+        type: true,
+        narrative: true,
+        createdAt: true,
+        moodAffect: true,
+        response: true,
+        participationLevel: true,
+        followUp: true,
+        createdByUser: {
+          select: {
+            name: true
+          }
+        }
+      }
+    }),
+    prisma.attendance.findMany({
+      where: {
+        residentId,
+        resident: {
+          facilityId: context.facilityId
+        },
+        createdAt: {
+          gte: thirtyDaysAgo
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 260,
+      select: {
+        id: true,
+        status: true,
+        barrierReason: true,
+        notes: true,
+        createdAt: true,
+        activityInstance: {
+          select: {
+            id: true,
+            title: true,
+            location: true,
+            startAt: true,
+            template: {
+              select: {
+                category: true
+              }
+            }
+          }
+        }
+      }
+    })
+  ]);
+
+  if (!residentMeta) return null;
+
+  const completionsMap = buildResidentCompletionsMap(
+    notes.map((item) => ({
+      residentId,
+      narrative: item.narrative,
+      createdAt: item.createdAt
+    }))
+  );
+
+  const assessmentSchedule = getResidentAssessmentSchedule({
+    admissionDate: residentMeta.admissionDate,
+    residentCreatedAt: residentMeta.createdAt,
+    mdsManualDueDate: residentMeta.mdsManualDueDate,
+    status: residentMeta.status,
+    completions: completionsMap.get(residentId) ?? null,
+    now
+  });
+
+  const notesThisMonth = notes.filter((item) => item.createdAt >= monthStart);
+  const oneToOneThisMonth = notesThisMonth.filter((item) => item.type === "ONE_TO_ONE").length;
+
+  const attendance30 = attendanceRows;
+  const attendance7 = attendanceRows.filter((item) => item.createdAt >= sevenDaysAgo);
+  const present30 = attendance30.filter((item) => item.status === "PRESENT" || item.status === "ACTIVE" || item.status === "LEADING").length;
+  const present7 = attendance7.filter((item) => item.status === "PRESENT" || item.status === "ACTIVE" || item.status === "LEADING").length;
+  const refused30 = attendance30.filter((item) => item.status === "REFUSED").length;
+  const total30 = attendance30.length;
+  const total7 = attendance7.length;
+  const participation30 = total30 > 0 ? clampPercent((present30 / total30) * 100) : 0;
+  const participation7 = total7 > 0 ? clampPercent((present7 / total7) * 100) : 0;
+
+  const oneOnOneNeededDays = residentMeta.lastOneOnOneAt
+    ? Math.floor((now.getTime() - residentMeta.lastOneOnOneAt.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+  const oneOnOneNeeded = oneOnOneNeededDays == null ? true : oneOnOneNeededDays >= 30;
+
+  const documentationCompletionPercent = clampPercent(
+    ((notesThisMonth.filter((item) => !item.followUp).length || 0) / Math.max(1, notesThisMonth.length)) * 100
+  );
+
+  const responseCounts = {
+    POSITIVE: notesThisMonth.filter((item) => item.response === "POSITIVE").length,
+    NEUTRAL: notesThisMonth.filter((item) => item.response === "NEUTRAL").length,
+    RESISTANT: notesThisMonth.filter((item) => item.response === "RESISTANT").length
+  };
+  const responseTotal = responseCounts.POSITIVE + responseCounts.NEUTRAL + responseCounts.RESISTANT;
+
+  const categoryCounts = new Map<string, number>();
+  const hourCounts = new Map<string, number>();
+  for (const row of attendance30) {
+    if (row.status !== "PRESENT" && row.status !== "ACTIVE" && row.status !== "LEADING") continue;
+    const category = row.activityInstance.template?.category || "General";
+    categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+
+    const hour = row.activityInstance.startAt.getHours();
+    const bucket = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+    hourCounts.set(bucket, (hourCounts.get(bucket) ?? 0) + 1);
+  }
+
+  const mostAttendedCategory =
+    [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Not enough data";
+  const bestTimeWindow = [...hourCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Not enough data";
+
+  const latestMood = notesThisMonth[0]?.moodAffect ? titleCase(notesThisMonth[0].moodAffect) : "Baseline stable";
+  const tags = parseResidentTags(residentMeta.tags);
+  const residentChips = [
+    ...tags.slice(0, 5),
+    residentMeta.preferences?.toLowerCase().includes("music") ? "Enjoys music" : null,
+    oneOnOneNeeded ? "1:1 needed" : "1:1 current"
+  ]
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 8);
+
+  const docs = notes.slice(0, 18).map((item) => {
+    const kind =
+      item.type === "ONE_TO_ONE"
+        ? "ONE_TO_ONE"
+        : item.narrative.includes("\"kind\":\"UDA\"")
+          ? "UDA"
+          : item.narrative.includes("\"kind\":\"MDS\"")
+            ? "MDS"
+            : "PROGRESS";
+
+    const href =
+      kind === "PROGRESS"
+        ? `/app/documentation/progress-notes/${item.id}`
+        : kind === "ONE_TO_ONE"
+          ? `/app/documentation/one-to-one/${item.id}`
+          : kind === "UDA"
+            ? `/app/documentation/uda/${item.id}`
+            : `/app/documentation/mds/${item.id}`;
+
+    return {
+      id: item.id,
+      kind,
+      title:
+        kind === "PROGRESS"
+          ? "Progress Note"
+          : kind === "ONE_TO_ONE"
+            ? "1:1 Note"
+            : kind === "UDA"
+              ? "UDA Assessment"
+              : "MDS Section F",
+      status: item.narrative.includes("\"status\":\"DRAFT\"")
+        ? "Draft"
+        : item.narrative.includes("\"status\":\"READY_REVIEW\"")
+          ? "Ready Review"
+          : "Completed",
+      createdAtIso: item.createdAt.toISOString(),
+      author: item.createdByUser.name,
+      summary: stripDocumentationMeta(item.narrative),
+      href
+    };
+  });
+
+  const interdisciplinary = [
+    {
+      key: "activities",
+      label: "Activities",
+      state: notesThisMonth.length > 0 ? "Reviewed" : "Pending"
+    },
+    {
+      key: "nursing",
+      label: "Nursing",
+      state: attendance30.length > 0 ? "Reviewed" : "Pending"
+    },
+    {
+      key: "social",
+      label: "Social Services",
+      state: notesThisMonth.some((item) => stripDocumentationMeta(item.narrative).toLowerCase().includes("family")) ? "Reviewed" : "Pending"
+    },
+    {
+      key: "therapy",
+      label: "Therapy",
+      state: attendance30.some((item) => item.barrierReason === "THERAPY") ? "Reviewed" : "Not Required"
+    },
+    {
+      key: "dietary",
+      label: "Dietary",
+      state: "Not Required"
+    },
+    {
+      key: "mds",
+      label: "MDS Coordinator",
+      state: docs.some((item) => item.kind === "MDS") ? "Reviewed" : "Pending"
+    },
+    {
+      key: "resident",
+      label: "Resident / Responsible Party",
+      state: notesThisMonth.some((item) => Boolean(item.followUp && item.followUp.trim())) ? "Reviewed" : "Pending"
+    }
+  ] as const;
+
+  return {
+    resident: {
+      id: residentMeta.id,
+      name: `${residentMeta.firstName} ${residentMeta.lastName}`,
+      firstName: residentMeta.firstName,
+      lastName: residentMeta.lastName,
+      preferredName: residentMeta.preferredName,
+      room: residentMeta.room,
+      status: residentMeta.status,
+      unitName: residentMeta.unit?.name ?? null,
+      birthDateIso: isoOrNull(residentMeta.birthDate),
+      admissionDateIso: isoOrNull(residentMeta.admissionDate),
+      createdAtIso: residentMeta.createdAt.toISOString(),
+      age: formatAge(residentMeta.birthDate, now),
+      tags,
+      chips: residentChips,
+      preferences: residentMeta.preferences,
+      safetyNotes: residentMeta.safetyNotes,
+      bestTimesOfDay: residentMeta.bestTimesOfDay,
+      notes: residentMeta.notes,
+      followUpFlag: residentMeta.followUpFlag,
+      oneToOneNeeded: oneOnOneNeeded
+    },
+    plan: base.plan,
+    displayStatus: base.displayStatus,
+    displayStatusLabel: base.displayStatusLabel,
+    displayStatusTone: base.displayStatusTone,
+    trend: base.trend,
+    summary: {
+      activeFocuses: base.plan?.focusAreasList.length ?? 0,
+      currentGoals: base.plan?.goals.length ?? 0,
+      openInterventions: base.plan?.interventions.length ?? 0,
+      oneToOneNeeded: oneOnOneNeeded,
+      participationTrendLabel: participationTrendLabel(base.trend),
+      refusalsThisMonth: refused30,
+      nextReviewDateIso: base.plan ? base.plan.nextReviewDate.toISOString() : null,
+      quarterlyLabel: formatDueLabelFromIso(assessmentSchedule.quarterly.dueDateIso, now),
+      annualLabel: formatDueLabelFromIso(assessmentSchedule.annual.dueDateIso, now),
+      mdsLabel: formatDueLabelFromIso(assessmentSchedule.mds.dueDateIso, now),
+      documentationCompletionPercent
+    },
+    baseline: {
+      communication: tags.some((item) => item.toLowerCase().includes("non verbal")) ? "Communication support needed" : "Verbal communication",
+      cognition:
+        notesThisMonth.some((item) => stripDocumentationMeta(item.narrative).toLowerCase().includes("cue"))
+          ? "Cueing often needed"
+          : "Consistent with baseline",
+      mobility:
+        residentMeta.status === "BED_BOUND"
+          ? "Bedbound / room-based programming"
+          : residentMeta.status === "ON_LEAVE"
+            ? "On leave / variable attendance"
+            : "Ambulates with support as needed",
+      mood: latestMood,
+      participation: participation30 >= 60 ? "Participation stable" : participation30 >= 40 ? "Participation variable" : "Low participation risk"
+    },
+    participation: {
+      sevenDayPercent: participation7,
+      thirtyDayPercent: participation30,
+      groupAttendance30d: present30,
+      oneToOneThisMonth,
+      independentEngagement30d: notesThisMonth.filter((item) =>
+        stripDocumentationMeta(item.narrative).toLowerCase().includes("independent")
+      ).length,
+      refusalsThisMonth: refused30,
+      mostAttendedCategory,
+      bestTimeWindow,
+      responseBreakdown: {
+        positivePercent: responseTotal ? clampPercent((responseCounts.POSITIVE / responseTotal) * 100) : 0,
+        neutralPercent: responseTotal ? clampPercent((responseCounts.NEUTRAL / responseTotal) * 100) : 0,
+        resistantPercent: responseTotal ? clampPercent((responseCounts.RESISTANT / responseTotal) * 100) : 0
+      }
+    },
+    assessmentSchedule,
+    docs,
+    reviewTimeline: (base.plan?.reviews ?? []).map((review) => ({
+      id: review.id,
+      reviewDateIso: review.reviewDate.toISOString(),
+      result: review.result,
+      participation: review.participation,
+      response: review.response,
+      note: review.note,
+      nextReviewDateAfterIso: review.nextReviewDateAfter.toISOString(),
+      reason:
+        review.note && review.note.toLowerCase().includes("annual")
+          ? "Annual"
+          : review.note && review.note.toLowerCase().includes("quarter")
+            ? "Quarterly"
+            : "Care Plan Review"
+    })),
+    interdisciplinary
   };
 }
