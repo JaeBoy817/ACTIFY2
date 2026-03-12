@@ -692,14 +692,19 @@ export function ResidentsWorkspace({
       },
       body: JSON.stringify(payload)
     });
-    const body = await response.json();
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body?.error ?? "Could not save resident.");
-    const nextResident = body.resident as ResidentListRow;
 
-    setResidents((previous) => {
-      const without = previous.filter((resident) => resident.id !== nextResident.id);
-      return [...without, nextResident];
-    });
+    const nextResident = body?.resident as ResidentListRow | undefined;
+    if (nextResident?.id) {
+      setResidents((previous) => {
+        const without = previous.filter((resident) => resident.id !== nextResident.id);
+        return [...without, nextResident];
+      });
+      return;
+    }
+
+    await refreshResidents();
   }
 
   async function importResidents(rows: Array<{ firstName: string; lastName: string; room: string; status: string; notes?: string }>) {

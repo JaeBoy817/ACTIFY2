@@ -105,17 +105,19 @@ export async function PATCH(
       lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
     };
 
-    const updated = await prisma.resident
+    await prisma.resident
       .update({
         where: {
           id: existing.id
         },
         data: updateData,
-        ...residentListContextQuery
+        select: {
+          id: true
+        }
       })
       .catch(async (error) => {
         if (!isResidentSchemaDriftError(error)) throw error;
-        const legacyUpdated = await prisma.resident.update({
+        await prisma.resident.update({
           where: {
             id: existing.id
           },
@@ -140,10 +142,38 @@ export async function PATCH(
             followUpFlag: parsed.data.followUpFlag,
             lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
           },
+          select: {
+            id: true
+          }
+        });
+      });
+
+    const updated = await prisma.resident
+      .findFirst({
+        where: {
+          id: existing.id,
+          facilityId: context.facilityId
+        },
+        ...residentListContextQuery
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyUpdated = await prisma.resident.findFirst({
+          where: {
+            id: existing.id,
+            facilityId: context.facilityId
+          },
           ...residentListContextLegacyQuery
         });
+        if (!legacyUpdated) {
+          throw new ResidentsApiError("Resident not found after update.", 404);
+        }
         return inflateLegacyResidentContextRow(legacyUpdated);
       });
+
+    if (!updated) {
+      throw new ResidentsApiError("Resident not found after update.", 404);
+    }
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),
