@@ -5,17 +5,19 @@ import {
   ClipboardList,
   HeartPulse,
   ListChecks,
-  NotebookPen,
   Plus,
   ShieldCheck,
-  Sparkles,
   Target,
   Users,
   Workflow
 } from "lucide-react";
 
 import type { getResidentActivitiesCarePlanData } from "@/app/app/care-plans/_actions/actions";
+import { TopContentHeader } from "@/components/app/TopContentHeader";
 import { StatusBadge } from "@/components/care-plans/StatusBadge";
+import { PremiumInputField } from "@/components/dashboard/v4/PremiumInputField";
+import { PremiumPillButton } from "@/components/dashboard/v4/PremiumPillButton";
+import { PremiumSegmentControl } from "@/components/dashboard/v4/PremiumSegmentControl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -268,6 +270,7 @@ export function ActivitiesCarePlanPage({
           data={data}
           timeZone={timeZone}
           canEdit={canEdit}
+          activeTab={activeTab}
           residentPath={residentPath}
           archiveAction={archiveAction}
         />
@@ -322,7 +325,7 @@ export function ActivitiesCarePlanPage({
         {activeTab === "participation" ? (
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)]">
             <ParticipationAnalyticsPanel data={data} detailed />
-            <Card className="rounded-2xl border-[#253b62] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+            <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
               <CardHeader>
                 <CardTitle className="text-base text-white">Interdisciplinary Sign-off</CardTitle>
                 <p className="text-xs text-[#9cb4de]">Clinical involvement and review readiness across disciplines.</p>
@@ -343,7 +346,7 @@ export function ActivitiesCarePlanPage({
         {activeTab === "history" ? (
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)]">
             <ReviewTimeline data={data} timeZone={timeZone} />
-            <Card className="rounded-2xl border-[#253b62] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+            <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
               <CardHeader>
                 <CardTitle className="text-base text-white">Interdisciplinary Sign-off</CardTitle>
                 <p className="text-xs text-[#9cb4de]">Ownership visibility for Activities, Nursing, and Section F workflows.</p>
@@ -363,12 +366,14 @@ function CarePlanHeader({
   data,
   timeZone,
   canEdit,
+  activeTab,
   residentPath,
   archiveAction
 }: {
   data: ActivitiesCarePlanData;
   timeZone: string;
   canEdit: boolean;
+  activeTab: ActivitiesCarePlanTab;
   residentPath: string;
   archiveAction: (formData: FormData) => Promise<void> | void;
 }) {
@@ -383,64 +388,57 @@ function CarePlanHeader({
           : "UNSCHEDULED";
 
   return (
-    <section className="rounded-[1.7rem] border border-[#24385e] bg-[linear-gradient(180deg,#0d1730_0%,#091126_100%)] p-4 md:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#95add8]">Resident Workflow</p>
-          <h1 className="mt-1 text-3xl font-black text-white md:text-4xl">Activities Care Plan</h1>
-          <p className="mt-1 text-sm text-[#bcd0f0]">
-            {data.resident.name} · Room {data.resident.room}
-            {data.resident.unitName ? ` · ${data.resident.unitName}` : ""}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusBadge status={data.displayStatus as CarePlanDisplayStatus} className="border-white/25 bg-[#122343] text-[#dbe9ff]" />
-            <Badge className="border-[#3a5d93] bg-[#132648] text-[#d9e6ff]">Last updated {formatDate(data.plan?.updatedAt ? data.plan.updatedAt.toISOString() : null, timeZone)}</Badge>
-            <Badge className={cn("border", dueTone(nextDueLevel))}>
-              Next review {nextReviewDate ? formatDate(nextReviewDate, timeZone) : "Not set"}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild className="h-9 rounded-full border border-cyan-300/50 bg-cyan-500/20 px-4 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/30">
-            <Link href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`}>Edit Care Plan</Link>
-          </Button>
-          <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
-            <Link href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`}>
-              <Plus className="mr-1 h-3.5 w-3.5" />Add Focus
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
-            <Link href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`}>Add Goal</Link>
-          </Button>
-          <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
-            <Link href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`}>Add Intervention</Link>
-          </Button>
-          <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
-            <Link href={`${residentPath}/reviews/new`}>Mark Reviewed</Link>
-          </Button>
+    <TopContentHeader
+      eyebrow="Resident Workflow"
+      title="Activities Care Plan"
+      subtitle={`${data.resident.name} · Room ${data.resident.room}${data.resident.unitName ? ` · ${data.resident.unitName}` : ""}`}
+      icon={ClipboardList}
+      accentGradientClasses="from-cyan-300 to-blue-500"
+      actions={
+        <>
+          <PremiumPillButton label="Edit Care Plan" href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`} tone="blue" />
+          <PremiumPillButton label="Add Focus" href={data.plan ? `${residentPath}/edit` : `${residentPath}/new`} tone="neutral" icon={Plus} />
+          <PremiumPillButton label="Mark Reviewed" href={`${residentPath}/reviews/new`} tone="emerald" />
           {data.plan ? (
-            <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
-              <Link href={`/api/care-plans/${data.plan.id}/pdf`} target="_blank">Print / Export</Link>
-            </Button>
+            <PremiumPillButton label="Print / Export" href={`/api/care-plans/${data.plan.id}/pdf`} tone="neutral" />
           ) : null}
           {canEdit && data.plan ? (
             <form action={archiveAction}>
               <input type="hidden" name="carePlanId" value={data.plan.id} />
-              <Button type="submit" variant="outline" className="h-9 rounded-full border-rose-400/45 bg-rose-500/16 px-4 text-xs text-rose-100 hover:bg-rose-500/24">
+              <Button type="submit" className="inline-flex h-9 items-center rounded-full border border-rose-400/45 bg-[#3a1a2a] px-3 text-xs font-semibold text-rose-100 hover:bg-[#472036]">
                 Mark Resolved
               </Button>
             </form>
           ) : null}
+        </>
+      }
+    >
+      <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
+        <PremiumInputField placeholder="Search goals, interventions, and care plan notes" className="w-full" />
+        <PremiumSegmentControl
+          items={[
+            { id: "overview", label: "Overview", href: sectionHref(residentPath, "overview"), active: activeTab === "overview" },
+            { id: "focuses", label: "Focuses", href: sectionHref(residentPath, "focuses"), active: activeTab === "focuses" },
+            { id: "goals", label: "Goals", href: sectionHref(residentPath, "goals-interventions"), active: activeTab === "goals-interventions" }
+          ]}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={data.displayStatus as CarePlanDisplayStatus} className="border-white/25 bg-[#122343] text-[#dbe9ff]" />
+          <Badge className="border-[#3a5d93] bg-[#132648] text-[#d9e6ff]">
+            Last updated {formatDate(data.plan?.updatedAt ? data.plan.updatedAt.toISOString() : null, timeZone)}
+          </Badge>
+          <Badge className={cn("border", dueTone(nextDueLevel))}>
+            Next review {nextReviewDate ? formatDate(nextReviewDate, timeZone) : "Not set"}
+          </Badge>
         </div>
       </div>
-    </section>
+    </TopContentHeader>
   );
 }
 
 function ResidentSnapshotBanner({ data, timeZone }: { data: ActivitiesCarePlanData; timeZone: string }) {
   return (
-    <section className="rounded-2xl border border-[#243a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)] p-4">
+    <section className="rounded-2xl border border-[#2c395b] bg-[#111a2e] p-4">
       <div className="flex flex-wrap items-start gap-3">
         <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-500/18 text-lg font-black text-cyan-100">
           {data.resident.firstName[0]}
@@ -484,7 +482,7 @@ function ResidentSnapshotBanner({ data, timeZone }: { data: ActivitiesCarePlanDa
 
 function SnapshotMeta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-2.5">
+    <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">{label}</p>
       <p className="mt-1 text-sm text-[#dce8ff]">{value}</p>
     </div>
@@ -524,7 +522,7 @@ function CarePlanSummaryStrip({
           <Link
             key={item.label}
             href={item.href}
-            className="group rounded-xl border border-[#274068] bg-[linear-gradient(180deg,#0f1b33_0%,#0b1528_100%)] p-3 transition hover:-translate-y-[1px] hover:border-[#3f5f93]"
+            className="group rounded-xl border border-[#2c395b] bg-[#111a2e] p-3 transition hover:-translate-y-[1px] hover:border-[#3f5f93]"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">{item.label}</p>
@@ -545,45 +543,40 @@ function CarePlanSummaryStrip({
 }
 
 function CarePlanTabs({ residentPath, activeTab }: { residentPath: string; activeTab: ActivitiesCarePlanTab }) {
-  const tabs: Array<{ key: ActivitiesCarePlanTab; label: string; icon: typeof Sparkles }> = [
-    { key: "overview", label: "Overview", icon: Sparkles },
-    { key: "focuses", label: "Focuses", icon: Target },
-    { key: "goals-interventions", label: "Goals & Interventions", icon: ListChecks },
-    { key: "participation", label: "Participation", icon: HeartPulse },
-    { key: "documents", label: "Documents", icon: NotebookPen },
-    { key: "history", label: "History", icon: CalendarClock }
+  const tabs: Array<{ key: ActivitiesCarePlanTab; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "focuses", label: "Focuses" },
+    { key: "goals-interventions", label: "Goals & Interventions" },
+    { key: "participation", label: "Participation" },
+    { key: "documents", label: "Documents" },
+    { key: "history", label: "History" }
   ];
 
   return (
-    <nav className="overflow-x-auto rounded-2xl border border-[#21365a] bg-[linear-gradient(180deg,#0e1a30_0%,#091326_100%)] p-2">
-      <div className="flex min-w-max items-center gap-2">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const active = tab.key === activeTab;
-          return (
-            <Link
-              key={tab.key}
-              href={sectionHref(residentPath, tab.key)}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                active
-                  ? "border-cyan-300/45 bg-cyan-500/18 text-cyan-100"
-                  : "border-[#33507f] bg-[#10203a] text-[#b9cff0] hover:border-[#4d73ab] hover:text-white"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {tab.label}
-            </Link>
-          );
-        })}
-      </div>
+    <nav className="flex flex-wrap items-center gap-2">
+      <PremiumSegmentControl
+        items={tabs.slice(0, 3).map((tab) => ({
+          id: tab.key,
+          label: tab.label,
+          href: sectionHref(residentPath, tab.key),
+          active: tab.key === activeTab
+        }))}
+      />
+      <PremiumSegmentControl
+        items={tabs.slice(3).map((tab) => ({
+          id: tab.key,
+          label: tab.label,
+          href: sectionHref(residentPath, tab.key),
+          active: tab.key === activeTab
+        }))}
+      />
     </nav>
   );
 }
 
 function PreferencesCard({ data }: { data: ActivitiesCarePlanData }) {
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1c35_0%,#0a1325_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#111a2e]">
       <CardHeader>
         <CardTitle className="text-base text-white">Interests & Preferences</CardTitle>
         <p className="text-xs text-[#9cb4de]">Favorite activities, social style, and preference-based engagement details.</p>
@@ -611,14 +604,14 @@ function StrengthsCard({ data }: { data: ActivitiesCarePlanData }) {
   ].filter((item): item is string => Boolean(item));
 
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#10203a_0%,#0b1528_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#111a2e]">
       <CardHeader>
         <CardTitle className="text-base text-white">Strengths</CardTitle>
       </CardHeader>
       <CardContent>
         <ul className="grid gap-2 sm:grid-cols-2">
           {strengths.map((item) => (
-            <li key={item} className="rounded-xl border border-[#314d79] bg-[#0f1b33] px-3 py-2 text-sm text-[#dce8ff]">
+            <li key={item} className="rounded-xl border border-[#2f3d64] bg-[#0f182a] px-3 py-2 text-sm text-[#dce8ff]">
               {item}
             </li>
           ))}
@@ -637,17 +630,17 @@ function BarriersCard({ data }: { data: ActivitiesCarePlanData }) {
   ].filter((item): item is string => Boolean(item));
 
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#10203a_0%,#0b1528_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#111a2e]">
       <CardHeader>
         <CardTitle className="text-base text-white">Barriers / Risks</CardTitle>
       </CardHeader>
       <CardContent>
         {barriers.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[#314d79] bg-[#0f1b33] px-3 py-4 text-sm text-[#9eb6df]">No barriers documented yet.</p>
+          <p className="rounded-xl border border-dashed border-[#2f3d64] bg-[#0f182a] px-3 py-4 text-sm text-[#9eb6df]">No barriers documented yet.</p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {barriers.map((item) => (
-              <li key={item} className="rounded-xl border border-[#314d79] bg-[#0f1b33] px-3 py-2 text-sm text-[#dce8ff]">
+              <li key={item} className="rounded-xl border border-[#2f3d64] bg-[#0f182a] px-3 py-2 text-sm text-[#dce8ff]">
                 {item}
               </li>
             ))}
@@ -660,7 +653,7 @@ function BarriersCard({ data }: { data: ActivitiesCarePlanData }) {
 
 function ParticipationProfileCard({ data }: { data: ActivitiesCarePlanData }) {
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#10203a_0%,#0b1528_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#111a2e]">
       <CardHeader>
         <CardTitle className="text-base text-white">Participation Profile</CardTitle>
       </CardHeader>
@@ -678,7 +671,7 @@ function ParticipationProfileCard({ data }: { data: ActivitiesCarePlanData }) {
 
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+    <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">{label}</p>
       <p className="mt-1 text-sm text-[#dce8ff]">{value}</p>
     </div>
@@ -699,7 +692,7 @@ function ActiveCarePlanFocusesSection({
   expanded?: boolean;
 }) {
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
           <CardTitle className="text-base text-white">Active Care Plan Focuses</CardTitle>
@@ -711,7 +704,7 @@ function ActiveCarePlanFocusesSection({
       </CardHeader>
       <CardContent className="space-y-3">
         {focusRows.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#314d79] bg-[#0f1b33] p-5 text-sm text-[#9eb6df]">
+          <div className="rounded-xl border border-dashed border-[#2f3d64] bg-[#0f182a] p-5 text-sm text-[#9eb6df]">
             No active focus yet. Start a care plan to create focus/problem statements, goals, and interventions.
           </div>
         ) : null}
@@ -749,7 +742,7 @@ function FocusCard({
         : "border-emerald-400/45 bg-emerald-500/16 text-emerald-100";
 
   return (
-    <article className="rounded-2xl border border-[#2c4674] bg-[#0f1b33] p-4">
+    <article className="rounded-2xl border border-[#2c395b] bg-[#10192d] p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-white">{focus.title}</h3>
@@ -768,7 +761,7 @@ function FocusCard({
         <MetaCell label="Priority" value={focus.priority} />
       </div>
 
-      <div className="mt-3 rounded-xl border border-[#314d79] bg-[#0e1a31] p-3">
+      <div className="mt-3 rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Supporting rationale</p>
         <p className="mt-1 text-sm text-[#dce8ff]">{focus.rationale}</p>
       </div>
@@ -776,7 +769,7 @@ function FocusCard({
       <div className="mt-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Goals</p>
         {focus.goals.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[#314d79] bg-[#0f1b33] px-3 py-2 text-sm text-[#9eb6df]">No goals linked yet.</p>
+          <p className="rounded-lg border border-dashed border-[#2f3d64] bg-[#0f182a] px-3 py-2 text-sm text-[#9eb6df]">No goals linked yet.</p>
         ) : (
           focus.goals.map((goal) => <GoalItem key={goal.id} goal={goal} timeZone={timeZone} />)
         )}
@@ -785,7 +778,7 @@ function FocusCard({
       <div className="mt-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Interventions</p>
         {focus.interventions.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[#314d79] bg-[#0f1b33] px-3 py-2 text-sm text-[#9eb6df]">No interventions linked yet.</p>
+          <p className="rounded-lg border border-dashed border-[#2f3d64] bg-[#0f182a] px-3 py-2 text-sm text-[#9eb6df]">No interventions linked yet.</p>
         ) : (
           focus.interventions.map((intervention) => (
             <InterventionItem key={intervention.id} intervention={intervention} timeZone={timeZone} />
@@ -794,7 +787,7 @@ function FocusCard({
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+        <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Related documents</p>
           <div className="mt-2 space-y-2">
             {focus.relatedDocuments.slice(0, 3).map((doc) => (
@@ -806,7 +799,7 @@ function FocusCard({
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+        <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Review notes</p>
           <div className="mt-2 space-y-2">
             {focus.reviewNotes.slice(0, 2).map((review) => (
@@ -836,7 +829,7 @@ function FocusCard({
 
 function GoalItem({ goal, timeZone }: { goal: FocusRow["goals"][number]; timeZone: string }) {
   return (
-    <article className="rounded-xl border border-[#314d79] bg-[#0e1a31] p-3">
+    <article className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-[#e2ecff]">{goal.statement}</p>
         <Badge className={cn("border text-[10px]", progressTone(goal.progress))}>{goal.progress}</Badge>
@@ -855,7 +848,7 @@ function InterventionItem({
   timeZone: string;
 }) {
   return (
-    <article className="rounded-xl border border-[#314d79] bg-[#0e1a31] p-3">
+    <article className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-[#e2ecff]">{intervention.statement}</p>
         <Badge className={cn("border text-[10px]", effectivenessTone(intervention.effectiveness))}>
@@ -879,7 +872,7 @@ function ParticipationAnalyticsPanel({
   detailed?: boolean;
 }) {
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
       <CardHeader>
         <CardTitle className="text-base text-white">Participation & Response</CardTitle>
         <p className="text-xs text-[#9cb4de]">Attendance and response signals tied to current activity care planning.</p>
@@ -894,7 +887,7 @@ function ParticipationAnalyticsPanel({
           <MiniMetric label="Best time" value={data.participation.bestTimeWindow} />
         </div>
 
-        <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+        <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">Response split</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <ResponseBar label="Positive" value={data.participation.responseBreakdown.positivePercent} tone="emerald" />
@@ -909,7 +902,7 @@ function ParticipationAnalyticsPanel({
         </div>
 
         {detailed ? (
-          <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3 text-sm text-[#dce8ff]">
+          <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3 text-sm text-[#dce8ff]">
             Activity response average: {data.participation.responseBreakdown.positivePercent >= 60 ? "Positive" : data.participation.responseBreakdown.resistantPercent >= 35 ? "Resistant trend" : "Mixed"}
           </div>
         ) : null}
@@ -920,7 +913,7 @@ function ParticipationAnalyticsPanel({
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+    <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#93abd6]">{label}</p>
       <p className="mt-1 text-sm font-semibold text-[#e2ecff]">{value}</p>
     </div>
@@ -964,17 +957,17 @@ function DocumentationLinksPanel({
   const rows = detailed ? data.docs : data.docs.slice(0, 8);
 
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
       <CardHeader>
         <CardTitle className="text-base text-white">Related Documentation</CardTitle>
         <p className="text-xs text-[#9cb4de]">Progress Notes, 1:1, UDA, MDS, and review-linked support documentation.</p>
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[#314d79] bg-[#0f1b33] p-4 text-sm text-[#9eb6df]">No related documentation found.</p>
+          <p className="rounded-xl border border-dashed border-[#2f3d64] bg-[#0f182a] p-4 text-sm text-[#9eb6df]">No related documentation found.</p>
         ) : (
           rows.map((doc) => (
-            <Link key={doc.id} href={doc.href} className="block rounded-xl border border-[#314d79] bg-[#0f1b33] px-3 py-2 transition hover:border-[#4d73ab]">
+            <Link key={doc.id} href={doc.href} className="block rounded-xl border border-[#2f3d64] bg-[#0f182a] px-3 py-2 transition hover:border-[#4d73ab]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-[#e2ecff]">{doc.title}</p>
                 <Badge className="border-[#3a5d93] bg-[#132648] text-[10px] text-[#d9e6ff]">{doc.status}</Badge>
@@ -991,7 +984,7 @@ function DocumentationLinksPanel({
 
 function ReviewTimeline({ data, timeZone }: { data: ActivitiesCarePlanData; timeZone: string }) {
   return (
-    <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+    <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
       <CardHeader>
         <CardTitle className="text-base text-white">Review History</CardTitle>
         <p className="text-xs text-[#9cb4de]">Created, reviewed, revised, and next-review milestones.</p>
@@ -1024,7 +1017,7 @@ function ReviewTimeline({ data, timeZone }: { data: ActivitiesCarePlanData; time
 
 function TimelineRow({ title, date, detail }: { title: string; date: string; detail: string }) {
   return (
-    <div className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+    <div className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-[#e2ecff]">{title}</p>
         <p className="text-xs text-[#9cb4de]">{date}</p>
@@ -1038,7 +1031,7 @@ function InterdisciplinarySignoffPanel({ data }: { data: ActivitiesCarePlanData 
   return (
     <div className="space-y-2">
       {data.interdisciplinary.map((item) => (
-        <div key={item.key} className="flex items-center justify-between rounded-xl border border-[#314d79] bg-[#0f1b33] px-3 py-2">
+        <div key={item.key} className="flex items-center justify-between rounded-xl border border-[#2f3d64] bg-[#0f182a] px-3 py-2">
           <p className="text-sm text-[#dce8ff]">{item.label}</p>
           <Badge
             className={cn(
@@ -1060,7 +1053,7 @@ function InterdisciplinarySignoffPanel({ data }: { data: ActivitiesCarePlanData 
 
 function QuickAddFocusTemplateDrawer({ residentId, hasPlan }: { residentId: string; hasPlan: boolean }) {
   return (
-    <details className="rounded-2xl border border-[#223a5f] bg-[linear-gradient(180deg,#10203a_0%,#0b1528_100%)] p-4">
+    <details className="rounded-2xl border border-[#2c395b] bg-[#111a2e] p-4">
       <summary className="cursor-pointer list-none text-sm font-semibold text-[#e2ecff]">
         Quick-Add Focus Template Library
       </summary>
@@ -1074,7 +1067,7 @@ function QuickAddFocusTemplateDrawer({ residentId, hasPlan }: { residentId: stri
                 ? `/app/residents/${residentId}/care-plan/edit?template=${encodeURIComponent(template.key)}`
                 : `/app/residents/${residentId}/care-plan/new?template=${encodeURIComponent(template.key)}`
             }
-            className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3 transition hover:border-[#4d73ab]"
+            className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3 transition hover:border-[#4d73ab]"
           >
             <p className="text-sm font-semibold text-[#e2ecff]">{template.name}</p>
             <p className="mt-1 text-xs text-[#9cb4de]">{template.description}</p>
@@ -1113,17 +1106,17 @@ function GoalsAndInterventionsTab({
 
   return (
     <div className="space-y-4">
-      <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+      <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
         <CardHeader>
           <CardTitle className="text-base text-white">Goals</CardTitle>
           <p className="text-xs text-[#9cb4de]">Centralized goals list with due status and progress outcome.</p>
         </CardHeader>
         <CardContent className="space-y-2">
           {goalRows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-[#314d79] bg-[#0f1b33] p-4 text-sm text-[#9eb6df]">No goals available.</p>
+            <p className="rounded-xl border border-dashed border-[#2f3d64] bg-[#0f182a] p-4 text-sm text-[#9eb6df]">No goals available.</p>
           ) : (
             goalRows.map((goal) => (
-              <div key={goal.id} className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+              <div key={goal.id} className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-[#e2ecff]">{goal.statement}</p>
                   <Badge className={cn("border text-[10px]", progressTone(goal.progress))}>{goal.progress}</Badge>
@@ -1136,7 +1129,7 @@ function GoalsAndInterventionsTab({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-[#223a5f] bg-[linear-gradient(180deg,#0f1d37_0%,#0a1325_100%)]">
+      <Card className="rounded-2xl border-[#2c395b] bg-[#10192d]">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base text-white">Interventions</CardTitle>
@@ -1150,10 +1143,10 @@ function GoalsAndInterventionsTab({
         </CardHeader>
         <CardContent className="space-y-2">
           {interventionRows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-[#314d79] bg-[#0f1b33] p-4 text-sm text-[#9eb6df]">No interventions available.</p>
+            <p className="rounded-xl border border-dashed border-[#2f3d64] bg-[#0f182a] p-4 text-sm text-[#9eb6df]">No interventions available.</p>
           ) : (
             interventionRows.map((intervention) => (
-              <div key={intervention.id} className="rounded-xl border border-[#314d79] bg-[#0f1b33] p-3">
+              <div key={intervention.id} className="rounded-xl border border-[#2f3d64] bg-[#0f182a] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-[#e2ecff]">{intervention.statement}</p>
                   <Badge className={cn("border text-[10px]", effectivenessTone(intervention.effectiveness))}>
