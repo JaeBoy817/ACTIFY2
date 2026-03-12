@@ -92,6 +92,52 @@ export type DashboardResidentAttentionCategory = {
   items: DashboardResidentAttentionItem[];
 };
 
+export type DashboardResidentFollowUpPriorityLevel = "critical" | "high" | "medium" | "low";
+
+export type DashboardResidentFollowUpBoardItem = {
+  id: string;
+  residentId: string;
+  name: string;
+  room: string;
+  unit: string;
+  status: string;
+  avatarInitials: string;
+  priorityScore: number;
+  priorityLevel: DashboardResidentFollowUpPriorityLevel;
+  sourceModule: ModuleKey;
+  primaryReason: string;
+  secondaryReasons: string[];
+  reasonChips: string[];
+  recencyContext: string[];
+  suggestedAction: {
+    label: string;
+    href: string;
+    module: ModuleKey;
+  };
+  secondaryAction?: {
+    label: string;
+    href: string;
+  };
+  lastUpdatedAt: string | null;
+  daysSinceLastOneToOne: number | null;
+  daysSinceLastAttendance: number | null;
+  daysSinceLastNote: number | null;
+  refusalCountRecent: number;
+  participationTrend: "up" | "down" | "flat";
+  documentationIssueCount: number;
+  carePlanIssueFlag: boolean;
+  newAdmissionFlag: boolean;
+};
+
+export type DashboardResidentFollowUpBoard = {
+  generatedAt: string;
+  threshold: number;
+  defaultVisibleCount: number;
+  totalSurfaced: number;
+  viewAllHref: string;
+  items: DashboardResidentFollowUpBoardItem[];
+};
+
 export type DashboardMomentumSummary = {
   dailyParticipationRate: number;
   weeklyParticipationTrend: number;
@@ -185,6 +231,7 @@ export type DashboardCommandCenterSummary = {
   missions: DashboardMission[];
   timeline: DashboardTimelineItem[];
   residentAttention: DashboardResidentAttentionCategory[];
+  residentFollowUpBoard: DashboardResidentFollowUpBoard;
   momentum: DashboardMomentumSummary;
   inventoryPulse: DashboardInventoryPulse;
   notesHub: DashboardNotesHub;
@@ -222,8 +269,72 @@ const MORALE_ROTATION: readonly DashboardMoraleCard[] = [
   }
 ];
 
+type FollowUpResidentCore = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  room: string;
+  status: ResidentStatus;
+  admissionDate: Date | null;
+  createdAt: Date;
+  lastOneOnOneAt: Date | null;
+  followUpFlag: boolean;
+  preferences: string | null;
+  unitName: string | null;
+};
+
+type FollowUpAttendanceRow = {
+  residentId: string;
+  activityInstanceId: string;
+  status: AttendanceStatus;
+  barrierReason: string | null;
+  startAt: Date;
+  category: string | null;
+};
+
+type FollowUpNoteRow = {
+  id: string;
+  residentId: string;
+  type: "GROUP" | "ONE_TO_ONE";
+  createdAt: Date;
+  participationLevel: "MINIMAL" | "MODERATE" | "HIGH";
+  moodAffect: "BRIGHT" | "CALM" | "FLAT" | "ANXIOUS" | "AGITATED";
+  response: "POSITIVE" | "NEUTRAL" | "RESISTANT";
+  followUp: string | null;
+  narrative: string;
+};
+
+type ResidentFollowUpSignal = {
+  key:
+    | "missing-monthly-1to1"
+    | "low-participation"
+    | "repeated-refusals"
+    | "recent-note-follow-up"
+    | "not-recently-seen"
+    | "documentation-incomplete"
+    | "new-admission"
+    | "care-plan-signal"
+    | "persistent-flag";
+  label: string;
+  weight: number;
+  module: ModuleKey;
+  timestamp: Date | null;
+};
+
+const FOLLOW_UP_PRIORITY_THRESHOLD = 25;
+const FOLLOW_UP_DEFAULT_VISIBLE = 6;
+const FOLLOW_UP_VIEW_ALL_HREF = "/app/residents?filter=follow-up";
+const CONCERN_PHRASE_REGEX =
+  /\b(withdrawn|isolat(e|ive)|declin(e|ed)|refus(ed|al)|anxious|agitated|tearful|sad|flat affect|disinterested|not engaged|follow[- ]?up|recheck|family concern)\b/gi;
+
 function residentDisplayName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
+}
+
+function residentInitials(firstName: string, lastName: string) {
+  const first = firstName.trim().charAt(0).toUpperCase();
+  const last = lastName.trim().charAt(0).toUpperCase();
+  return `${first || "R"}${last || ""}`;
 }
 
 function statusLabel(status: ResidentStatus) {
@@ -240,6 +351,19 @@ function toPercent(value: number, total: number) {
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function daysSince(now: Date, value: Date | null | undefined) {
+  if (!value) return null;
+  return Math.max(0, Math.floor((now.getTime() - value.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function formatDaysAgoLabel(now: Date, value: Date | null | undefined, prefix: string) {
+  const days = daysSince(now, value);
+  if (days == null) return `${prefix}: none`;
+  if (days === 0) return `${prefix}: today`;
+  if (days === 1) return `${prefix}: 1 day ago`;
+  return `${prefix}: ${days} days ago`;
 }
 
 function buildSmartSummary(input: {
@@ -296,6 +420,376 @@ function defaultQuickActions(): DashboardQuickAction[] {
     { id: "inventory", label: "Add Inventory", href: "/app/dashboard/budget-stock?open=inventory", module: "budgetStock" },
     { id: "reports", label: "Open Reports", href: "/app/reports", module: "reports" }
   ];
+}
+
+function isConcerningFollowUpNarrative(narrative: string) {
+  if (!narrative || narrative.trim().length < 3) return false;
+  const matches = narrative.match(CONCERN_PHRASE_REGEX);
+  if (!matches) return false;
+  return new Set(matches.map((value) => value.toLowerCase())).size >= 2;
+}
+
+function toPriorityLevel(score: number): DashboardResidentFollowUpPriorityLevel {
+  if (score >= 70) return "critical";
+  if (score >= 45) return "high";
+  if (score >= 25) return "medium";
+  return "low";
+}
+
+function mapPrimaryAction(params: {
+  reasonKey: ResidentFollowUpSignal["key"];
+  residentId: string;
+}): DashboardResidentFollowUpBoardItem["suggestedAction"] {
+  const encoded = encodeURIComponent(params.residentId);
+
+  switch (params.reasonKey) {
+    case "missing-monthly-1to1":
+      return { label: "Add 1:1 Note", href: `/app/documentation/one-to-one/new?residentId=${encoded}`, module: "oneToOne" };
+    case "low-participation":
+      return { label: "View Attendance", href: `/app/attendance/residents?residentId=${encoded}`, module: "attendance" };
+    case "repeated-refusals":
+      return { label: "Add Progress Note", href: `/app/documentation/progress-notes/new?residentId=${encoded}`, module: "notes" };
+    case "recent-note-follow-up":
+      return { label: "View Notes", href: `/app/documentation/overview?residentId=${encoded}`, module: "notes" };
+    case "documentation-incomplete":
+      return { label: "Complete Documentation", href: `/app/documentation/progress-notes/new?residentId=${encoded}`, module: "notes" };
+    case "new-admission":
+      return { label: "Open Resident", href: `/app/residents?residentId=${encoded}`, module: "residents" };
+    case "care-plan-signal":
+      return { label: "Open Care Plan", href: `/app/residents/${encoded}/care-plan`, module: "carePlan" };
+    case "not-recently-seen":
+      return { label: "Check In", href: `/app/residents?residentId=${encoded}`, module: "residents" };
+    case "persistent-flag":
+      return { label: "Add Follow-Up Note", href: `/app/documentation/one-to-one/new?residentId=${encoded}`, module: "oneToOne" };
+    default:
+      return { label: "Open Resident", href: `/app/residents?residentId=${encoded}`, module: "residents" };
+  }
+}
+
+function buildResidentFollowUpBoard(args: {
+  now: Date;
+  residents: FollowUpResidentCore[];
+  attendanceRows: FollowUpAttendanceRow[];
+  noteRows: FollowUpNoteRow[];
+  carePlanOverdueResidentIds: Set<string>;
+  carePlanDueSoonResidentIds: Set<string>;
+  carePlanCoverageResidentIds: Set<string>;
+  documentedGroupActivityIdsRecent: Set<string>;
+  monthStart: Date;
+  weekWindowStart: Date;
+  dayStart: Date;
+  timeZone: string;
+}): DashboardResidentFollowUpBoard {
+  const attendanceByResident = new Map<string, FollowUpAttendanceRow[]>();
+  const notesByResident = new Map<string, FollowUpNoteRow[]>();
+  const oneToOneThisMonthResidentIds = new Set<string>();
+  const oneToOneTodayResidentIds = new Set<string>();
+  const documentationIssueCounts = new Map<string, number>();
+  const latestSignalAtByResident = new Map<string, Date>();
+  const threeDaysAgo = subtractDays(args.now, 3);
+  const sevenDaysAgo = addZonedDays(args.dayStart, args.timeZone, -7);
+  const fourteenDaysAgo = addZonedDays(args.dayStart, args.timeZone, -14);
+
+  for (const row of args.attendanceRows) {
+    const list = attendanceByResident.get(row.residentId);
+    if (list) {
+      list.push(row);
+    } else {
+      attendanceByResident.set(row.residentId, [row]);
+    }
+
+    if (
+      row.startAt >= threeDaysAgo &&
+      ENGAGED_ATTENDANCE_STATUSES.has(row.status) &&
+      !args.documentedGroupActivityIdsRecent.has(row.activityInstanceId)
+    ) {
+      documentationIssueCounts.set(row.residentId, (documentationIssueCounts.get(row.residentId) ?? 0) + 1);
+      const previous = latestSignalAtByResident.get(row.residentId);
+      if (!previous || row.startAt > previous) {
+        latestSignalAtByResident.set(row.residentId, row.startAt);
+      }
+    }
+  }
+
+  for (const row of args.noteRows) {
+    const list = notesByResident.get(row.residentId);
+    if (list) {
+      list.push(row);
+    } else {
+      notesByResident.set(row.residentId, [row]);
+    }
+
+    if (row.type === "ONE_TO_ONE" && row.createdAt >= args.monthStart) {
+      oneToOneThisMonthResidentIds.add(row.residentId);
+    }
+    if (row.type === "ONE_TO_ONE" && row.createdAt >= args.dayStart) {
+      oneToOneTodayResidentIds.add(row.residentId);
+    }
+  }
+
+  for (const [residentId, rows] of notesByResident.entries()) {
+    rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    if (rows.length > 0) {
+      latestSignalAtByResident.set(residentId, rows[0].createdAt);
+    }
+  }
+
+  const items: DashboardResidentFollowUpBoardItem[] = [];
+
+  for (const resident of args.residents) {
+    const attendance = (attendanceByResident.get(resident.id) ?? []).sort(
+      (a, b) => b.startAt.getTime() - a.startAt.getTime()
+    );
+    const notes = notesByResident.get(resident.id) ?? [];
+
+    const attendanceLast7 = attendance.filter((row) => row.startAt >= sevenDaysAgo);
+    const attendancePrev7 = attendance.filter((row) => row.startAt < sevenDaysAgo && row.startAt >= fourteenDaysAgo);
+    const attendanceLast3 = attendance.filter((row) => row.startAt >= threeDaysAgo);
+    const attendancePrev3 = attendance.filter((row) => row.startAt < threeDaysAgo && row.startAt >= addZonedDays(args.dayStart, args.timeZone, -6));
+
+    const engagedLast7 = attendanceLast7.filter((row) => ENGAGED_ATTENDANCE_STATUSES.has(row.status)).length;
+    const engagedPrev7 = attendancePrev7.filter((row) => ENGAGED_ATTENDANCE_STATUSES.has(row.status)).length;
+    const engagedLast3 = attendanceLast3.filter((row) => ENGAGED_ATTENDANCE_STATUSES.has(row.status)).length;
+    const engagedPrev3 = attendancePrev3.filter((row) => ENGAGED_ATTENDANCE_STATUSES.has(row.status)).length;
+
+    const refusalsFromAttendance = attendanceLast7.filter((row) => row.status === "REFUSED").length;
+    const concerningNotesLast7 = notes.filter(
+      (row) =>
+        row.createdAt >= sevenDaysAgo &&
+        (Boolean(row.followUp && row.followUp.trim().length > 0) ||
+          row.response === "RESISTANT" ||
+          row.moodAffect === "ANXIOUS" ||
+          row.moodAffect === "AGITATED" ||
+          row.moodAffect === "FLAT" ||
+          row.participationLevel === "MINIMAL" ||
+          isConcerningFollowUpNarrative(row.narrative))
+    );
+    const refusalsFromNotes = notes.filter(
+      (row) => row.createdAt >= sevenDaysAgo && row.response === "RESISTANT"
+    ).length;
+    const refusalCountRecent = refusalsFromAttendance + refusalsFromNotes;
+
+    const latestAttendanceAt = attendance[0]?.startAt ?? null;
+    const latestNoteAt = notes[0]?.createdAt ?? null;
+    const latestOneToOneAt =
+      notes.find((row) => row.type === "ONE_TO_ONE")?.createdAt ?? resident.lastOneOnOneAt ?? null;
+
+    const oneToOneThisMonth = oneToOneThisMonthResidentIds.has(resident.id);
+    const oneToOneToday = oneToOneTodayResidentIds.has(resident.id);
+    const preferenceText = (resident.preferences ?? "").toLowerCase();
+    const preferenceAdjusted =
+      preferenceText.includes("1:1") ||
+      preferenceText.includes("one-to-one") ||
+      preferenceText.includes("in-room") ||
+      preferenceText.includes("independent");
+    const documentationIssueCount = documentationIssueCounts.get(resident.id) ?? 0;
+    const hasCarePlanOverdue = args.carePlanOverdueResidentIds.has(resident.id);
+    const hasCarePlanDueSoon = args.carePlanDueSoonResidentIds.has(resident.id);
+    const hasCarePlanCoverage = args.carePlanCoverageResidentIds.has(resident.id);
+    const admissionAnchor = resident.admissionDate ?? resident.createdAt;
+    const newAdmissionFlag = admissionAnchor >= addZonedDays(args.dayStart, args.timeZone, -14);
+    const preferencesMissing = !resident.preferences || resident.preferences.trim().length === 0;
+
+    const signals: ResidentFollowUpSignal[] = [];
+    let score = 0;
+    const pushSignal = (signal: ResidentFollowUpSignal) => {
+      if (signals.some((item) => item.key === signal.key)) return;
+      signals.push(signal);
+      score += signal.weight;
+    };
+
+    if (!oneToOneThisMonth) {
+      pushSignal({
+        key: "missing-monthly-1to1",
+        label: latestOneToOneAt ? "Needs monthly 1:1" : "No 1:1 note this month",
+        weight: 40,
+        module: "oneToOne",
+        timestamp: latestOneToOneAt
+      });
+    }
+
+    const noGroupParticipationLast7 = engagedLast7 === 0 && attendanceLast7.length > 0;
+    const lowParticipationRatio =
+      attendanceLast7.length >= 3 && engagedLast7 / Math.max(1, attendanceLast7.length) < 0.4;
+    const trendDown =
+      engagedLast7 === 0 ? engagedPrev7 > 0 : engagedLast7 < engagedPrev7;
+
+    if ((!preferenceAdjusted && noGroupParticipationLast7) || lowParticipationRatio || trendDown) {
+      pushSignal({
+        key: "low-participation",
+        label: noGroupParticipationLast7 ? "No recent group attendance" : "Participation trending down",
+        weight: noGroupParticipationLast7 ? 30 : 26,
+        module: "attendance",
+        timestamp: latestAttendanceAt
+      });
+    }
+
+    if (refusalCountRecent >= 2) {
+      pushSignal({
+        key: "repeated-refusals",
+        label: "Repeated refusals in the last 7 days",
+        weight: 30,
+        module: "attendance",
+        timestamp: latestAttendanceAt
+      });
+    }
+
+    if (concerningNotesLast7.length > 0) {
+      pushSignal({
+        key: "recent-note-follow-up",
+        label: "Follow-up recommended from note",
+        weight: 35,
+        module: "notes",
+        timestamp: concerningNotesLast7[0].createdAt
+      });
+    }
+
+    const noAttendanceIn7Days = !latestAttendanceAt || latestAttendanceAt < sevenDaysAgo;
+    const noNoteIn7Days = !latestNoteAt || latestNoteAt < sevenDaysAgo;
+    if (noAttendanceIn7Days && noNoteIn7Days) {
+      pushSignal({
+        key: "not-recently-seen",
+        label: "Not recently seen",
+        weight: 20,
+        module: "residents",
+        timestamp: latestSignalAtByResident.get(resident.id) ?? null
+      });
+    }
+
+    if (documentationIssueCount > 0) {
+      pushSignal({
+        key: "documentation-incomplete",
+        label: "Recent activity missing follow-up documentation",
+        weight: 15,
+        module: "notes",
+        timestamp: latestAttendanceAt
+      });
+    }
+
+    if (newAdmissionFlag && (preferencesMissing || !oneToOneThisMonth)) {
+      pushSignal({
+        key: "new-admission",
+        label: preferencesMissing ? "New admission with missing preferences" : "New admission needs engagement follow-up",
+        weight: preferencesMissing ? 24 : 20,
+        module: "residents",
+        timestamp: admissionAnchor
+      });
+    }
+
+    if (hasCarePlanOverdue || hasCarePlanDueSoon || (!hasCarePlanCoverage && admissionAnchor < subtractDays(args.now, 30))) {
+      pushSignal({
+        key: "care-plan-signal",
+        label: hasCarePlanOverdue ? "Care plan review overdue" : "Care plan follow-up needed",
+        weight: hasCarePlanOverdue ? 20 : 15,
+        module: "carePlan",
+        timestamp: latestSignalAtByResident.get(resident.id) ?? null
+      });
+    }
+
+    if (resident.followUpFlag) {
+      pushSignal({
+        key: "persistent-flag",
+        label: "Existing follow-up flag remains active",
+        weight: 10,
+        module: "residents",
+        timestamp: resident.createdAt
+      });
+    }
+
+    if (signals.length >= 3) {
+      score += 10;
+    }
+
+    if (oneToOneToday) {
+      score -= 20;
+    }
+
+    if (
+      latestOneToOneAt &&
+      latestOneToOneAt >= threeDaysAgo &&
+      engagedLast3 > engagedPrev3
+    ) {
+      score -= 10;
+    }
+
+    score = Math.max(0, score);
+    const priorityLevel = toPriorityLevel(score);
+    if (score < FOLLOW_UP_PRIORITY_THRESHOLD) {
+      continue;
+    }
+
+    const orderedSignals = [...signals].sort((a, b) => b.weight - a.weight || (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0));
+    const primarySignal = orderedSignals[0];
+    if (!primarySignal) {
+      continue;
+    }
+
+    const suggestedAction = mapPrimaryAction({
+      reasonKey: primarySignal.key,
+      residentId: resident.id
+    });
+
+    const recencyContext = [
+      formatDaysAgoLabel(args.now, latestOneToOneAt, "Last 1:1"),
+      formatDaysAgoLabel(args.now, latestAttendanceAt, "Last attendance"),
+      formatDaysAgoLabel(args.now, latestNoteAt, "Last note"),
+      refusalCountRecent > 0 ? `${refusalCountRecent} refusals this week` : null
+    ].filter((value): value is string => Boolean(value)).slice(0, 3);
+
+    const trend: "up" | "down" | "flat" = engagedLast7 > engagedPrev7 ? "up" : engagedLast7 < engagedPrev7 ? "down" : "flat";
+
+    items.push({
+      id: `follow-board-${resident.id}`,
+      residentId: resident.id,
+      name: residentDisplayName(resident.firstName, resident.lastName),
+      room: resident.room,
+      unit: resident.unitName ?? "Unassigned",
+      status: statusLabel(resident.status),
+      avatarInitials: residentInitials(resident.firstName, resident.lastName),
+      priorityScore: score,
+      priorityLevel,
+      sourceModule: primarySignal.module,
+      primaryReason: primarySignal.label,
+      secondaryReasons: orderedSignals.slice(1, 3).map((signal) => signal.label),
+      reasonChips: orderedSignals.map((signal) => signal.label).slice(0, 3),
+      recencyContext,
+      suggestedAction,
+      secondaryAction: {
+        label: "Open Resident",
+        href: `/app/residents?residentId=${encodeURIComponent(resident.id)}`
+      },
+      lastUpdatedAt: (primarySignal.timestamp ?? latestSignalAtByResident.get(resident.id) ?? null)?.toISOString() ?? null,
+      daysSinceLastOneToOne: daysSince(args.now, latestOneToOneAt),
+      daysSinceLastAttendance: daysSince(args.now, latestAttendanceAt),
+      daysSinceLastNote: daysSince(args.now, latestNoteAt),
+      refusalCountRecent,
+      participationTrend: trend,
+      documentationIssueCount,
+      carePlanIssueFlag: hasCarePlanOverdue || hasCarePlanDueSoon || !hasCarePlanCoverage,
+      newAdmissionFlag
+    });
+  }
+
+  items.sort((a, b) => {
+    if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+    const aUpdated = a.lastUpdatedAt ? new Date(a.lastUpdatedAt).getTime() : 0;
+    const bUpdated = b.lastUpdatedAt ? new Date(b.lastUpdatedAt).getTime() : 0;
+    if (bUpdated !== aUpdated) return bUpdated - aUpdated;
+    if (a.newAdmissionFlag !== b.newAdmissionFlag) return a.newAdmissionFlag ? -1 : 1;
+    const aRecency = Math.max(a.daysSinceLastAttendance ?? 0, a.daysSinceLastNote ?? 0, a.daysSinceLastOneToOne ?? 0);
+    const bRecency = Math.max(b.daysSinceLastAttendance ?? 0, b.daysSinceLastNote ?? 0, b.daysSinceLastOneToOne ?? 0);
+    if (bRecency !== aRecency) return bRecency - aRecency;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+
+  return {
+    generatedAt: args.now.toISOString(),
+    threshold: FOLLOW_UP_PRIORITY_THRESHOLD,
+    defaultVisibleCount: FOLLOW_UP_DEFAULT_VISIBLE,
+    totalSurfaced: items.length,
+    viewAllHref: FOLLOW_UP_VIEW_ALL_HREF,
+    items: items.slice(0, 24)
+  };
 }
 
 function deriveLowStockCountFromAlerts(base: DashboardHomeSummary) {
@@ -401,6 +895,49 @@ function buildFallbackCommandCenterSummary(args: {
     }
   ];
 
+  const residentFollowUpBoard: DashboardResidentFollowUpBoard = {
+    generatedAt: now.toISOString(),
+    threshold: FOLLOW_UP_PRIORITY_THRESHOLD,
+    defaultVisibleCount: FOLLOW_UP_DEFAULT_VISIBLE,
+    totalSurfaced: residentAttention.flatMap((group) => group.items).length,
+    viewAllHref: FOLLOW_UP_VIEW_ALL_HREF,
+    items: residentAttention
+      .flatMap((group) =>
+        group.items.map((item, index) => ({
+          id: `fallback-board-${item.id}`,
+          residentId: item.residentId,
+          name: item.name,
+          room: item.room,
+          unit: "Unassigned",
+          status: item.status,
+          avatarInitials: residentInitials(item.name.split(" ")[0] ?? "R", item.name.split(" ")[1] ?? ""),
+          priorityScore: Math.max(45, 80 - index * 4),
+          priorityLevel: (index < 2 ? "high" : "medium") as DashboardResidentFollowUpPriorityLevel,
+          sourceModule: group.module,
+          primaryReason: item.reason,
+          secondaryReasons: item.chips.slice(0, 2),
+          reasonChips: item.chips.slice(0, 3),
+          recencyContext: [item.reason],
+          suggestedAction: {
+            label: item.primaryAction.label,
+            href: item.primaryAction.href,
+            module: group.module
+          },
+          secondaryAction: item.secondaryAction,
+          lastUpdatedAt: null,
+          daysSinceLastOneToOne: null,
+          daysSinceLastAttendance: null,
+          daysSinceLastNote: null,
+          refusalCountRecent: 0,
+          participationTrend: "flat" as const,
+          documentationIssueCount: 0,
+          carePlanIssueFlag: group.key === "care-plan-overdue",
+          newAdmissionFlag: group.key === "new-admission"
+        }))
+      )
+      .slice(0, 12)
+  };
+
   return {
     generatedAt: now.toISOString(),
     hero: {
@@ -426,6 +963,7 @@ function buildFallbackCommandCenterSummary(args: {
     missions,
     timeline,
     residentAttention,
+    residentFollowUpBoard,
     momentum: {
       dailyParticipationRate: clampPercent(args.base.analytics.today.participationPercent),
       weeklyParticipationTrend: 0,
@@ -587,6 +1125,14 @@ function buildEmergencyCommandCenterSummary(args: {
     missions: [],
     timeline: [],
     residentAttention: [],
+    residentFollowUpBoard: {
+      generatedAt: now.toISOString(),
+      threshold: FOLLOW_UP_PRIORITY_THRESHOLD,
+      defaultVisibleCount: FOLLOW_UP_DEFAULT_VISIBLE,
+      totalSurfaced: 0,
+      viewAllHref: FOLLOW_UP_VIEW_ALL_HREF,
+      items: []
+    },
     momentum: {
       dailyParticipationRate: 0,
       weeklyParticipationTrend: 0,
@@ -669,6 +1215,9 @@ async function computeDashboardCommandCenterSummary(args: {
   const nextMonthStart = startOfZonedMonthShift(now, args.timeZone, 1);
   const monthEnd = new Date(nextMonthStart.getTime() - 1);
   const fourteenDaysAgo = subtractDays(now, 14);
+  const thirtyDaysAgo = subtractDays(now, 30);
+  const fortyFiveDaysAgo = subtractDays(now, 45);
+  const threeDaysAgo = subtractDays(now, 3);
   const admissionWindowStart = subtractDays(now, 45);
   const thirtyDaysAhead = addZonedDays(dayStart, args.timeZone, 30);
   const sevenDaysAhead = addZonedDays(dayStart, args.timeZone, 7);
@@ -710,11 +1259,16 @@ async function computeDashboardCommandCenterSummary(args: {
     attendanceWeekRows,
     newAdmissionsMissingPrefs,
     carePlanOverdueRows,
+    carePlanDueSoonRows,
     resistantTrendRows,
     followUpRows,
     carePlanCoverageRows,
     attendanceLast7Rows,
-    attendancePrevious7Rows
+    attendancePrevious7Rows,
+    residentsForFollowUp,
+    followUpAttendanceRows,
+    followUpNoteRows,
+    documentedGroupActivityIdsRecentRows
   ] = await Promise.all([
     baseSummaryPromise,
     prisma.activityInstance.findMany({
@@ -1065,6 +1619,21 @@ async function computeDashboardCommandCenterSummary(args: {
         }
       }
     }),
+    prisma.carePlan.findMany({
+      where: {
+        status: "ACTIVE",
+        nextReviewDate: {
+          gte: dayStart,
+          lte: sevenDaysAhead
+        },
+        resident: residentWhere
+      },
+      take: 24,
+      orderBy: [{ nextReviewDate: "asc" }],
+      select: {
+        residentId: true
+      }
+    }),
     prisma.progressNote.findMany({
       where: {
         type: "ONE_TO_ONE",
@@ -1153,6 +1722,95 @@ async function computeDashboardCommandCenterSummary(args: {
         residentId: true,
         status: true
       }
+    }),
+    prisma.resident.findMany({
+      where: residentWhere,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        room: true,
+        status: true,
+        admissionDate: true,
+        createdAt: true,
+        lastOneOnOneAt: true,
+        followUpFlag: true,
+        preferences: true,
+        unit: {
+          select: {
+            name: true
+          }
+        }
+      }
+    }),
+    prisma.attendance.findMany({
+      where: {
+        activityInstance: {
+          facilityId: args.facilityId,
+          startAt: {
+            gte: thirtyDaysAgo,
+            lte: dayEnd
+          }
+        },
+        resident: residentWhere
+      },
+      select: {
+        residentId: true,
+        activityInstanceId: true,
+        status: true,
+        barrierReason: true,
+        activityInstance: {
+          select: {
+            startAt: true,
+            template: {
+              select: {
+                category: true
+              }
+            }
+          }
+        }
+      }
+    }),
+    prisma.progressNote.findMany({
+      where: {
+        resident: residentWhere,
+        createdAt: {
+          gte: fortyFiveDaysAgo,
+          lte: dayEnd
+        }
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        residentId: true,
+        type: true,
+        createdAt: true,
+        participationLevel: true,
+        moodAffect: true,
+        response: true,
+        followUp: true,
+        narrative: true
+      }
+    }),
+    prisma.progressNote.findMany({
+      where: {
+        type: "GROUP",
+        activityInstanceId: {
+          not: null
+        },
+        activityInstance: {
+          facilityId: args.facilityId,
+          startAt: {
+            gte: threeDaysAgo,
+            lte: dayEnd
+          }
+        }
+      },
+      distinct: ["activityInstanceId"],
+      select: {
+        activityInstanceId: true
+      }
     })
   ]);
 
@@ -1235,6 +1893,65 @@ async function computeDashboardCommandCenterSummary(args: {
     .slice(0, 4);
 
   const reportDueDaysRemaining = Math.max(0, Math.ceil((monthEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+  const followUpResidents: FollowUpResidentCore[] = residentsForFollowUp.map((resident) => ({
+    id: resident.id,
+    firstName: resident.firstName,
+    lastName: resident.lastName,
+    room: resident.room,
+    status: resident.status,
+    admissionDate: resident.admissionDate,
+    createdAt: resident.createdAt,
+    lastOneOnOneAt: resident.lastOneOnOneAt,
+    followUpFlag: resident.followUpFlag,
+    preferences: resident.preferences,
+    unitName: resident.unit?.name ?? null
+  }));
+
+  const followUpAttendanceSignalRows: FollowUpAttendanceRow[] = followUpAttendanceRows.map((row) => ({
+    residentId: row.residentId,
+    activityInstanceId: row.activityInstanceId,
+    status: row.status,
+    barrierReason: row.barrierReason ?? null,
+    startAt: row.activityInstance.startAt,
+    category: row.activityInstance.template?.category ?? null
+  }));
+
+  const followUpNoteSignalRows: FollowUpNoteRow[] = followUpNoteRows.map((row) => ({
+    id: row.id,
+    residentId: row.residentId,
+    type: row.type,
+    createdAt: row.createdAt,
+    participationLevel: row.participationLevel,
+    moodAffect: row.moodAffect,
+    response: row.response,
+    followUp: row.followUp,
+    narrative: row.narrative
+  }));
+
+  const carePlanOverdueResidentIds = new Set(carePlanOverdueRows.map((plan) => plan.resident.id));
+  const carePlanDueSoonResidentIds = new Set(carePlanDueSoonRows.map((plan) => plan.residentId));
+  const carePlanCoverageResidentIds = new Set(carePlanCoverageRows.map((plan) => plan.residentId));
+  const documentedGroupActivityIdsRecent = new Set(
+    documentedGroupActivityIdsRecentRows
+      .map((row) => row.activityInstanceId)
+      .filter((value): value is string => Boolean(value))
+  );
+
+  const residentFollowUpBoard = buildResidentFollowUpBoard({
+    now,
+    residents: followUpResidents,
+    attendanceRows: followUpAttendanceSignalRows,
+    noteRows: followUpNoteSignalRows,
+    carePlanOverdueResidentIds,
+    carePlanDueSoonResidentIds,
+    carePlanCoverageResidentIds,
+    documentedGroupActivityIdsRecent,
+    monthStart,
+    weekWindowStart,
+    dayStart,
+    timeZone: args.timeZone
+  });
 
   const residentEngagementMap = new Map<
     string,
@@ -1698,6 +2415,7 @@ async function computeDashboardCommandCenterSummary(args: {
     missions,
     timeline,
     residentAttention,
+    residentFollowUpBoard,
     momentum,
     inventoryPulse: {
       lowStockCount: lowStockItems.length,
@@ -1721,7 +2439,7 @@ function getCachedDashboardCommandCenterSummary(facilityId: string, facilityName
         facilityName,
         timeZone
       }),
-    ["dashboard-command-center-v1", facilityId, facilityName],
+    ["dashboard-command-center-v2", facilityId, facilityName],
     {
       revalidate: 45,
       tags: [getDashboardSummaryCacheTag(facilityId)]
