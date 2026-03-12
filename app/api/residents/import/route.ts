@@ -4,7 +4,12 @@ import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiEr
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
 import { statusIsActive } from "@/lib/resident-status";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { normalizeResidentStatusForImport } from "@/lib/residents/types";
 
@@ -96,14 +101,27 @@ export async function POST(request: Request) {
       return results;
     });
 
-    const rows = await prisma.resident.findMany({
-      where: {
-        id: { in: importedResidents },
-        facilityId: context.facilityId
-      },
-      ...residentListContextQuery,
-      orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
-    });
+    const rows = await prisma.resident
+      .findMany({
+        where: {
+          id: { in: importedResidents },
+          facilityId: context.facilityId
+        },
+        ...residentListContextQuery,
+        orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyRows = await prisma.resident.findMany({
+          where: {
+            id: { in: importedResidents },
+            facilityId: context.facilityId
+          },
+          ...residentListContextLegacyQuery,
+          orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+        });
+        return legacyRows.map(inflateLegacyResidentContextRow);
+      });
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),

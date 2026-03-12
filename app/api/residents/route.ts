@@ -5,7 +5,12 @@ import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiEr
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
 import { statusIsActive } from "@/lib/resident-status";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
 
@@ -46,18 +51,35 @@ export async function GET(request: Request) {
     const archivedOnly = url.searchParams.get("archived") === "true";
     const includeAll = url.searchParams.get("includeAll") === "true";
 
-    const residents = await prisma.resident.findMany({
-      where: {
-        facilityId: context.facilityId,
-        ...(archivedOnly
-          ? { status: ResidentStatus.DISCHARGED }
-          : includeAll
-            ? {}
-            : { status: { not: ResidentStatus.DISCHARGED } })
-      },
-      ...residentListContextQuery,
-      orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
-    });
+    const residents = await prisma.resident
+      .findMany({
+        where: {
+          facilityId: context.facilityId,
+          ...(archivedOnly
+            ? { status: ResidentStatus.DISCHARGED }
+            : includeAll
+              ? {}
+              : { status: { not: ResidentStatus.DISCHARGED } })
+        },
+        ...residentListContextQuery,
+        orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyRows = await prisma.resident.findMany({
+          where: {
+            facilityId: context.facilityId,
+            ...(archivedOnly
+              ? { status: ResidentStatus.DISCHARGED }
+              : includeAll
+                ? {}
+                : { status: { not: ResidentStatus.DISCHARGED } })
+          },
+          ...residentListContextLegacyQuery,
+          orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+        });
+        return legacyRows.map(inflateLegacyResidentContextRow);
+      });
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),
@@ -89,28 +111,54 @@ export async function POST(request: Request) {
       });
     }
 
-    const created = await prisma.resident.create({
-      data: {
-        facilityId: context.facilityId,
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-        preferredName: parsed.data.preferredName || null,
-        room: parsed.data.room,
-        status: parsed.data.status,
-        isActive: statusIsActive(parsed.data.status),
-        unitId: parsed.data.unitId || null,
-        birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
-        admissionDate: parseDateInput(parsed.data.admissionDate, "admission date"),
-        mdsManualDueDate: parseDateInput(parsed.data.mdsManualDueDate, "MDS manual due date"),
-        bestTimesOfDay: parsed.data.bestTimesOfDay || null,
-        notes: parsed.data.notes || null,
-        preferences: parsed.data.preferences || null,
-        safetyNotes: parsed.data.safetyNotes || null,
-        tags: parsed.data.tags ? serializeResidentTags(parsed.data.tags) : null,
-        followUpFlag: parsed.data.followUpFlag ?? false
-      },
-      ...residentListContextQuery
-    });
+    const createPayload = {
+      facilityId: context.facilityId,
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      preferredName: parsed.data.preferredName || null,
+      room: parsed.data.room,
+      status: parsed.data.status,
+      isActive: statusIsActive(parsed.data.status),
+      unitId: parsed.data.unitId || null,
+      birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
+      admissionDate: parseDateInput(parsed.data.admissionDate, "admission date"),
+      mdsManualDueDate: parseDateInput(parsed.data.mdsManualDueDate, "MDS manual due date"),
+      bestTimesOfDay: parsed.data.bestTimesOfDay || null,
+      notes: parsed.data.notes || null,
+      preferences: parsed.data.preferences || null,
+      safetyNotes: parsed.data.safetyNotes || null,
+      tags: parsed.data.tags ? serializeResidentTags(parsed.data.tags) : null,
+      followUpFlag: parsed.data.followUpFlag ?? false
+    };
+
+    const created = await prisma.resident
+      .create({
+        data: createPayload,
+        ...residentListContextQuery
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyCreated = await prisma.resident.create({
+          data: {
+            facilityId: context.facilityId,
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            room: parsed.data.room,
+            status: parsed.data.status,
+            isActive: statusIsActive(parsed.data.status),
+            unitId: parsed.data.unitId || null,
+            birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
+            bestTimesOfDay: parsed.data.bestTimesOfDay || null,
+            notes: parsed.data.notes || null,
+            preferences: parsed.data.preferences || null,
+            safetyNotes: parsed.data.safetyNotes || null,
+            tags: parsed.data.tags ? serializeResidentTags(parsed.data.tags) : null,
+            followUpFlag: parsed.data.followUpFlag ?? false
+          },
+          ...residentListContextLegacyQuery
+        });
+        return inflateLegacyResidentContextRow(legacyCreated);
+      });
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),

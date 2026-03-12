@@ -19,6 +19,7 @@ import {
   getResidentAssessmentSchedule,
   type AssessmentDueLevel
 } from "@/lib/residents/assessment-due";
+import { isResidentSchemaDriftError } from "@/lib/residents/query";
 import {
   formatResidentBirthDate,
   getResidentAge,
@@ -184,86 +185,197 @@ export default async function ResidentProfilePage({
   const context = await getFacilityContextWithSubscription();
   const activeTab = normalizeTab(searchParams?.tab);
 
-  const resident = await prisma.resident.findFirst({
-    where: {
-      id: params.id,
-      facilityId: context.facilityId
-    },
-    include: {
-      unit: true,
-      carePlans: {
-        where: { status: "ACTIVE" },
-        orderBy: { updatedAt: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          focusAreas: true,
-          barriers: true,
-          supports: true,
-          preferencesText: true,
-          safetyNotes: true,
-          nextReviewDate: true,
-          updatedAt: true
-        }
+  const resident = await prisma.resident
+    .findFirst({
+      where: {
+        id: params.id,
+        facilityId: context.facilityId
       },
-      progressNotes: {
-        include: {
-          createdByUser: {
-            select: {
-              id: true,
-              name: true
+      include: {
+        unit: true,
+        carePlans: {
+          where: { status: "ACTIVE" },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            focusAreas: true,
+            barriers: true,
+            supports: true,
+            preferencesText: true,
+            safetyNotes: true,
+            nextReviewDate: true,
+            updatedAt: true
+          }
+        },
+        progressNotes: {
+          include: {
+            createdByUser: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            activityInstance: {
+              select: {
+                id: true,
+                title: true,
+                location: true,
+                startAt: true
+              }
             }
           },
-          activityInstance: {
-            select: {
-              id: true,
-              title: true,
-              location: true,
-              startAt: true
+          orderBy: { createdAt: "desc" },
+          take: 120
+        },
+        attendance: {
+          include: {
+            activityInstance: {
+              select: {
+                id: true,
+                title: true,
+                location: true,
+                startAt: true
+              }
             }
+          },
+          orderBy: { createdAt: "desc" },
+          take: 180
+        },
+        assessments: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            createdAt: true,
+            answers: true,
+            suggestedPrograms: true,
+            dislikesTriggers: true
           }
         },
-        orderBy: { createdAt: "desc" },
-        take: 120
-      },
-      attendance: {
-        include: {
-          activityInstance: {
-            select: {
-              id: true,
-              title: true,
-              location: true,
-              startAt: true
-            }
+        familyEngagementNotes: {
+          orderBy: { createdAt: "desc" },
+          take: 12,
+          select: {
+            id: true,
+            createdAt: true,
+            bestContactTimes: true,
+            preferences: true,
+            calmingThings: true
           }
-        },
-        orderBy: { createdAt: "desc" },
-        take: 180
-      },
-      assessments: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        select: {
-          id: true,
-          createdAt: true,
-          answers: true,
-          suggestedPrograms: true,
-          dislikesTriggers: true
-        }
-      },
-      familyEngagementNotes: {
-        orderBy: { createdAt: "desc" },
-        take: 12,
-        select: {
-          id: true,
-          createdAt: true,
-          bestContactTimes: true,
-          preferences: true,
-          calmingThings: true
         }
       }
-    }
-  });
+    })
+    .catch(async (error) => {
+      if (!isResidentSchemaDriftError(error)) throw error;
+      const legacyResident = await prisma.resident.findFirst({
+        where: {
+          id: params.id,
+          facilityId: context.facilityId
+        },
+        select: {
+          id: true,
+          facilityId: true,
+          unitId: true,
+          status: true,
+          firstName: true,
+          lastName: true,
+          room: true,
+          birthDate: true,
+          preferences: true,
+          safetyNotes: true,
+          tags: true,
+          lastOneOnOneAt: true,
+          followUpFlag: true,
+          bestTimesOfDay: true,
+          notes: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          unit: true,
+          carePlans: {
+            where: { status: "ACTIVE" },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              focusAreas: true,
+              barriers: true,
+              supports: true,
+              preferencesText: true,
+              safetyNotes: true,
+              nextReviewDate: true,
+              updatedAt: true
+            }
+          },
+          progressNotes: {
+            include: {
+              createdByUser: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              },
+              activityInstance: {
+                select: {
+                  id: true,
+                  title: true,
+                  location: true,
+                  startAt: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 120
+          },
+          attendance: {
+            include: {
+              activityInstance: {
+                select: {
+                  id: true,
+                  title: true,
+                  location: true,
+                  startAt: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 180
+          },
+          assessments: {
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            select: {
+              id: true,
+              createdAt: true,
+              answers: true,
+              suggestedPrograms: true,
+              dislikesTriggers: true
+            }
+          },
+          familyEngagementNotes: {
+            orderBy: { createdAt: "desc" },
+            take: 12,
+            select: {
+              id: true,
+              createdAt: true,
+              bestContactTimes: true,
+              preferences: true,
+              calmingThings: true
+            }
+          }
+        }
+      });
+
+      if (!legacyResident) return null;
+
+      return {
+        ...legacyResident,
+        preferredName: null,
+        admissionDate: null,
+        mdsManualDueDate: null
+      };
+    });
 
   if (!resident) {
     notFound();

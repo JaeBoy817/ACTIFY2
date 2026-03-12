@@ -3,20 +3,18 @@ import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 
 export default async function ResidentsPage() {
   const context = await getFacilityContextWithSubscription();
 
-  const [residents, units, completionByResident, attendanceByResident] = await Promise.all([
-    prisma.resident.findMany({
-      where: {
-        facilityId: context.facilityId
-      },
-      ...residentListContextQuery,
-      orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
-    }),
+  const [units, completionByResident, attendanceByResident] = await Promise.all([
     prisma.unit.findMany({
       where: {
         facilityId: context.facilityId
@@ -32,6 +30,26 @@ export default async function ResidentsPage() {
     getAssessmentCompletionMapForFacility(context.facilityId),
     getAttendanceSummaryMapForFacility(context.facilityId)
   ]);
+
+  const residents = await prisma.resident
+    .findMany({
+      where: {
+        facilityId: context.facilityId
+      },
+      ...residentListContextQuery,
+      orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+    })
+    .catch(async (error) => {
+      if (!isResidentSchemaDriftError(error)) throw error;
+      const legacyRows = await prisma.resident.findMany({
+        where: {
+          facilityId: context.facilityId
+        },
+        ...residentListContextLegacyQuery,
+        orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+      });
+      return legacyRows.map(inflateLegacyResidentContextRow);
+    });
 
   return (
     <div className="residents-page-gradient min-h-screen space-y-4">

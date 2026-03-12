@@ -5,7 +5,12 @@ import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiEr
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
 import { statusIsActive } from "@/lib/resident-status";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 import { serializeResidentTags } from "@/lib/residents/types";
 
@@ -75,36 +80,70 @@ export async function PATCH(
       throw new ResidentsApiError("Resident not found.", 404);
     }
 
-    const updated = await prisma.resident.update({
-      where: {
-        id: existing.id
-      },
-      data: {
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-        preferredName: parsed.data.preferredName,
-        room: parsed.data.room,
-        status: parsed.data.status,
-        isActive: parsed.data.status ? statusIsActive(parsed.data.status) : undefined,
-        unitId: parsed.data.unitId,
-        birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
-        admissionDate: parseDateInput(parsed.data.admissionDate, "admission date"),
-        mdsManualDueDate: parseDateInput(parsed.data.mdsManualDueDate, "MDS manual due date"),
-        bestTimesOfDay: parsed.data.bestTimesOfDay,
-        notes: parsed.data.notes,
-        preferences: parsed.data.preferences,
-        safetyNotes: parsed.data.safetyNotes,
-        tags:
-          parsed.data.tags !== undefined
-            ? parsed.data.tags
-              ? serializeResidentTags(parsed.data.tags)
-              : null
-            : undefined,
-        followUpFlag: parsed.data.followUpFlag,
-        lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
-      },
-      ...residentListContextQuery
-    });
+    const updateData = {
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      preferredName: parsed.data.preferredName,
+      room: parsed.data.room,
+      status: parsed.data.status,
+      isActive: parsed.data.status ? statusIsActive(parsed.data.status) : undefined,
+      unitId: parsed.data.unitId,
+      birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
+      admissionDate: parseDateInput(parsed.data.admissionDate, "admission date"),
+      mdsManualDueDate: parseDateInput(parsed.data.mdsManualDueDate, "MDS manual due date"),
+      bestTimesOfDay: parsed.data.bestTimesOfDay,
+      notes: parsed.data.notes,
+      preferences: parsed.data.preferences,
+      safetyNotes: parsed.data.safetyNotes,
+      tags:
+        parsed.data.tags !== undefined
+          ? parsed.data.tags
+            ? serializeResidentTags(parsed.data.tags)
+            : null
+          : undefined,
+      followUpFlag: parsed.data.followUpFlag,
+      lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
+    };
+
+    const updated = await prisma.resident
+      .update({
+        where: {
+          id: existing.id
+        },
+        data: updateData,
+        ...residentListContextQuery
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyUpdated = await prisma.resident.update({
+          where: {
+            id: existing.id
+          },
+          data: {
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            room: parsed.data.room,
+            status: parsed.data.status,
+            isActive: parsed.data.status ? statusIsActive(parsed.data.status) : undefined,
+            unitId: parsed.data.unitId,
+            birthDate: parseDateInput(parsed.data.birthDate, "birth date"),
+            bestTimesOfDay: parsed.data.bestTimesOfDay,
+            notes: parsed.data.notes,
+            preferences: parsed.data.preferences,
+            safetyNotes: parsed.data.safetyNotes,
+            tags:
+              parsed.data.tags !== undefined
+                ? parsed.data.tags
+                  ? serializeResidentTags(parsed.data.tags)
+                  : null
+                : undefined,
+            followUpFlag: parsed.data.followUpFlag,
+            lastOneOnOneAt: parsed.data.lastOneOnOneAt ? new Date(parsed.data.lastOneOnOneAt) : parsed.data.lastOneOnOneAt
+          },
+          ...residentListContextLegacyQuery
+        });
+        return inflateLegacyResidentContextRow(legacyUpdated);
+      });
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),

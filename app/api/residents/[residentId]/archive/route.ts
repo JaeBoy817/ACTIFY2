@@ -3,7 +3,12 @@ import { ResidentStatus } from "@prisma/client";
 import { asResidentsApiErrorResponse, requireResidentsApiContext, ResidentsApiError } from "@/lib/residents/api-context";
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
 import { prisma } from "@/lib/prisma";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 
 export async function POST(
@@ -25,14 +30,27 @@ export async function POST(
       throw new ResidentsApiError("Resident not found.", 404);
     }
 
-    const updated = await prisma.resident.update({
-      where: { id: existing.id },
-      data: {
-        status: ResidentStatus.DISCHARGED,
-        isActive: false
-      },
-      ...residentListContextQuery
-    });
+    const updated = await prisma.resident
+      .update({
+        where: { id: existing.id },
+        data: {
+          status: ResidentStatus.DISCHARGED,
+          isActive: false
+        },
+        ...residentListContextQuery
+      })
+      .catch(async (error) => {
+        if (!isResidentSchemaDriftError(error)) throw error;
+        const legacyUpdated = await prisma.resident.update({
+          where: { id: existing.id },
+          data: {
+            status: ResidentStatus.DISCHARGED,
+            isActive: false
+          },
+          ...residentListContextLegacyQuery
+        });
+        return inflateLegacyResidentContextRow(legacyUpdated);
+      });
 
     const [completionByResident, attendanceByResident] = await Promise.all([
       getAssessmentCompletionMapForFacility(context.facilityId),

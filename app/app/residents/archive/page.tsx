@@ -2,24 +2,43 @@ import { ResidentsArchiveWorkspace } from "@/components/residents/ResidentsArchi
 import { getFacilityContextWithSubscription } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getAssessmentCompletionMapForFacility, getAttendanceSummaryMapForFacility } from "@/lib/residents/metrics";
-import { residentListContextQuery } from "@/lib/residents/query";
+import {
+  inflateLegacyResidentContextRow,
+  isResidentSchemaDriftError,
+  residentListContextLegacyQuery,
+  residentListContextQuery
+} from "@/lib/residents/query";
 import { toResidentListRow } from "@/lib/residents/serializers";
 
 export default async function ResidentsArchivePage() {
   const context = await getFacilityContextWithSubscription();
 
-  const [residents, completionByResident, attendanceByResident] = await Promise.all([
-    prisma.resident.findMany({
+  const [completionByResident, attendanceByResident] = await Promise.all([
+    getAssessmentCompletionMapForFacility(context.facilityId),
+    getAttendanceSummaryMapForFacility(context.facilityId)
+  ]);
+
+  const residents = await prisma.resident
+    .findMany({
       where: {
         facilityId: context.facilityId,
         status: "DISCHARGED"
       },
       ...residentListContextQuery,
       orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
-    }),
-    getAssessmentCompletionMapForFacility(context.facilityId),
-    getAttendanceSummaryMapForFacility(context.facilityId)
-  ]);
+    })
+    .catch(async (error) => {
+      if (!isResidentSchemaDriftError(error)) throw error;
+      const legacyRows = await prisma.resident.findMany({
+        where: {
+          facilityId: context.facilityId,
+          status: "DISCHARGED"
+        },
+        ...residentListContextLegacyQuery,
+        orderBy: [{ room: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
+      });
+      return legacyRows.map(inflateLegacyResidentContextRow);
+    });
 
   return (
     <div className="residents-page-gradient min-h-screen">
