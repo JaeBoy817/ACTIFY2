@@ -12,6 +12,7 @@ type InsightListProps = {
 };
 
 function entryHref(row: DocumentationListRow) {
+  if (row.openHref) return row.openHref;
   if (row.kind === "PROGRESS") return `/app/documentation/progress-notes/${encodeURIComponent(row.id)}`;
   if (row.kind === "ONE_TO_ONE") return `/app/documentation/one-to-one/${encodeURIComponent(row.id)}`;
   if (row.kind === "UDA") return `/app/documentation/uda/${encodeURIComponent(row.id)}`;
@@ -37,6 +38,7 @@ function InsightList({ title, icon: Icon, items, emptyLabel }: InsightListProps)
             >
               <p className="truncate font-semibold text-white">{row.residentName}</p>
               <p className="mt-0.5 truncate text-[#9bb2d7]">{row.summary || "No narrative summary."}</p>
+              {row.dueDateIso ? <p className="mt-0.5 text-[10px] text-amber-100">Due {new Date(row.dueDateIso).toLocaleDateString()}</p> : null}
             </Link>
           ))
         )}
@@ -73,6 +75,36 @@ export function DocumentationInsightPanel({
       <InsightList title="Recent Progress Notes" icon={ClipboardList} items={recentProgress} emptyLabel="No recent progress notes." />
       <InsightList title="UDA Reviews Due" icon={Clock3} items={udaDue} emptyLabel="No UDA due items." />
       <InsightList title="MDS Deadlines" icon={CheckCircle2} items={mdsDue} emptyLabel="No MDS deadlines queued." />
+
+      <section className="rounded-2xl border border-[#233a60] bg-[#091426] p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9cb4da]">Quick Actions</p>
+        <div className="mt-2 grid gap-1.5">
+          <Link
+            href="/app/documentation/progress-notes/new"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-[#35527f] bg-[#132848] px-3 text-[11px] font-semibold text-[#d7e6ff]"
+          >
+            Add Progress Note
+          </Link>
+          <Link
+            href="/app/documentation/one-to-one/new"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-violet-300/35 bg-violet-500/15 px-3 text-[11px] font-semibold text-violet-100"
+          >
+            Add 1:1 Note
+          </Link>
+          <Link
+            href="/app/documentation/uda"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/15 px-3 text-[11px] font-semibold text-amber-100"
+          >
+            Open UDA Queue
+          </Link>
+          <Link
+            href="/app/documentation/mds"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-emerald-300/35 bg-emerald-500/15 px-3 text-[11px] font-semibold text-emerald-100"
+          >
+            Open MDS Queue
+          </Link>
+        </div>
+      </section>
     </aside>
   );
 }

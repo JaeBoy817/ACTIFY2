@@ -21,6 +21,7 @@ const STATUS_TONE: Record<DocumentationStatus, string> = {
 };
 
 function resolveEntryHref(row: DocumentationListRow) {
+  if (row.openHref) return row.openHref;
   if (row.kind === "PROGRESS") return `/app/documentation/progress-notes/${encodeURIComponent(row.id)}`;
   if (row.kind === "ONE_TO_ONE") return `/app/documentation/one-to-one/${encodeURIComponent(row.id)}`;
   if (row.kind === "UDA") return `/app/documentation/uda/${encodeURIComponent(row.id)}`;
@@ -71,6 +72,11 @@ export function DocumentationBoard({
                     <Clock3 className="h-3 w-3" />
                     {new Date(row.createdAtIso).toLocaleDateString()}
                   </span>
+                  {row.complianceStatus ? (
+                    <span className="rounded-full border border-[#324f7b] bg-[#11233f] px-2 py-0.5">
+                      {row.complianceStatus.replaceAll("_", " ")}
+                    </span>
+                  ) : null}
                   {row.dueDateIso ? (
                     <span className="inline-flex items-center gap-1 text-amber-100">
                       <FileWarning className="h-3 w-3" />
@@ -91,4 +97,3 @@ export function DocumentationBoard({
     </div>
   );
 }
-

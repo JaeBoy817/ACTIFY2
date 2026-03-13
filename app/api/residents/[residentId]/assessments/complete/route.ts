@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { CuesRequired, MoodAffect, ParticipationLevel, ProgressNoteType, ResponseType } from "@prisma/client";
 import { z } from "zod";
 
@@ -91,6 +92,12 @@ export async function POST(request: Request, { params }: { params: { residentId:
         createdByUserId: context.user.id
       }
     });
+
+    revalidatePath("/app/documentation");
+    revalidatePath("/app/documentation/uda");
+    revalidatePath("/app/documentation/mds");
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${resident.id}`);
 
     return Response.json({ ok: true });
   } catch (error) {

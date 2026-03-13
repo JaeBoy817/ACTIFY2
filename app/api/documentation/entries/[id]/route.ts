@@ -235,8 +235,12 @@ export async function PATCH(
     });
 
     revalidatePath("/app/documentation");
+    revalidatePath("/app/documentation/progress-notes");
+    revalidatePath("/app/documentation/one-to-one");
     revalidatePath("/app/documentation/uda");
     revalidatePath("/app/documentation/mds");
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${existing.residentId}`);
 
     return Response.json({
       entry: mapEntry({
@@ -263,7 +267,8 @@ export async function DELETE(
         }
       },
       select: {
-        id: true
+        id: true,
+        residentId: true
       }
     });
 
@@ -276,8 +281,12 @@ export async function DELETE(
     });
 
     revalidatePath("/app/documentation");
+    revalidatePath("/app/documentation/progress-notes");
+    revalidatePath("/app/documentation/one-to-one");
     revalidatePath("/app/documentation/uda");
     revalidatePath("/app/documentation/mds");
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${existing.residentId}`);
 
     return Response.json({ ok: true });
   } catch (error) {

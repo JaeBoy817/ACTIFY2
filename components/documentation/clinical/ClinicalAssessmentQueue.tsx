@@ -26,6 +26,26 @@ const STATUS_BADGE: Record<DocumentationStatus, string> = {
   COMPLETED: "border-emerald-300/35 bg-emerald-500/20 text-emerald-100"
 };
 
+const COMPLIANCE_LABEL: Record<ClinicalAssessmentQueueRow["complianceStatus"], string> = {
+  CURRENT: "Current",
+  DUE_SOON: "Due Soon",
+  DUE_THIS_MONTH: "Due This Month",
+  OVERDUE: "Overdue",
+  COMPLETED: "Completed",
+  MISSING: "Missing",
+  FOLLOW_UP_NEEDED: "Follow-Up Needed"
+};
+
+const COMPLIANCE_BADGE: Record<ClinicalAssessmentQueueRow["complianceStatus"], string> = {
+  CURRENT: "border-emerald-300/35 bg-emerald-500/16 text-emerald-100",
+  DUE_SOON: "border-amber-300/35 bg-amber-500/16 text-amber-100",
+  DUE_THIS_MONTH: "border-amber-300/35 bg-amber-500/16 text-amber-100",
+  OVERDUE: "border-rose-300/35 bg-rose-500/16 text-rose-100",
+  COMPLETED: "border-emerald-300/35 bg-emerald-500/16 text-emerald-100",
+  MISSING: "border-rose-300/35 bg-rose-500/16 text-rose-100",
+  FOLLOW_UP_NEEDED: "border-sky-300/35 bg-sky-500/16 text-sky-100"
+};
+
 function formatDate(value: string | null) {
   if (!value) return "--";
   const parsed = new Date(value);
@@ -40,6 +60,28 @@ function assessmentLabel(row: ClinicalAssessmentQueueRow) {
 
 function defaultAssessmentFilter(kind: ClinicalAssessmentKind): AssessmentTypeFilter {
   return kind === "UDA" ? "all" : "SECTION_F";
+}
+
+function isActionable(row: ClinicalAssessmentQueueRow) {
+  return (
+    row.complianceStatus === "OVERDUE" ||
+    row.complianceStatus === "MISSING" ||
+    row.complianceStatus === "DUE_SOON" ||
+    row.complianceStatus === "DUE_THIS_MONTH" ||
+    row.complianceStatus === "FOLLOW_UP_NEEDED"
+  );
+}
+
+function resolveOpenHref(row: ClinicalAssessmentQueueRow, kind: ClinicalAssessmentKind, newEntryHref: string) {
+  if (row.entryId) {
+    return `/app/documentation/${kind === "UDA" ? "uda" : "mds"}/${encodeURIComponent(row.entryId)}`;
+  }
+
+  if (kind === "UDA") {
+    return `/app/documentation/uda/new?residentId=${encodeURIComponent(row.residentId)}&assessmentType=${encodeURIComponent(row.assessmentType)}`;
+  }
+
+  return `${newEntryHref}?residentId=${encodeURIComponent(row.residentId)}`;
 }
 
 type MetricCard = {
@@ -127,11 +169,11 @@ export function ClinicalAssessmentQueue({
     };
 
     if (kind === "UDA") {
-      const annualDue = rows.filter((row) => row.assessmentType === "ANNUAL" && inCurrentMonth(row.dueDateIso) && row.status !== "COMPLETED").length;
-      const quarterlyDue = rows.filter((row) => row.assessmentType === "QUARTERLY" && inCurrentMonth(row.dueDateIso) && row.status !== "COMPLETED").length;
-      const overdue = rows.filter((row) => row.isOverdue).length;
-      const drafts = rows.filter((row) => row.status === "DRAFT").length;
-      const completedMonth = rows.filter((row) => row.status === "COMPLETED" && inCurrentMonth(row.createdAtIso)).length;
+      const annualDue = rows.filter((row) => row.assessmentType === "ANNUAL" && isActionable(row)).length;
+      const quarterlyDue = rows.filter((row) => row.assessmentType === "QUARTERLY" && isActionable(row)).length;
+      const overdue = rows.filter((row) => row.complianceStatus === "OVERDUE" || row.complianceStatus === "MISSING").length;
+      const drafts = rows.filter((row) => row.status === "DRAFT" || row.status === "IN_PROGRESS").length;
+      const completedMonth = rows.filter((row) => inCurrentMonth(row.lastCompletedDateIso)).length;
       return [
         { label: "Annual Due This Month", value: annualDue, tone: "amber" },
         { label: "Quarterly Due This Month", value: quarterlyDue, tone: "blue" },
@@ -141,11 +183,11 @@ export function ClinicalAssessmentQueue({
       ];
     }
 
-    const dueSoon = rows.filter((row) => row.isDueSoon).length;
-    const overdue = rows.filter((row) => row.isOverdue).length;
-    const drafts = rows.filter((row) => row.status === "DRAFT").length;
-    const completedMonth = rows.filter((row) => row.status === "COMPLETED" && inCurrentMonth(row.createdAtIso)).length;
-    const reviewDue = rows.filter((row) => inCurrentMonth(row.reviewDateIso) && row.status !== "COMPLETED").length;
+    const dueSoon = rows.filter((row) => isActionable(row)).length;
+    const overdue = rows.filter((row) => row.complianceStatus === "OVERDUE" || row.complianceStatus === "MISSING").length;
+    const drafts = rows.filter((row) => row.status === "DRAFT" || row.status === "IN_PROGRESS").length;
+    const completedMonth = rows.filter((row) => inCurrentMonth(row.lastCompletedDateIso)).length;
+    const reviewDue = rows.filter((row) => inCurrentMonth(row.reviewDateIso) && row.complianceStatus !== "CURRENT").length;
 
     return [
       { label: "Due Soon", value: dueSoon, tone: "blue" },
@@ -304,18 +346,23 @@ export function ClinicalAssessmentQueue({
                       {row.isDueSoon ? <p className="mt-1 text-amber-200">Due soon</p> : null}
                     </td>
                     <td className="px-3 py-3 align-top">
-                      <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]", STATUS_BADGE[row.status])}>
-                        {STATUS_LABEL[row.status]}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]", COMPLIANCE_BADGE[row.complianceStatus])}>
+                          {COMPLIANCE_LABEL[row.complianceStatus]}
+                        </span>
+                        <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]", STATUS_BADGE[row.status])}>
+                          {STATUS_LABEL[row.status]}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-3 py-3 align-top text-xs text-[#b7cbe9]">{row.assignedStaff || row.authorName}</td>
                     <td className="px-3 py-3 align-top text-right">
                       <div className="flex justify-end gap-2">
                         <Link
-                          href={`/app/documentation/${kind === "UDA" ? "uda" : "mds"}/${encodeURIComponent(row.id)}`}
+                          href={resolveOpenHref(row, kind, newEntryHref)}
                           className="inline-flex h-8 items-center rounded-full border border-[#3f5d8d] bg-[#17305a] px-3 text-[11px] font-semibold text-[#d6e6ff]"
                         >
-                          Open
+                          {row.entryId ? "Open" : kind === "UDA" ? "Start" : "Start"}
                         </Link>
                         {kind === "UDA" ? (
                           <Link
@@ -373,6 +420,7 @@ export function ClinicalAssessmentQueue({
                     <span className="font-semibold">{assessmentLabel(selectedRow)} Workflow</span>
                   </div>
                   <div className="mt-2 space-y-1 text-[#9eb5db]">
+                    <p>Compliance: {COMPLIANCE_LABEL[selectedRow.complianceStatus]}</p>
                     <p>Status: {STATUS_LABEL[selectedRow.status]}</p>
                     <p>Due: {formatDate(selectedRow.dueDateIso)}</p>
                     {selectedRow.reviewDateIso ? <p>Review: {formatDate(selectedRow.reviewDateIso)}</p> : null}
@@ -411,10 +459,10 @@ export function ClinicalAssessmentQueue({
 
                 <section className="grid gap-2">
                   <Link
-                    href={`/app/documentation/${kind === "UDA" ? "uda" : "mds"}/${encodeURIComponent(selectedRow.id)}`}
+                    href={resolveOpenHref(selectedRow, kind, newEntryHref)}
                     className="inline-flex h-9 items-center justify-center rounded-full border border-[#3f5d8d] bg-[#183361] text-xs font-semibold text-[#d6e6ff]"
                   >
-                    Open Assessment
+                    {selectedRow.entryId ? "Open Assessment" : "Start Assessment"}
                   </Link>
 
                   {kind === "UDA" ? (

@@ -8,6 +8,15 @@ export type DocumentationAssessmentType = "ANNUAL" | "QUARTERLY" | "SECTION_F";
 
 export type DocumentationSectionChangeState = "NO_CHANGE" | "UPDATED" | "SIGNIFICANT_CHANGE";
 
+export type DocumentationComplianceStatus =
+  | "CURRENT"
+  | "DUE_SOON"
+  | "DUE_THIS_MONTH"
+  | "OVERDUE"
+  | "COMPLETED"
+  | "MISSING"
+  | "FOLLOW_UP_NEEDED";
+
 export type DocumentationMeta = {
   kind: DocumentationKind;
   status?: DocumentationStatus;
@@ -44,6 +53,14 @@ export type DocumentationListRow = {
   sectionProgress: number | null;
   noMajorChange: boolean | null;
   hasFollowUp: boolean;
+  complianceStatus?: DocumentationComplianceStatus | null;
+  daysUntilDue?: number | null;
+  daysOverdue?: number | null;
+  lastCompletedAtIso?: string | null;
+  openHref?: string | null;
+  actionHref?: string | null;
+  actionLabel?: string | null;
+  source?: "ENTRY" | "DUE_TRACKER";
 };
 
 export type DocumentationOverviewCounts = {

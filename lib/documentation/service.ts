@@ -1,6 +1,7 @@
 import { startOfMonth } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
+import { parseDateOnlyInputToUtcStart } from "@/lib/datetime";
 import {
   inferDocumentationAssignedStaff,
   inferDocumentationAssessmentType,
@@ -14,15 +15,20 @@ import {
   stripDocumentationMeta
 } from "@/lib/documentation/meta";
 import type {
+  DocumentationComplianceStatus,
   DocumentationKind,
   DocumentationListRow,
   DocumentationOverviewCounts,
   DocumentationStatus
 } from "@/lib/documentation/types";
 
-function isDueSoon(dueDateIso: string | null, now: Date) {
+function isDueSoonStatus(status: DocumentationComplianceStatus | null | undefined) {
+  return status === "DUE_SOON" || status === "DUE_THIS_MONTH" || status === "FOLLOW_UP_NEEDED";
+}
+
+function isDueSoon(dueDateIso: string | null, now: Date, timeZone?: string | null) {
   if (!dueDateIso) return false;
-  const due = new Date(dueDateIso);
+  const due = parseDateOnlyInputToUtcStart(dueDateIso, timeZone) ?? new Date(dueDateIso);
   if (Number.isNaN(due.getTime())) return false;
   const horizon = new Date(now);
   horizon.setDate(now.getDate() + 7);
@@ -134,6 +140,10 @@ export function getDocumentationOverview(rows: DocumentationListRow[]) {
     current.totalThisMonth += 1;
     if (row.status === "DRAFT") current.draftCount += 1;
     if (row.status === "COMPLETED") current.completedCount += 1;
+    if (isDueSoonStatus(row.complianceStatus)) {
+      current.dueSoonCount += 1;
+      continue;
+    }
     if (isDueSoon(row.dueDateIso, now)) current.dueSoonCount += 1;
   }
 

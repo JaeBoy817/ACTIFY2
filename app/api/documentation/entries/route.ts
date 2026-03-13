@@ -227,8 +227,12 @@ export async function POST(request: Request) {
     });
 
     revalidatePath("/app/documentation");
+    revalidatePath("/app/documentation/progress-notes");
+    revalidatePath("/app/documentation/one-to-one");
     revalidatePath("/app/documentation/uda");
     revalidatePath("/app/documentation/mds");
+    revalidatePath("/app/residents");
+    revalidatePath(`/app/residents/${resident.id}`);
 
     return Response.json({
       entry: mapNoteToEntry({

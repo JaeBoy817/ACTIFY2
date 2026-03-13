@@ -6,16 +6,32 @@ import { useDeferredValue, useMemo, useState } from "react";
 
 import { DocumentationBoard } from "@/components/documentation/DocumentationBoard";
 import { cn } from "@/lib/utils";
-import type { DocumentationKind, DocumentationListRow, DocumentationStatus } from "@/lib/documentation/types";
+import type {
+  DocumentationComplianceStatus,
+  DocumentationKind,
+  DocumentationListRow,
+  DocumentationStatus
+} from "@/lib/documentation/types";
 
 type ViewMode = "board" | "list" | "due";
 
 function entryHref(row: DocumentationListRow) {
+  if (row.openHref) return row.openHref;
   if (row.kind === "PROGRESS") return `/app/documentation/progress-notes/${encodeURIComponent(row.id)}`;
   if (row.kind === "ONE_TO_ONE") return `/app/documentation/one-to-one/${encodeURIComponent(row.id)}`;
   if (row.kind === "UDA") return `/app/documentation/uda/${encodeURIComponent(row.id)}`;
   return `/app/documentation/mds/${encodeURIComponent(row.id)}`;
 }
+
+const COMPLIANCE_LABEL: Record<DocumentationComplianceStatus, string> = {
+  CURRENT: "Current",
+  DUE_SOON: "Due Soon",
+  DUE_THIS_MONTH: "Due This Month",
+  OVERDUE: "Overdue",
+  COMPLETED: "Completed",
+  MISSING: "Missing",
+  FOLLOW_UP_NEEDED: "Follow-Up Needed"
+};
 
 function defaultColumns(): Record<DocumentationStatus, DocumentationListRow[]> {
   return {
@@ -37,17 +53,19 @@ export function DocumentationTypeWorkspace({
   const [view, setView] = useState<ViewMode>("board");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | DocumentationStatus>("all");
+  const [compliance, setCompliance] = useState<"all" | DocumentationComplianceStatus>("all");
 
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
       if (status !== "all" && row.status !== status) return false;
+      if (compliance !== "all" && row.complianceStatus !== compliance) return false;
       if (!deferredQuery) return true;
-      const haystack = `${row.title} ${row.summary} ${row.residentName} ${row.residentRoom} ${row.authorName}`.toLowerCase();
+      const haystack = `${row.title} ${row.summary} ${row.residentName} ${row.residentRoom} ${row.authorName} ${row.complianceStatus ?? ""}`.toLowerCase();
       return haystack.includes(deferredQuery);
     });
-  }, [deferredQuery, rows, status]);
+  }, [compliance, deferredQuery, rows, status]);
 
   const columns = useMemo(() => {
     const data = defaultColumns();
@@ -88,6 +106,19 @@ export function DocumentationTypeWorkspace({
             <option value="IN_PROGRESS">In Progress</option>
             <option value="READY_REVIEW">Ready to Review</option>
             <option value="COMPLETED">Completed</option>
+          </select>
+          <select
+            value={compliance}
+            onChange={(event) => setCompliance(event.target.value as "all" | DocumentationComplianceStatus)}
+            className="h-10 rounded-full border border-[#2f4269] bg-[#0f1d35] px-3 text-xs font-semibold text-[#dceaff]"
+          >
+            <option value="all">All Due Status</option>
+            <option value="CURRENT">Current</option>
+            <option value="DUE_SOON">Due Soon</option>
+            <option value="DUE_THIS_MONTH">Due This Month</option>
+            <option value="OVERDUE">Overdue</option>
+            <option value="MISSING">Missing</option>
+            <option value="FOLLOW_UP_NEEDED">Follow-Up Needed</option>
           </select>
           <div className="inline-flex rounded-full border border-[#2f4269] bg-[#0f1d35] p-1">
             <button
@@ -144,6 +175,7 @@ export function DocumentationTypeWorkspace({
                   <th className="px-3 py-2">Resident</th>
                   <th className="px-3 py-2">Summary</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Due Status</th>
                   <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Author</th>
                 </tr>
@@ -159,13 +191,14 @@ export function DocumentationTypeWorkspace({
                     </td>
                     <td className="px-3 py-2 text-[#c8d9f6]">{row.summary || "-"}</td>
                     <td className="px-3 py-2 text-[#c8d9f6]">{row.status.replaceAll("_", " ")}</td>
+                    <td className="px-3 py-2 text-[#c8d9f6]">{row.complianceStatus ? COMPLIANCE_LABEL[row.complianceStatus] : "-"}</td>
                     <td className="px-3 py-2 text-[#9fb4d9]">{new Date(row.createdAtIso).toLocaleDateString()}</td>
                     <td className="px-3 py-2 text-[#9fb4d9]">{row.authorName}</td>
                   </tr>
                 ))}
                 {filtered.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-[#93a8cf]" colSpan={5}>
+                    <td className="px-3 py-6 text-center text-[#93a8cf]" colSpan={6}>
                       No entries found for the current filters.
                     </td>
                   </tr>
@@ -190,6 +223,9 @@ export function DocumentationTypeWorkspace({
                 >
                   <p className="font-semibold text-white">{row.residentName} · {row.title}</p>
                   <p className="mt-1 text-xs text-[#9eb4d8]">{row.summary}</p>
+                  {row.complianceStatus ? (
+                    <p className="mt-1 text-xs text-[#c7d7f4]">{COMPLIANCE_LABEL[row.complianceStatus]}</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-amber-100">
                     Due {row.dueDateIso ? new Date(row.dueDateIso).toLocaleDateString() : "Not set"}
                   </p>
