@@ -9,7 +9,7 @@ import { getDocumentationBaseContext, getDocumentationOverviewData } from "@/app
 
 export default async function DocumentationOverviewPage() {
   const { context } = await getDocumentationBaseContext();
-  const data = await getDocumentationOverviewData(context.facilityId);
+  const data = await getDocumentationOverviewData(context.facilityId, context.timeZone);
 
   return (
     <DocumentationShell

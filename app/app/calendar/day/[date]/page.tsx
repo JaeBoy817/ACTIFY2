@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { logAudit } from "@/lib/audit";
+import { parseDateTimeInputToUtcDate, toDateTimeLocalInputValueInTimeZone } from "@/lib/datetime";
 import { requireModulePage } from "@/lib/page-guards";
 import { assertWritable } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -106,9 +107,9 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
       location: formData.get("location")
     });
 
-    const startAt = new Date(parsed.startAt);
-    const endAt = new Date(parsed.endAt);
-    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
+    const startAt = parseDateTimeInputToUtcDate(parsed.startAt, { timeZone: scoped.timeZone });
+    const endAt = parseDateTimeInputToUtcDate(parsed.endAt, { timeZone: scoped.timeZone });
+    if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
       return;
     }
 
@@ -334,14 +335,14 @@ export default async function CalendarDayPage({ params }: CalendarDayPageProps) 
                 <Input
                   type="datetime-local"
                   name="startAt"
-                  defaultValue={format(activity.startAt, "yyyy-MM-dd'T'HH:mm")}
+                  defaultValue={toDateTimeLocalInputValueInTimeZone(activity.startAt, context.timeZone)}
                   required
                   className="bg-white/85"
                 />
                 <Input
                   type="datetime-local"
                   name="endAt"
-                  defaultValue={format(activity.endAt, "yyyy-MM-dd'T'HH:mm")}
+                  defaultValue={toDateTimeLocalInputValueInTimeZone(activity.endAt, context.timeZone)}
                   required
                   className="bg-white/85"
                 />

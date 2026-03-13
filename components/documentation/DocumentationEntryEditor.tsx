@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2, Save, Trash2 } from "lucide-react";
 
+import { formatActifyDateTime, parseDateTimeInputToUtcDate } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import type { DocumentationKind, DocumentationPriority, DocumentationStatus } from "@/lib/documentation/types";
 
@@ -66,17 +67,6 @@ const KIND_HREF: Record<DocumentationKind, string> = {
 
 function getEntryHref(kind: DocumentationKind, id: string) {
   return `${KIND_HREF[kind]}/${encodeURIComponent(id)}`;
-}
-
-function formatAsInputDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
 function parseSectionsFromNarrative(narrative: string, labels: readonly string[]) {
@@ -145,11 +135,13 @@ function buildStructuredNarrative(args: {
 export function DocumentationEntryEditor({
   kind,
   residents,
-  initial
+  initial,
+  timeZone
 }: {
   kind: DocumentationKind;
   residents: ResidentOption[];
   initial: EntryInitial;
+  timeZone?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -178,6 +170,12 @@ export function DocumentationEntryEditor({
   const [mdsSections, setMdsSections] = useState(() => parseSectionsFromNarrative(initial.narrative, MDS_SECTION_LABELS));
 
   const resident = useMemo(() => residents.find((item) => item.id === residentId) ?? null, [residentId, residents]);
+  const entryTimestampLabel = useMemo(() => {
+    if (!initial.id) return null;
+    const parsed = parseDateTimeInputToUtcDate(initial.occurredAt, { timeZone });
+    if (!parsed) return "N/A";
+    return formatActifyDateTime(parsed, timeZone);
+  }, [initial.id, initial.occurredAt, timeZone]);
 
   const draftStorageKey = useMemo(() => {
     return `actify:documentation:draft:${kind}:${initial.id ?? "new"}`;
@@ -660,7 +658,7 @@ export function DocumentationEntryEditor({
 
           {initial.id ? (
             <section className="rounded-xl border border-[#2a4168] bg-[#0d1a31] p-3 text-xs text-[#9db2d8]">
-              Entry timestamp: {formatAsInputDateTime(initial.occurredAt) ? new Date(initial.occurredAt).toLocaleString() : "N/A"}
+              Entry timestamp: {entryTimestampLabel ?? "N/A"}
             </section>
           ) : null}
         </aside>

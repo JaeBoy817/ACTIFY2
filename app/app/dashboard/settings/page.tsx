@@ -15,6 +15,7 @@ export default async function DashboardSettingsPage() {
         month: "short",
         day: "numeric"
       })}
+      timeZone={context.timeZone}
       statusLine="Set which optional dashboard elements are visible. Defaults keep the home view minimal."
     >
       <DashboardSettingsPanel />

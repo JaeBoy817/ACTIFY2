@@ -17,7 +17,8 @@ export default async function MdsDetailPage({
   const entry = await getClinicalAssessmentEntryForEditor({
     facilityId: context.facilityId,
     id: params.id,
-    kind: "MDS"
+    kind: "MDS",
+    timeZone: context.timeZone
   });
 
   if (!entry) {
@@ -35,7 +36,7 @@ export default async function MdsDetailPage({
       title="MDS Section F Detail"
       description="Review, update, and finalize Section F activity preference support entries with resident history context."
     >
-      <MdsSectionFEditor residents={residents} history={history} initial={entry} />
+      <MdsSectionFEditor timeZone={context.timeZone} residents={residents} history={history} initial={entry} />
     </DocumentationShell>
   );
 }

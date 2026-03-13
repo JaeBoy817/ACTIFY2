@@ -1,4 +1,4 @@
-const DEFAULT_TIME_ZONE = "America/New_York";
+const DEFAULT_TIME_ZONE = "America/Chicago";
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 

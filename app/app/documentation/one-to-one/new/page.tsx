@@ -7,7 +7,7 @@ export default async function NewOneToOneNotePage({
 }: {
   searchParams?: { residentId?: string };
 }) {
-  const { residents } = await getDocumentationBaseContext();
+  const { context, residents } = await getDocumentationBaseContext();
 
   return (
     <DocumentationShell
@@ -16,10 +16,12 @@ export default async function NewOneToOneNotePage({
     >
       <DocumentationEntryEditor
         kind="ONE_TO_ONE"
+        timeZone={context.timeZone}
         residents={residents}
         initial={getDefaultDocumentationEditorData({
           kind: "ONE_TO_ONE",
-          residentId: searchParams?.residentId
+          residentId: searchParams?.residentId,
+          timeZone: context.timeZone
         })}
       />
     </DocumentationShell>

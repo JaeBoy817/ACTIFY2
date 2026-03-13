@@ -7,7 +7,7 @@ export default async function NewProgressNotePage({
 }: {
   searchParams?: { residentId?: string };
 }) {
-  const { residents } = await getDocumentationBaseContext();
+  const { context, residents } = await getDocumentationBaseContext();
 
   return (
     <DocumentationShell
@@ -16,10 +16,12 @@ export default async function NewProgressNotePage({
     >
       <DocumentationEntryEditor
         kind="PROGRESS"
+        timeZone={context.timeZone}
         residents={residents}
         initial={getDefaultDocumentationEditorData({
           kind: "PROGRESS",
-          residentId: searchParams?.residentId
+          residentId: searchParams?.residentId,
+          timeZone: context.timeZone
         })}
       />
     </DocumentationShell>

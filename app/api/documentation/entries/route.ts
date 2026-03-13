@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
+import { parseDateTimeInputToUtcDate } from "@/lib/datetime";
 import { prisma } from "@/lib/prisma";
 import {
   attachDocumentationMeta,
@@ -188,7 +189,13 @@ export async function POST(request: Request) {
       carryForwardFromId: parsed.data.carryForwardFromId?.trim() || null
     });
 
-    const createdAt = parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : new Date();
+    const createdAt = parseDateTimeInputToUtcDate(parsed.data.occurredAt, {
+      timeZone: context.timeZone,
+      fallbackToNow: true
+    });
+    if (!createdAt) {
+      throw new NotesApiError("Invalid documentation timestamp.", 400);
+    }
 
     const note = await prisma.progressNote.create({
       data: {

@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { BellRing, CalendarDays, Search, Sparkles, UserRound } from "lucide-react";
 
+import { LiveDateTimeText } from "@/components/app/live-date-time-text";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { Input } from "@/components/ui/input";
 
 export function DashboardHeader({
   welcomeText,
   dateLabel,
+  timeZone,
   statusLine
 }: {
   welcomeText: string;
   dateLabel: string;
+  timeZone?: string | null;
   statusLine: string;
 }) {
   return (
@@ -22,7 +25,9 @@ export function DashboardHeader({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <h1 className="font-[var(--font-display)] text-3xl text-foreground">{welcomeText}</h1>
-          <p className="text-sm text-foreground/70">{dateLabel}</p>
+          <p className="text-sm text-foreground/70">
+            {timeZone ? <LiveDateTimeText timeZone={timeZone} mode="long-date" /> : dateLabel}
+          </p>
           <p className="text-sm text-foreground/70">{statusLine}</p>
         </div>
 

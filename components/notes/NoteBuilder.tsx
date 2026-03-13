@@ -92,11 +92,6 @@ function draftStorageKey(noteId: string | null, type: NoteBuilderValues["noteTyp
   return `actify:note:draft:${type}:${residentId || "none"}`;
 }
 
-function toIsoFromInput(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
-}
-
 function statusLabel(type: NoteBuilderValues["noteType"]) {
   return type === "1on1" ? "1:1 Note" : "General Note";
 }
@@ -286,7 +281,7 @@ export function NoteBuilder({
       ...rawValues,
       tags: (rawValues.tags ?? []).map(normalizeTag).filter(Boolean),
       linkedResidentIds: Array.from(new Set(rawValues.linkedResidentIds ?? [])),
-      occurredAt: toIsoFromInput(rawValues.occurredAt)
+      occurredAt: rawValues.occurredAt
     };
 
     setSaveState("saving");

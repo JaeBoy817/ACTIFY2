@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
+import { parseDateTimeInputToUtcDate } from "@/lib/datetime";
 import { prisma } from "@/lib/prisma";
 import {
   attachDocumentationMeta,
@@ -30,6 +31,7 @@ const patchSchema = z.object({
   cuesRequired: z.enum(["NONE", "VERBAL", "VISUAL", "HAND_OVER_HAND"]).default("VERBAL"),
   response: z.enum(["POSITIVE", "NEUTRAL", "RESISTANT"]).default("NEUTRAL"),
   dueDate: z.string().trim().optional().nullable(),
+  occurredAt: z.string().trim().optional().nullable(),
   sectionProgress: z.number().min(0).max(100).optional().nullable(),
   assessmentType: z.enum(["ANNUAL", "QUARTERLY", "SECTION_F"]).optional().nullable(),
   reviewDate: z.string().trim().optional().nullable(),
@@ -193,6 +195,16 @@ export async function PATCH(
       carryForwardFromId: parsed.data.carryForwardFromId?.trim() || null
     });
 
+    const occurredAtInput = parsed.data.occurredAt?.trim() || null;
+    const occurredAt = occurredAtInput
+      ? parseDateTimeInputToUtcDate(occurredAtInput, {
+          timeZone: context.timeZone
+        })
+      : null;
+    if (occurredAtInput && !occurredAt) {
+      throw new NotesApiError("Invalid documentation timestamp.", 400);
+    }
+
     const updated = await prisma.progressNote.update({
       where: {
         id: existing.id
@@ -203,7 +215,8 @@ export async function PATCH(
         participationLevel: parsed.data.participationLevel,
         moodAffect: parsed.data.moodAffect,
         cuesRequired: parsed.data.cuesRequired,
-        response: parsed.data.response
+        response: parsed.data.response,
+        ...(occurredAt ? { createdAt: occurredAt } : {})
       },
       include: {
         resident: {

@@ -1,5 +1,3 @@
-import { startOfMonth } from "date-fns";
-
 import {
   inferDocumentationAssignedStaff,
   inferDocumentationAssessmentType,
@@ -23,8 +21,14 @@ import type {
   DocumentationSectionChangeState,
   DocumentationStatus
 } from "@/lib/documentation/types";
+import {
+  normalizeDateOnlyInput,
+  parseDateOnlyInputToUtcStart,
+  toDateTimeLocalInputValueInTimeZone
+} from "@/lib/datetime";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
+import { addZonedDays, startOfZonedDay, startOfZonedMonth } from "@/lib/timezone";
 
 export type DocumentationResidentOption = {
   id: string;
@@ -49,15 +53,6 @@ export type DocumentationEditorData = {
   cuesRequired: "NONE" | "VERBAL" | "VISUAL" | "HAND_OVER_HAND";
   response: "POSITIVE" | "NEUTRAL" | "RESISTANT";
 };
-
-function toLocalDateTimeInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hour}:${minute}`;
-}
 
 function toAge(birthDate: Date | null | undefined) {
   if (!birthDate) return null;
@@ -109,10 +104,10 @@ export async function getDocumentationBaseContext() {
   };
 }
 
-export async function getDocumentationOverviewData(facilityId: string) {
+export async function getDocumentationOverviewData(facilityId: string, timeZone?: string | null) {
   const rows = await getDocumentationRows({
     facilityId,
-    monthStart: startOfMonth(new Date()),
+    monthStart: startOfZonedMonth(new Date(), timeZone),
     limit: 900
   });
 
@@ -129,8 +124,8 @@ export async function getDocumentationOverviewData(facilityId: string) {
   const udaDue = rows
     .filter((row) => row.kind === "UDA" && row.dueDateIso)
     .sort((a, b) => {
-      const aTime = new Date(a.dueDateIso as string).getTime();
-      const bTime = new Date(b.dueDateIso as string).getTime();
+      const aTime = parseDateOnlyInputToUtcStart(a.dueDateIso as string, timeZone)?.getTime() ?? Number.POSITIVE_INFINITY;
+      const bTime = parseDateOnlyInputToUtcStart(b.dueDateIso as string, timeZone)?.getTime() ?? Number.POSITIVE_INFINITY;
       return aTime - bTime;
     })
     .slice(0, 6);
@@ -138,8 +133,8 @@ export async function getDocumentationOverviewData(facilityId: string) {
   const mdsDue = rows
     .filter((row) => row.kind === "MDS" && row.dueDateIso)
     .sort((a, b) => {
-      const aTime = new Date(a.dueDateIso as string).getTime();
-      const bTime = new Date(b.dueDateIso as string).getTime();
+      const aTime = parseDateOnlyInputToUtcStart(a.dueDateIso as string, timeZone)?.getTime() ?? Number.POSITIVE_INFINITY;
+      const bTime = parseDateOnlyInputToUtcStart(b.dueDateIso as string, timeZone)?.getTime() ?? Number.POSITIVE_INFINITY;
       return aTime - bTime;
     })
     .slice(0, 6);
@@ -157,11 +152,15 @@ export async function getDocumentationOverviewData(facilityId: string) {
   };
 }
 
-export async function getDocumentationRowsForKind(facilityId: string, kind?: DocumentationKind) {
+export async function getDocumentationRowsForKind(
+  facilityId: string,
+  kind?: DocumentationKind,
+  timeZone?: string | null
+) {
   return getDocumentationRows({
     facilityId,
     kind,
-    monthStart: startOfMonth(new Date()),
+    monthStart: startOfZonedMonth(new Date(), timeZone),
     limit: 900
   });
 }
@@ -170,6 +169,7 @@ export async function getDocumentationEntryForEditor(params: {
   facilityId: string;
   id: string;
   expectedKind: DocumentationKind;
+  timeZone?: string | null;
 }): Promise<DocumentationEditorData | null> {
   const note = await prisma.progressNote.findFirst({
     where: {
@@ -207,8 +207,8 @@ export async function getDocumentationEntryForEditor(params: {
     followUp: note.followUp?.trim() || "",
     status: inferDocumentationStatus(note.narrative),
     priority: inferDocumentationPriority(note.narrative),
-    dueDate: dueDateIso ? dueDateIso.slice(0, 10) : "",
-    occurredAt: toLocalDateTimeInput(note.createdAt),
+    dueDate: normalizeDateOnlyInput(dueDateIso, params.timeZone),
+    occurredAt: toDateTimeLocalInputValueInTimeZone(note.createdAt, params.timeZone),
     participationLevel: note.participationLevel,
     moodAffect: note.moodAffect,
     cuesRequired: note.cuesRequired,
@@ -219,6 +219,7 @@ export async function getDocumentationEntryForEditor(params: {
 export function getDefaultDocumentationEditorData(params: {
   kind: DocumentationKind;
   residentId?: string;
+  timeZone?: string | null;
 }): DocumentationEditorData {
   const defaultResponse = params.kind === "ONE_TO_ONE" ? "POSITIVE" : "NEUTRAL";
 
@@ -230,7 +231,7 @@ export function getDefaultDocumentationEditorData(params: {
     status: "DRAFT",
     priority: "MEDIUM",
     dueDate: "",
-    occurredAt: toLocalDateTimeInput(new Date()),
+    occurredAt: toDateTimeLocalInputValueInTimeZone(new Date(), params.timeZone),
     participationLevel: "MODERATE",
     moodAffect: "CALM",
     cuesRequired: "VERBAL",
@@ -306,14 +307,11 @@ function normalizeAssessmentType(kind: ClinicalAssessmentKind, value: Documentat
   return "SECTION_F";
 }
 
-function normalizeDateInput(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+function normalizeDateInput(value: string | null, timeZone?: string | null) {
+  return normalizeDateOnlyInput(value, timeZone);
 }
 
-function computeDueFlags(dueDateIso: string | null, status: DocumentationStatus) {
+function computeDueFlags(dueDateIso: string | null, status: DocumentationStatus, timeZone?: string | null) {
   if (!dueDateIso || status === "COMPLETED") {
     return {
       isOverdue: false,
@@ -321,18 +319,16 @@ function computeDueFlags(dueDateIso: string | null, status: DocumentationStatus)
     };
   }
 
-  const due = new Date(dueDateIso);
-  if (Number.isNaN(due.getTime())) {
+  const due = parseDateOnlyInputToUtcStart(dueDateIso, timeZone);
+  if (!due || Number.isNaN(due.getTime())) {
     return {
       isOverdue: false,
       isDueSoon: false
     };
   }
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const horizon = new Date(todayStart);
-  horizon.setDate(horizon.getDate() + 7);
+  const todayStart = startOfZonedDay(new Date(), timeZone);
+  const horizon = addZonedDays(todayStart, timeZone, 7);
 
   return {
     isOverdue: due < todayStart,
@@ -358,13 +354,14 @@ function mapToClinicalQueueRow(params: {
     createdByUser: { name: string };
   };
   kind: ClinicalAssessmentKind;
+  timeZone?: string | null;
 }): ClinicalAssessmentQueueRow {
   const kind = params.kind;
   const note = params.note;
   const assessmentType = normalizeAssessmentType(kind, inferDocumentationAssessmentType(note.narrative));
   const status = inferDocumentationStatus(note.narrative);
   const dueDateIso = inferDocumentationDueDate(note.narrative);
-  const flags = computeDueFlags(dueDateIso, status);
+  const flags = computeDueFlags(dueDateIso, status, params.timeZone);
   const summaryRaw = stripDocumentationMeta(note.narrative);
   const summary = summaryRaw.length > 180 ? `${summaryRaw.slice(0, 177)}...` : summaryRaw;
 
@@ -407,6 +404,7 @@ function completedKey(row: Pick<ClinicalAssessmentQueueRow, "residentId" | "asse
 export async function getClinicalAssessmentQueueData(params: {
   facilityId: string;
   kind: ClinicalAssessmentKind;
+  timeZone?: string | null;
 }) {
   const notes = await prisma.progressNote.findMany({
     where: {
@@ -452,7 +450,8 @@ export async function getClinicalAssessmentQueueData(params: {
           ...note,
           type: note.type as "GROUP" | "ONE_TO_ONE"
         },
-        kind: params.kind
+        kind: params.kind,
+        timeZone: params.timeZone
       });
     })
     .filter((row): row is ClinicalAssessmentQueueRow => Boolean(row));
@@ -564,6 +563,7 @@ export async function getClinicalAssessmentEntryForEditor(params: {
   facilityId: string;
   id: string;
   kind: ClinicalAssessmentKind;
+  timeZone?: string | null;
 }): Promise<ClinicalAssessmentEditorData | null> {
   const note = await prisma.progressNote.findFirst({
     where: {
@@ -606,14 +606,14 @@ export async function getClinicalAssessmentEntryForEditor(params: {
     followUp: note.followUp?.trim() || "",
     status: inferDocumentationStatus(note.narrative),
     priority: inferDocumentationPriority(note.narrative),
-    dueDate: normalizeDateInput(inferDocumentationDueDate(note.narrative)),
-    occurredAt: toLocalDateTimeInput(note.createdAt),
+    dueDate: normalizeDateInput(inferDocumentationDueDate(note.narrative), params.timeZone),
+    occurredAt: toDateTimeLocalInputValueInTimeZone(note.createdAt, params.timeZone),
     participationLevel: note.participationLevel,
     moodAffect: note.moodAffect,
     cuesRequired: note.cuesRequired,
     response: note.response,
     assessmentType: normalizedType,
-    reviewDate: normalizeDateInput(inferDocumentationReviewDate(note.narrative)),
+    reviewDate: normalizeDateInput(inferDocumentationReviewDate(note.narrative), params.timeZone),
     assignedStaff: inferDocumentationAssignedStaff(note.narrative) || "",
     noMajorChange: inferDocumentationNoMajorChange(note.narrative) ?? false,
     sectionStates: meta?.sectionStates ?? {},
@@ -625,10 +625,12 @@ export function getDefaultClinicalAssessmentEditorData(params: {
   kind: ClinicalAssessmentKind;
   residentId?: string;
   assessmentType?: DocumentationAssessmentType;
+  timeZone?: string | null;
 }): ClinicalAssessmentEditorData {
   const defaults = getDefaultDocumentationEditorData({
     kind: params.kind,
-    residentId: params.residentId
+    residentId: params.residentId,
+    timeZone: params.timeZone
   });
 
   return {

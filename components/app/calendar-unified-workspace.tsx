@@ -62,6 +62,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { useLiveNow } from "@/hooks/useLiveNow";
 import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
 import { useDevRenderTrace } from "@/lib/perf/devRenderTrace";
 import { formatInTimeZone, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
@@ -724,6 +725,7 @@ export function CalendarUnifiedWorkspace({
 
   const router = useRouter();
   const { toast } = useToast();
+  const liveNow = useLiveNow(60_000);
   const templateScrollRef = useRef<HTMLDivElement | null>(null);
   const agendaScrollRef = useRef<HTMLDivElement | null>(null);
   const resizePreviewRef = useRef<ResizePreview | null>(null);
@@ -1017,7 +1019,7 @@ export function CalendarUnifiedWorkspace({
   }, [monthAnchor]);
 
   const nowIndicator = useMemo(() => {
-    const now = new Date();
+    const now = liveNow;
     const nowKey = zonedDateKey(now, timeZone);
     const dayIndex = gridDays.findIndex((day) => zonedDateKey(day, timeZone) === nowKey);
     if (dayIndex === -1) return null;
@@ -1030,7 +1032,7 @@ export function CalendarUnifiedWorkspace({
       dayIndex,
       top: clamp(top, 0, totalGridHeight - 2)
     };
-  }, [gridDays, timeZone, totalGridHeight]);
+  }, [gridDays, liveNow, timeZone, totalGridHeight]);
 
   const visibleRangeCount = useMemo(() => {
     const start = startOfWeek(zonedDateStringToUtcStart(anchorDateKey, timeZone) ?? new Date(), { weekStartsOn: 1 });

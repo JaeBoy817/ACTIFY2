@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ActivitySquare, Home, SlidersHorizontal } from "lucide-react";
 
+import { LiveDateTimeText } from "@/components/app/live-date-time-text";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { cn } from "@/lib/utils";
 
@@ -28,11 +29,13 @@ const dashboardSubsections = [
 export function DashboardShell({
   active,
   dateLabel,
+  timeZone,
   statusLine,
   children
 }: {
   active: "home" | "activity-feed" | "settings";
   dateLabel: string;
+  timeZone?: string | null;
   statusLine: string;
   children: React.ReactNode;
 }) {
@@ -42,7 +45,9 @@ export function DashboardShell({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <h1 className="font-[var(--font-display)] text-3xl text-zinc-950">Dashboard</h1>
-            <p className="text-sm text-zinc-600">{dateLabel}</p>
+            <p className="text-sm text-zinc-600">
+              {timeZone ? <LiveDateTimeText timeZone={timeZone} mode="long-date" /> : dateLabel}
+            </p>
             <p className="text-sm text-zinc-600">{statusLine}</p>
           </div>
 

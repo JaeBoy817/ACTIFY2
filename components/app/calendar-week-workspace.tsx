@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useLiveNow } from "@/hooks/useLiveNow";
 import { formatInTimeZone, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
 import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
@@ -276,6 +277,7 @@ export function CalendarWeekWorkspace({
 }) {
   const { toast } = useToast();
   const router = useRouter();
+  const liveNow = useLiveNow(60_000);
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [weekStart, setWeekStart] = useState<Date>(() => {
     const parsed = parseISO(initialWeekStart);
@@ -313,7 +315,7 @@ export function CalendarWeekWorkspace({
   );
 
   useEffect(() => {
-    const todayKey = zonedDateKey(new Date(), timeZone);
+    const todayKey = zonedDateKey(liveNow, timeZone);
     const weekContainsActiveDay = activeMobileDayKey
       ? weekDays.some((day) => zonedDateKey(day, timeZone) === activeMobileDayKey)
       : false;
@@ -323,11 +325,11 @@ export function CalendarWeekWorkspace({
       ? todayKey
       : zonedDateKey(weekDays[0], timeZone);
     setActiveMobileDayKey(fallback);
-  }, [activeMobileDayKey, timeZone, weekDays]);
+  }, [activeMobileDayKey, liveNow, timeZone, weekDays]);
 
   const weekStartKey = useMemo(() => zonedDateKey(weekDays[0], timeZone), [timeZone, weekDays]);
   const monthKey = useMemo(() => format(weekDays[0], "yyyy-MM-01"), [weekDays]);
-  const todayKey = useMemo(() => zonedDateKey(new Date(), timeZone), [timeZone]);
+  const todayKey = useMemo(() => zonedDateKey(liveNow, timeZone), [liveNow, timeZone]);
   const weekLabel = useMemo(
     () => `${format(weekDays[0], "MMM d")} - ${format(weekDays[6], "MMM d, yyyy")}`,
     [weekDays]
@@ -523,7 +525,7 @@ export function CalendarWeekWorkspace({
   }, [events, weekDays]);
 
   const currentTimeIndicator = useMemo(() => {
-    const now = new Date();
+    const now = liveNow;
     const nowKey = zonedDateKey(now, timeZone);
     const dayIndex = weekDays.findIndex((day) => zonedDateKey(day, timeZone) === nowKey);
     if (dayIndex < 0) return null;
@@ -539,7 +541,7 @@ export function CalendarWeekWorkspace({
       dayIndex,
       top: Math.max(0, Math.min(totalGridHeight - 2, top))
     };
-  }, [timeZone, totalGridHeight, weekDays]);
+  }, [liveNow, timeZone, totalGridHeight, weekDays]);
 
   function syncWeekToUrl(nextWeekStart: Date) {
     const date = format(nextWeekStart, "yyyy-MM-dd");

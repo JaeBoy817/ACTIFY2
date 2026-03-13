@@ -7,7 +7,7 @@ import { getDocumentationBaseContext, getDocumentationRowsForKind } from "@/app/
 
 export default async function OneToOneDocumentationPage() {
   const { context } = await getDocumentationBaseContext();
-  const rows = await getDocumentationRowsForKind(context.facilityId, "ONE_TO_ONE");
+  const rows = await getDocumentationRowsForKind(context.facilityId, "ONE_TO_ONE", context.timeZone);
 
   return (
     <DocumentationShell

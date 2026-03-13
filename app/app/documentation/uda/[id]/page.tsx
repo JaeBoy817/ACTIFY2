@@ -17,7 +17,8 @@ export default async function UdaDetailPage({
   const entry = await getClinicalAssessmentEntryForEditor({
     facilityId: context.facilityId,
     id: params.id,
-    kind: "UDA"
+    kind: "UDA",
+    timeZone: context.timeZone
   });
 
   if (!entry) {
@@ -35,7 +36,7 @@ export default async function UdaDetailPage({
       title="UDA Assessment Detail"
       description="Review, update, and finalize annual or quarterly activity assessments with resident history context."
     >
-      <UdaAssessmentEditor residents={residents} history={history} initial={entry} />
+      <UdaAssessmentEditor timeZone={context.timeZone} residents={residents} history={history} initial={entry} />
     </DocumentationShell>
   );
 }

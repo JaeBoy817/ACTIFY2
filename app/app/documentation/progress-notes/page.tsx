@@ -7,7 +7,7 @@ import { getDocumentationBaseContext, getDocumentationRowsForKind } from "@/app/
 
 export default async function ProgressNotesPage() {
   const { context } = await getDocumentationBaseContext();
-  const rows = await getDocumentationRowsForKind(context.facilityId, "PROGRESS");
+  const rows = await getDocumentationRowsForKind(context.facilityId, "PROGRESS", context.timeZone);
 
   return (
     <DocumentationShell

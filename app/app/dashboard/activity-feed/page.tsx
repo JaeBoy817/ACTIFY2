@@ -44,6 +44,7 @@ export default async function DashboardActivityFeedPage() {
     <DashboardShell
       active="activity-feed"
       dateLabel={summary.dateLabel}
+      timeZone={context.timeZone}
       statusLine="Expanded dashboard widgets moved out of Home so the main dashboard stays fast and focused."
     >
       <div className="space-y-4">

@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 
-import { resolveTimeZone } from "@/lib/timezone";
+import { resolveActifyTimeZone } from "@/lib/datetime";
 
 export const ACTIFY_TIMEZONE_COOKIE = "actify_tz";
 
@@ -37,10 +37,11 @@ function readTimeZoneFromRequest() {
   return null;
 }
 
-export function getRequestTimeZone(fallback?: string | null) {
+export function getRequestTimeZone(facilityTimeZone?: string | null, userTimeZone?: string | null) {
   const requestTimeZone = readTimeZoneFromRequest();
-  if (requestTimeZone) {
-    return resolveTimeZone(requestTimeZone);
-  }
-  return resolveTimeZone(fallback);
+  return resolveActifyTimeZone({
+    facilityTimeZone,
+    userTimeZone,
+    browserTimeZone: requestTimeZone
+  });
 }

@@ -13,7 +13,8 @@ export default async function OneToOneDetailPage({
   const entry = await getDocumentationEntryForEditor({
     facilityId: context.facilityId,
     id: params.id,
-    expectedKind: "ONE_TO_ONE"
+    expectedKind: "ONE_TO_ONE",
+    timeZone: context.timeZone
   });
 
   if (!entry) {
@@ -25,7 +26,7 @@ export default async function OneToOneDetailPage({
       title="1:1 Note Detail"
       description="Update resident visit details, follow-up, and completion status."
     >
-      <DocumentationEntryEditor kind="ONE_TO_ONE" residents={residents} initial={entry} />
+      <DocumentationEntryEditor kind="ONE_TO_ONE" timeZone={context.timeZone} residents={residents} initial={entry} />
     </DocumentationShell>
   );
 }

@@ -9,7 +9,8 @@ export default async function UdaDocumentationPage() {
   const { context } = await getDocumentationBaseContext();
   const queue = await getClinicalAssessmentQueueData({
     facilityId: context.facilityId,
-    kind: "UDA"
+    kind: "UDA",
+    timeZone: context.timeZone
   });
 
   return (

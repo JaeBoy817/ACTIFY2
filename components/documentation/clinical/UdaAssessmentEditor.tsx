@@ -20,6 +20,7 @@ import type {
   ClinicalAssessmentHistoryRow,
   DocumentationResidentOption
 } from "@/app/app/documentation/_lib";
+import { formatActifyDate } from "@/lib/datetime";
 import type { DocumentationSectionChangeState, DocumentationStatus } from "@/lib/documentation/types";
 import { cn } from "@/lib/utils";
 
@@ -460,11 +461,13 @@ function statusPill(status: DocumentationStatus) {
 export function UdaAssessmentEditor({
   residents,
   initial,
-  history
+  history,
+  timeZone
 }: {
   residents: DocumentationResidentOption[];
   initial: ClinicalAssessmentEditorData;
   history: ClinicalAssessmentHistoryRow[];
+  timeZone?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1079,11 +1082,11 @@ export function UdaAssessmentEditor({
             <div className="mt-3 space-y-2 text-xs text-[#a8c0e6]">
               <p className="inline-flex items-center gap-1">
                 <FileClock className="h-3.5 w-3.5 text-amber-200" />
-                Last Annual: {latestAnnualHistory ? new Date(latestAnnualHistory.createdAtIso).toLocaleDateString() : "--"}
+                Last Annual: {latestAnnualHistory ? formatActifyDate(latestAnnualHistory.createdAtIso, timeZone) : "--"}
               </p>
               <p className="inline-flex items-center gap-1">
                 <ClipboardCheck className="h-3.5 w-3.5 text-sky-200" />
-                Last Quarterly: {latestQuarterlyHistory ? new Date(latestQuarterlyHistory.createdAtIso).toLocaleDateString() : "--"}
+                Last Quarterly: {latestQuarterlyHistory ? formatActifyDate(latestQuarterlyHistory.createdAtIso, timeZone) : "--"}
               </p>
             </div>
 
@@ -1118,7 +1121,7 @@ export function UdaAssessmentEditor({
                       </span>
                     </div>
                     <p className="mt-2 font-semibold text-white">{entry.summary}</p>
-                    <p className="mt-1 text-[#98afd5]">{new Date(entry.createdAtIso).toLocaleDateString()} · {entry.authorName}</p>
+                    <p className="mt-1 text-[#98afd5]">{formatActifyDate(entry.createdAtIso, timeZone)} · {entry.authorName}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Link
                         href={`/app/documentation/uda/${encodeURIComponent(entry.id)}`}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
+import { parseDateTimeInputToUtcDate } from "@/lib/datetime";
 import { noteBuilderPayloadSchema } from "@/lib/notes/schema";
 import {
   serializeFollowUp,
@@ -125,6 +126,13 @@ export async function PATCH(
       .map((residentId) => residentMap.get(residentId))
       .filter((value): value is string => Boolean(value));
 
+    const occurredAt = parseDateTimeInputToUtcDate(parsed.data.occurredAt, {
+      timeZone: context.timeZone
+    });
+    if (!occurredAt) {
+      throw new NotesApiError("Invalid note timestamp.", 400);
+    }
+
     const updated = await prisma.progressNote.update({
       where: { id: existing.id },
       data: {
@@ -136,7 +144,7 @@ export async function PATCH(
         response: toDbResponse(parsed.data.responseType),
         narrative: serializeNarrative(parsed.data),
         followUp: serializeFollowUp(parsed.data, linkedResidentNames),
-        createdAt: new Date(parsed.data.occurredAt)
+        createdAt: occurredAt
       },
       include: {
         resident: {

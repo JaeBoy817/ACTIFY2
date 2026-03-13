@@ -2,6 +2,7 @@ import { z } from "zod";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { asNotesApiErrorResponse, NotesApiError, requireNotesApiContext } from "@/lib/notes/api-context";
+import { parseDateTimeInputToUtcDate } from "@/lib/datetime";
 import { getDashboardSummaryCacheTag } from "@/lib/dashboard/getDashboardSummary";
 import { noteBuilderPayloadSchema } from "@/lib/notes/schema";
 import {
@@ -163,7 +164,12 @@ export async function POST(request: Request) {
       .map((residentId) => residentMap.get(residentId))
       .filter((value): value is string => Boolean(value));
 
-    const occurredAt = new Date(parsed.data.occurredAt);
+    const occurredAt = parseDateTimeInputToUtcDate(parsed.data.occurredAt, {
+      timeZone: context.timeZone
+    });
+    if (!occurredAt) {
+      throw new NotesApiError("Invalid note timestamp.", 400);
+    }
     const created = await prisma.$transaction(async (tx) => {
       const note = await tx.progressNote.create({
         data: {

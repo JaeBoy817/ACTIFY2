@@ -13,7 +13,8 @@ export default async function ProgressNoteDetailPage({
   const entry = await getDocumentationEntryForEditor({
     facilityId: context.facilityId,
     id: params.id,
-    expectedKind: "PROGRESS"
+    expectedKind: "PROGRESS",
+    timeZone: context.timeZone
   });
 
   if (!entry) {
@@ -25,7 +26,7 @@ export default async function ProgressNoteDetailPage({
       title="Progress Note Detail"
       description="Update narrative, due state, and structured participation details."
     >
-      <DocumentationEntryEditor kind="PROGRESS" residents={residents} initial={entry} />
+      <DocumentationEntryEditor kind="PROGRESS" timeZone={context.timeZone} residents={residents} initial={entry} />
     </DocumentationShell>
   );
 }

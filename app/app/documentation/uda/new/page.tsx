@@ -30,12 +30,14 @@ export default async function NewUdaPage({
       description="Clinical UDA workflow for annual and quarterly assessment documentation with carry-forward history."
     >
       <UdaAssessmentEditor
+        timeZone={context.timeZone}
         residents={residents}
         history={history}
         initial={getDefaultClinicalAssessmentEditorData({
           kind: "UDA",
           residentId,
-          assessmentType: searchParams?.assessmentType
+          assessmentType: searchParams?.assessmentType,
+          timeZone: context.timeZone
         })}
       />
     </DocumentationShell>

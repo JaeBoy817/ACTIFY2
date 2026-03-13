@@ -20,6 +20,7 @@ import type {
   ClinicalAssessmentHistoryRow,
   DocumentationResidentOption
 } from "@/app/app/documentation/_lib";
+import { formatActifyDate } from "@/lib/datetime";
 import type { DocumentationSectionChangeState, DocumentationStatus } from "@/lib/documentation/types";
 import { cn } from "@/lib/utils";
 
@@ -260,11 +261,13 @@ function statusPill(status: DocumentationStatus) {
 export function MdsSectionFEditor({
   residents,
   initial,
-  history
+  history,
+  timeZone
 }: {
   residents: DocumentationResidentOption[];
   initial: ClinicalAssessmentEditorData;
   history: ClinicalAssessmentHistoryRow[];
+  timeZone?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -719,7 +722,7 @@ export function MdsSectionFEditor({
                       <span className="text-[#a8c0e5]">Section F</span>
                     </div>
                     <p className="mt-2 font-semibold text-white">{entry.summary}</p>
-                    <p className="mt-1 text-[#98afd5]">{new Date(entry.createdAtIso).toLocaleDateString()} · {entry.authorName}</p>
+                    <p className="mt-1 text-[#98afd5]">{formatActifyDate(entry.createdAtIso, timeZone)} · {entry.authorName}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Link
                         href={`/app/documentation/mds/${encodeURIComponent(entry.id)}`}

@@ -27,11 +27,13 @@ export default async function NewMdsPage({
       description="Structured MDS Section F support entry focused on preferences, routine, barriers, and observed response."
     >
       <MdsSectionFEditor
+        timeZone={context.timeZone}
         residents={residents}
         history={history}
         initial={getDefaultClinicalAssessmentEditorData({
           kind: "MDS",
-          residentId
+          residentId,
+          timeZone: context.timeZone
         })}
       />
     </DocumentationShell>

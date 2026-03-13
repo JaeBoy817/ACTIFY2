@@ -9,7 +9,8 @@ export default async function MdsDocumentationPage() {
   const { context } = await getDocumentationBaseContext();
   const queue = await getClinicalAssessmentQueueData({
     facilityId: context.facilityId,
-    kind: "MDS"
+    kind: "MDS",
+    timeZone: context.timeZone
   });
 
   return (
