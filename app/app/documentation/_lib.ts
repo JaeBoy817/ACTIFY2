@@ -39,6 +39,8 @@ export type DocumentationResidentOption = {
   room: string;
   unit: string | null;
   age: number | null;
+  admissionDateIso: string | null;
+  status: string | null;
 };
 
 export type DocumentationEditorData = {
@@ -471,7 +473,16 @@ function toDocumentationRowFromClinicalQueue(row: ClinicalAssessmentQueueRow): D
     lastCompletedAtIso: row.lastCompletedDateIso,
     openHref,
     actionHref: `${row.kind === "UDA" ? "/app/documentation/uda/new" : "/app/documentation/mds/new"}?residentId=${encodeURIComponent(row.residentId)}${row.kind === "UDA" ? `&assessmentType=${encodeURIComponent(row.assessmentType)}` : ""}`,
-    actionLabel: row.entryId ? "Open" : row.kind === "UDA" ? "Start UDA" : "Start MDS",
+    actionLabel:
+      row.entryId
+        ? "Open"
+        : row.kind === "UDA"
+          ? row.assessmentType === "ADMISSION"
+            ? "Start Admission UDA"
+            : row.assessmentType === "QUARTERLY"
+              ? "Start Quarterly UDA"
+              : "Start Annual UDA"
+          : "Start MDS",
     source: "DUE_TRACKER"
   };
 }
@@ -493,6 +504,8 @@ export async function getDocumentationBaseContext() {
       lastName: true,
       room: true,
       birthDate: true,
+      admissionDate: true,
+      status: true,
       unit: {
         select: {
           name: true
@@ -506,7 +519,9 @@ export async function getDocumentationBaseContext() {
     name: `${resident.firstName} ${resident.lastName}`,
     room: resident.room,
     unit: resident.unit?.name ?? null,
-    age: toAge(resident.birthDate)
+    age: toAge(resident.birthDate),
+    admissionDateIso: resident.admissionDate ? resident.admissionDate.toISOString() : null,
+    status: resident.status ?? null
   }));
 
   return {
@@ -790,6 +805,7 @@ export type ClinicalAssessmentQueueRow = {
   residentRoom: string;
   residentUnit: string | null;
   residentAge: number | null;
+  residentAdmissionDateIso: string | null;
   assessmentType: DocumentationAssessmentType;
   title: string;
   summary: string;
@@ -831,7 +847,7 @@ export type ClinicalAssessmentEditorData = DocumentationEditorData & {
 
 function normalizeAssessmentType(kind: ClinicalAssessmentKind, value: DocumentationAssessmentType | null) {
   if (kind === "UDA") {
-    if (value === "ANNUAL" || value === "QUARTERLY") return value;
+    if (value === "ADMISSION" || value === "ANNUAL" || value === "QUARTERLY") return value;
     return "ANNUAL";
   }
   return "SECTION_F";
@@ -911,13 +927,16 @@ function makeClinicalQueueRow(params: {
     residentRoom: params.resident.room,
     residentUnit: params.resident.unit?.name ?? null,
     residentAge: toAge(params.resident.birthDate),
+    residentAdmissionDateIso: params.resident.admissionDate ? params.resident.admissionDate.toISOString() : null,
     assessmentType: params.assessmentType,
     title:
       params.latestEntry?.followUp?.trim() ||
       (params.kind === "UDA"
-        ? params.assessmentType === "QUARTERLY"
-          ? "Quarterly UDA Assessment"
-          : "Annual UDA Assessment"
+        ? params.assessmentType === "ADMISSION"
+          ? "Admission UDA Assessment"
+          : params.assessmentType === "QUARTERLY"
+            ? "Quarterly UDA Assessment"
+            : "Annual UDA Assessment"
         : "MDS Section F Support Entry"),
     summary,
     createdAtIso: params.latestEntry?.createdAt.toISOString() ?? params.resident.updatedAt.toISOString(),
@@ -981,8 +1000,24 @@ function buildClinicalAssessmentQueueRows(params: {
     });
 
     if (params.kind === "UDA") {
+      const admissionNote = latestByResidentAssessment.get(`${resident.id}:ADMISSION`) ?? null;
       const annualNote = latestByResidentAssessment.get(`${resident.id}:ANNUAL`) ?? null;
       const quarterlyNote = latestByResidentAssessment.get(`${resident.id}:QUARTERLY`) ?? null;
+
+      rows.push(
+        makeClinicalQueueRow({
+          kind: "UDA",
+          resident,
+          assessmentType: "ADMISSION",
+          dueDateIso: normalizeDateOnlyInput(schedule.admission.dueDateIso, params.timeZone) || null,
+          dueLevel: schedule.admission.level,
+          lastCompletedDateIso: schedule.admission.lastCompletedIso,
+          latestEntry: admissionNote,
+          monthStart: params.context.monthStart,
+          monthEnd: params.context.monthEnd,
+          timeZone: params.timeZone
+        })
+      );
 
       rows.push(
         makeClinicalQueueRow({

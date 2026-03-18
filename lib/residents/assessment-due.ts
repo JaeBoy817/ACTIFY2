@@ -22,6 +22,10 @@ export type ResidentAssessmentSchedule = {
   anchorDateIso: string | null;
   admissionDateIso: string | null;
   lengthOfStayDays: number | null;
+  admission: AssessmentDueStatus & {
+    lastCompletedIso: string | null;
+    intervalDays: 7;
+  };
   quarterly: AssessmentDueStatus & {
     lastCompletedIso: string | null;
     intervalMonths: 3;
@@ -35,13 +39,15 @@ export type ResidentAssessmentSchedule = {
     manualOverrideIso: string | null;
     intervalMonths: 3;
   };
-  nextDueType: "QUARTERLY_UDA" | "ANNUAL_UDA" | "MDS" | null;
+  nextDueType: "ADMISSION_UDA" | "QUARTERLY_UDA" | "ANNUAL_UDA" | "MDS" | null;
   nextDueDateIso: string | null;
   overdueCount: number;
   dueSoonCount: number;
 };
 
 export type ResidentAssessmentCompletionSummary = {
+  lastAdmissionUdaCompletedAt: Date | null;
+  lastAdmissionUdaDueDate: Date | null;
   lastQuarterlyUdaCompletedAt: Date | null;
   lastAnnualUdaCompletedAt: Date | null;
   lastMdsCompletedAt: Date | null;
@@ -166,6 +172,33 @@ function computeDueDate(anchor: Date | null, lastCompleted: Date | null, interva
   return addMonths(anchor, intervalMonths);
 }
 
+function addDays(date: Date, days: number) {
+  const clone = new Date(date.getTime());
+  clone.setDate(clone.getDate() + days);
+  return clone;
+}
+
+function computeAdmissionDueDate(admissionDate: Date | null) {
+  if (!admissionDate) return null;
+  return addDays(admissionDate, 7);
+}
+
+function resolveAdmissionStatus(params: {
+  dueDate: Date | null;
+  completedAt: Date | null;
+  now: Date;
+}): AssessmentDueStatus {
+  const base = resolveDueLevel(params.dueDate, params.now);
+  if (!params.completedAt) return base;
+  return {
+    ...base,
+    level: "ON_TRACK",
+    label: "Completed",
+    daysUntil: null,
+    daysOverdue: null
+  };
+}
+
 export function getResidentAssessmentSchedule(params: {
   admissionDate: Date | null;
   residentCreatedAt: Date | null;
@@ -185,12 +218,20 @@ export function getResidentAssessmentSchedule(params: {
 
   const lastQuarterly = params.completions?.lastQuarterlyUdaCompletedAt ?? null;
   const lastAnnual = params.completions?.lastAnnualUdaCompletedAt ?? null;
+  const lastAdmission = params.completions?.lastAdmissionUdaCompletedAt ?? null;
+  const lastAdmissionDue = params.completions?.lastAdmissionUdaDueDate ?? null;
   const lastMds = params.completions?.lastMdsCompletedAt ?? null;
 
+  const admissionDue = lastAdmission ? lastAdmissionDue ?? computeAdmissionDueDate(params.admissionDate) : computeAdmissionDueDate(params.admissionDate);
   const quarterlyDue = computeDueDate(anchor, lastQuarterly, 3);
   const annualDue = computeDueDate(anchor, lastAnnual, 12);
   const mdsDue = params.mdsManualDueDate ?? computeDueDate(anchor, lastMds, 3);
 
+  const admissionStatus = resolveAdmissionStatus({
+    dueDate: admissionDue,
+    completedAt: lastAdmission,
+    now
+  });
   const quarterlyStatus = resolveDueLevel(quarterlyDue, now);
   const annualStatus = resolveDueLevel(annualDue, now);
   const mdsStatus = resolveDueLevel(mdsDue, now);
@@ -202,6 +243,12 @@ export function getResidentAssessmentSchedule(params: {
       level: "INACTIVE",
       label: "Inactive"
     };
+  };
+
+  const admission = {
+    ...applyInactive(admissionStatus),
+    lastCompletedIso: toIso(lastAdmission),
+    intervalDays: 7 as const
   };
 
   const quarterly = {
@@ -224,6 +271,7 @@ export function getResidentAssessmentSchedule(params: {
   };
 
   const dueEntries = [
+    { type: "ADMISSION_UDA" as const, status: admission },
     { type: "QUARTERLY_UDA" as const, status: quarterly },
     { type: "ANNUAL_UDA" as const, status: annual },
     { type: "MDS" as const, status: mds }
@@ -233,8 +281,8 @@ export function getResidentAssessmentSchedule(params: {
 
   const nextDue = dueEntries[0] ?? null;
 
-  const overdueCount = [quarterly, annual, mds].filter((status) => status.level === "OVERDUE").length;
-  const dueSoonCount = [quarterly, annual, mds].filter((status) =>
+  const overdueCount = [admission, quarterly, annual, mds].filter((status) => status.level === "OVERDUE").length;
+  const dueSoonCount = [admission, quarterly, annual, mds].filter((status) =>
     status.level === "DUE_SOON_7" || status.level === "DUE_SOON_14" || status.level === "DUE_SOON_30" || status.level === "DUE_TODAY"
   ).length;
 
@@ -242,6 +290,7 @@ export function getResidentAssessmentSchedule(params: {
     anchorDateIso: toIso(anchor),
     admissionDateIso: toIso(params.admissionDate),
     lengthOfStayDays,
+    admission,
     quarterly,
     annual,
     mds,
@@ -262,6 +311,8 @@ export function buildResidentCompletionsMap(entries: DocumentationAssessmentEntr
 
     const current =
       map.get(entry.residentId) ?? {
+        lastAdmissionUdaCompletedAt: null,
+        lastAdmissionUdaDueDate: null,
         lastQuarterlyUdaCompletedAt: null,
         lastAnnualUdaCompletedAt: null,
         lastMdsCompletedAt: null
@@ -275,7 +326,12 @@ export function buildResidentCompletionsMap(entries: DocumentationAssessmentEntr
       continue;
     }
 
-    if (meta.assessmentType === "ANNUAL") {
+    if (meta.assessmentType === "ADMISSION") {
+      if (!current.lastAdmissionUdaCompletedAt || current.lastAdmissionUdaCompletedAt < entry.createdAt) {
+        current.lastAdmissionUdaCompletedAt = entry.createdAt;
+        current.lastAdmissionUdaDueDate = meta.dueDate ? new Date(meta.dueDate) : null;
+      }
+    } else if (meta.assessmentType === "ANNUAL") {
       if (!current.lastAnnualUdaCompletedAt || current.lastAnnualUdaCompletedAt < entry.createdAt) {
         current.lastAnnualUdaCompletedAt = entry.createdAt;
       }

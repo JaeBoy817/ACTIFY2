@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 type DueFilter = "all" | "overdue" | "due_soon" | "no_due";
 type ViewFilterStatus = "all" | DocumentationStatus;
-type AssessmentTypeFilter = "all" | "ANNUAL" | "QUARTERLY" | "SECTION_F";
+type AssessmentTypeFilter = "all" | "ADMISSION" | "ANNUAL" | "QUARTERLY" | "SECTION_F";
 
 const STATUS_LABEL: Record<DocumentationStatus, string> = {
   DRAFT: "Draft",
@@ -55,11 +55,19 @@ function formatDate(value: string | null) {
 
 function assessmentLabel(row: ClinicalAssessmentQueueRow) {
   if (row.kind === "MDS") return "Section F";
+  if (row.assessmentType === "ADMISSION") return "Admission";
   return row.assessmentType === "QUARTERLY" ? "Quarterly" : "Annual";
 }
 
 function defaultAssessmentFilter(kind: ClinicalAssessmentKind): AssessmentTypeFilter {
   return kind === "UDA" ? "all" : "SECTION_F";
+}
+
+function workflowStatusLabel(row: ClinicalAssessmentQueueRow) {
+  if (!row.entryId && row.complianceStatus === "MISSING") {
+    return "Not Started";
+  }
+  return STATUS_LABEL[row.status];
 }
 
 function isActionable(row: ClinicalAssessmentQueueRow) {
@@ -105,7 +113,8 @@ export function ClinicalAssessmentQueue({
   staffOptions,
   newEntryHref,
   newAnnualHref,
-  newQuarterlyHref
+  newQuarterlyHref,
+  initialAssessmentType
 }: {
   kind: ClinicalAssessmentKind;
   rows: ClinicalAssessmentQueueRow[];
@@ -114,10 +123,11 @@ export function ClinicalAssessmentQueue({
   newEntryHref: string;
   newAnnualHref?: string;
   newQuarterlyHref?: string;
+  initialAssessmentType?: AssessmentTypeFilter;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ViewFilterStatus>("all");
-  const [assessmentType, setAssessmentType] = useState<AssessmentTypeFilter>(defaultAssessmentFilter(kind));
+  const [assessmentType, setAssessmentType] = useState<AssessmentTypeFilter>(initialAssessmentType ?? defaultAssessmentFilter(kind));
   const [unit, setUnit] = useState<string>("all");
   const [dueFilter, setDueFilter] = useState<DueFilter>("all");
   const [staff, setStaff] = useState<string>("all");
@@ -169,15 +179,21 @@ export function ClinicalAssessmentQueue({
     };
 
     if (kind === "UDA") {
+      const admissionDueWeek = rows.filter((row) => row.assessmentType === "ADMISSION" && row.isDueSoon).length;
+      const overdueAdmission = rows.filter(
+        (row) =>
+          row.assessmentType === "ADMISSION" &&
+          (row.complianceStatus === "OVERDUE" || row.complianceStatus === "MISSING")
+      ).length;
       const annualDue = rows.filter((row) => row.assessmentType === "ANNUAL" && isActionable(row)).length;
       const quarterlyDue = rows.filter((row) => row.assessmentType === "QUARTERLY" && isActionable(row)).length;
-      const overdue = rows.filter((row) => row.complianceStatus === "OVERDUE" || row.complianceStatus === "MISSING").length;
       const drafts = rows.filter((row) => row.status === "DRAFT" || row.status === "IN_PROGRESS").length;
       const completedMonth = rows.filter((row) => inCurrentMonth(row.lastCompletedDateIso)).length;
       return [
+        { label: "Admission Due This Week", value: admissionDueWeek, tone: "blue" },
+        { label: "Overdue Admission UDA", value: overdueAdmission, tone: "rose" },
+        { label: "Quarterly Due", value: quarterlyDue, tone: "amber" },
         { label: "Annual Due This Month", value: annualDue, tone: "amber" },
-        { label: "Quarterly Due This Month", value: quarterlyDue, tone: "blue" },
-        { label: "Overdue Assessments", value: overdue, tone: "rose" },
         { label: "Drafts", value: drafts, tone: "violet" },
         { label: "Completed This Month", value: completedMonth, tone: "emerald" }
       ];
@@ -200,7 +216,7 @@ export function ClinicalAssessmentQueue({
 
   return (
     <div className="space-y-4">
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <section className={cn("grid gap-3 md:grid-cols-2", kind === "UDA" ? "xl:grid-cols-6" : "xl:grid-cols-5")}>
         {metrics.map((metric) => (
           <article
             key={metric.label}
@@ -223,7 +239,7 @@ export function ClinicalAssessmentQueue({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={kind === "UDA" ? "Search resident, room, annual/quarterly" : "Search resident, room, Section F"}
+              placeholder={kind === "UDA" ? "Search resident, room, admission/annual/quarterly" : "Search resident, room, Section F"}
               className="h-10 w-full rounded-full border border-[#2d436c] bg-[#0d1b31] pl-9 pr-3 text-sm text-[#dce9ff] placeholder:text-[#7f98c0]"
             />
           </div>
@@ -241,6 +257,7 @@ export function ClinicalAssessmentQueue({
                 className="h-10 rounded-full border border-[#2d436c] bg-[#0d1b31] px-3 text-xs font-semibold text-[#dbe8ff]"
               >
                 <option value="all">All Types</option>
+                <option value="ADMISSION">Admission</option>
                 <option value="ANNUAL">Annual</option>
                 <option value="QUARTERLY">Quarterly</option>
               </select>
@@ -311,6 +328,7 @@ export function ClinicalAssessmentQueue({
                 <tr>
                   <th className="px-3 py-2">Resident</th>
                   <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Admission Date</th>
                   <th className="px-3 py-2">Last Completed</th>
                   <th className="px-3 py-2">Due</th>
                   <th className="px-3 py-2">Status</th>
@@ -339,6 +357,7 @@ export function ClinicalAssessmentQueue({
                       <p className="font-semibold">{assessmentLabel(row)}</p>
                       <p className="mt-1 text-[#8ea6cc]">{row.sectionProgress ?? 0}% complete</p>
                     </td>
+                    <td className="px-3 py-3 align-top text-xs text-[#b8ccec]">{formatDate(row.residentAdmissionDateIso)}</td>
                     <td className="px-3 py-3 align-top text-xs text-[#b8ccec]">{formatDate(row.lastCompletedDateIso)}</td>
                     <td className="px-3 py-3 align-top text-xs">
                       <p className="text-[#d6e5ff]">{formatDate(row.dueDateIso)}</p>
@@ -351,7 +370,7 @@ export function ClinicalAssessmentQueue({
                           {COMPLIANCE_LABEL[row.complianceStatus]}
                         </span>
                         <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]", STATUS_BADGE[row.status])}>
-                          {STATUS_LABEL[row.status]}
+                          {workflowStatusLabel(row)}
                         </span>
                       </div>
                     </td>
@@ -366,10 +385,16 @@ export function ClinicalAssessmentQueue({
                         </Link>
                         {kind === "UDA" ? (
                           <Link
-                            href={`${newQuarterlyHref || "/app/documentation/uda/new"}?residentId=${encodeURIComponent(row.residentId)}&assessmentType=QUARTERLY`}
+                            href={
+                              row.assessmentType === "ADMISSION"
+                                ? `${newEntryHref}?residentId=${encodeURIComponent(row.residentId)}&assessmentType=ADMISSION`
+                                : row.assessmentType === "ANNUAL"
+                                  ? `${newAnnualHref || "/app/documentation/uda/new"}?residentId=${encodeURIComponent(row.residentId)}&assessmentType=ANNUAL`
+                                  : `${newQuarterlyHref || "/app/documentation/uda/new"}?residentId=${encodeURIComponent(row.residentId)}&assessmentType=QUARTERLY`
+                            }
                             className="inline-flex h-8 items-center rounded-full border border-amber-300/35 bg-amber-500/15 px-3 text-[11px] font-semibold text-amber-100"
                           >
-                            Quarterly
+                            {row.assessmentType === "ADMISSION" ? "Admission" : row.assessmentType === "ANNUAL" ? "Annual" : "Quarterly"}
                           </Link>
                         ) : (
                           <Link
@@ -386,7 +411,7 @@ export function ClinicalAssessmentQueue({
 
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-[#96aed4]">
+                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-[#96aed4]">
                       No assessments match the current filters.
                     </td>
                   </tr>
@@ -420,8 +445,11 @@ export function ClinicalAssessmentQueue({
                     <span className="font-semibold">{assessmentLabel(selectedRow)} Workflow</span>
                   </div>
                   <div className="mt-2 space-y-1 text-[#9eb5db]">
+                    {selectedRow.assessmentType === "ADMISSION" ? (
+                      <p>Admission Date: {formatDate(selectedRow.residentAdmissionDateIso)}</p>
+                    ) : null}
                     <p>Compliance: {COMPLIANCE_LABEL[selectedRow.complianceStatus]}</p>
-                    <p>Status: {STATUS_LABEL[selectedRow.status]}</p>
+                    <p>Status: {workflowStatusLabel(selectedRow)}</p>
                     <p>Due: {formatDate(selectedRow.dueDateIso)}</p>
                     {selectedRow.reviewDateIso ? <p>Review: {formatDate(selectedRow.reviewDateIso)}</p> : null}
                     <p>Last completed: {formatDate(selectedRow.lastCompletedDateIso)}</p>
@@ -467,6 +495,12 @@ export function ClinicalAssessmentQueue({
 
                   {kind === "UDA" ? (
                     <>
+                      <Link
+                        href={`${newEntryHref}?residentId=${encodeURIComponent(selectedRow.residentId)}&assessmentType=ADMISSION`}
+                        className="inline-flex h-9 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/15 text-xs font-semibold text-amber-100"
+                      >
+                        Start Admission UDA
+                      </Link>
                       <Link
                         href={`${newAnnualHref || "/app/documentation/uda/new"}?residentId=${encodeURIComponent(selectedRow.residentId)}&assessmentType=ANNUAL`}
                         className="inline-flex h-9 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/15 text-xs font-semibold text-amber-100"

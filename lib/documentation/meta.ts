@@ -26,7 +26,7 @@ function isDocumentationPriority(value: string): value is DocumentationPriority 
 }
 
 function isDocumentationAssessmentType(value: string): value is DocumentationAssessmentType {
-  return value === "ANNUAL" || value === "QUARTERLY" || value === "SECTION_F";
+  return value === "ADMISSION" || value === "ANNUAL" || value === "QUARTERLY" || value === "SECTION_F";
 }
 
 function isDocumentationSectionChangeState(value: string): value is DocumentationSectionChangeState {

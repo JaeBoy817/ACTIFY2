@@ -5,7 +5,13 @@ import { ClinicalAssessmentQueue } from "@/components/documentation/clinical/Cli
 import { DocumentationShell } from "@/components/documentation/DocumentationShell";
 import { getClinicalAssessmentQueueData, getDocumentationBaseContext } from "@/app/app/documentation/_lib";
 
-export default async function UdaDocumentationPage() {
+export default async function UdaDocumentationPage({
+  searchParams
+}: {
+  searchParams?: {
+    assessmentType?: "ADMISSION" | "ANNUAL" | "QUARTERLY";
+  };
+}) {
   const { context } = await getDocumentationBaseContext();
   const queue = await getClinicalAssessmentQueueData({
     facilityId: context.facilityId,
@@ -16,9 +22,16 @@ export default async function UdaDocumentationPage() {
   return (
     <DocumentationShell
       title="UDA Assessments"
-      description="Activity annual and quarterly assessment workflow with due-date queueing, resident snapshots, and carry-forward review support."
+      description="Activity admission, annual, and quarterly assessment workflow with due-date queueing and resident snapshots."
       actions={
         <>
+          <Link
+            href="/app/documentation/uda/new?assessmentType=ADMISSION"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-amber-300/45 bg-[linear-gradient(180deg,#77521f_0%,#5f3f15_100%)] px-4 text-xs font-semibold text-amber-100"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Admission UDA
+          </Link>
           <Link
             href="/app/documentation/uda/new?assessmentType=ANNUAL"
             className="inline-flex h-10 items-center gap-2 rounded-full border border-amber-300/45 bg-[linear-gradient(180deg,#6a4a1d_0%,#573b16_100%)] px-4 text-xs font-semibold text-amber-100"
@@ -44,6 +57,7 @@ export default async function UdaDocumentationPage() {
         newEntryHref="/app/documentation/uda/new"
         newAnnualHref="/app/documentation/uda/new"
         newQuarterlyHref="/app/documentation/uda/new"
+        initialAssessmentType={searchParams?.assessmentType ?? "all"}
       />
     </DocumentationShell>
   );

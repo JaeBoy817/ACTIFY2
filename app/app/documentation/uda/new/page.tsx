@@ -11,7 +11,7 @@ export default async function NewUdaPage({
 }: {
   searchParams?: {
     residentId?: string;
-    assessmentType?: "ANNUAL" | "QUARTERLY";
+    assessmentType?: "ADMISSION" | "ANNUAL" | "QUARTERLY";
   };
 }) {
   const { context, residents } = await getDocumentationBaseContext();
@@ -27,7 +27,7 @@ export default async function NewUdaPage({
   return (
     <DocumentationShell
       title="New UDA Assessment"
-      description="Clinical UDA workflow for annual and quarterly assessment documentation with carry-forward history."
+      description="Clinical UDA workflow for admission, annual, and quarterly assessment documentation with carry-forward history."
     >
       <UdaAssessmentEditor
         timeZone={context.timeZone}

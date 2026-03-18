@@ -7,7 +7,7 @@ import { attachDocumentationMeta } from "@/lib/documentation/meta";
 import { prisma } from "@/lib/prisma";
 
 const completeAssessmentSchema = z.object({
-  kind: z.enum(["QUARTERLY_UDA", "ANNUAL_UDA", "MDS"]),
+  kind: z.enum(["ADMISSION_UDA", "QUARTERLY_UDA", "ANNUAL_UDA", "MDS"]),
   completedAt: z.string().datetime().optional().nullable()
 });
 
@@ -62,7 +62,12 @@ export async function POST(request: Request, { params }: { params: { residentId:
         : {
             kind: "UDA" as const,
             status: "COMPLETED" as const,
-            assessmentType: parsed.data.kind === "ANNUAL_UDA" ? ("ANNUAL" as const) : ("QUARTERLY" as const),
+            assessmentType:
+              parsed.data.kind === "ANNUAL_UDA"
+                ? ("ANNUAL" as const)
+                : parsed.data.kind === "ADMISSION_UDA"
+                  ? ("ADMISSION" as const)
+                  : ("QUARTERLY" as const),
             dueDate: null,
             reviewDate: completedAt.toISOString()
           };
@@ -71,6 +76,8 @@ export async function POST(request: Request, { params }: { params: { residentId:
       `${resident.firstName} ${resident.lastName}: ${
         parsed.data.kind === "ANNUAL_UDA"
           ? "Annual UDA"
+          : parsed.data.kind === "ADMISSION_UDA"
+            ? "Admission UDA"
           : parsed.data.kind === "QUARTERLY_UDA"
             ? "Quarterly UDA"
             : "MDS Section F"

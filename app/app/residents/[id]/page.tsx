@@ -114,10 +114,17 @@ function monthDifference(start: Date | null, end: Date) {
   return Math.max(0, total);
 }
 
-function buildMilestones(anchorIso: string | null, nextQuarterlyIso: string | null, nextAnnualIso: string | null, nextMdsIso: string | null) {
+function buildMilestones(
+  anchorIso: string | null,
+  nextAdmissionIso: string | null,
+  nextQuarterlyIso: string | null,
+  nextAnnualIso: string | null,
+  nextMdsIso: string | null
+) {
   const anchor = parseDate(anchorIso);
   const milestones: Array<{ label: string; date: string | null; accent: string }> = [
     { label: "Admission", date: anchorIso, accent: "bg-cyan-400" },
+    { label: "Admission UDA", date: nextAdmissionIso, accent: "bg-orange-400" },
     { label: "Next Quarterly", date: nextQuarterlyIso, accent: "bg-amber-400" },
     { label: "Next Annual", date: nextAnnualIso, accent: "bg-blue-400" },
     { label: "Next MDS", date: nextMdsIso, accent: "bg-emerald-400" }
@@ -440,6 +447,7 @@ export default async function ResidentProfilePage({
 
   const timelineMilestones = buildMilestones(
     schedule.anchorDateIso,
+    schedule.admission.dueDateIso,
     schedule.quarterly.dueDateIso,
     schedule.annual.dueDateIso,
     schedule.mds.dueDateIso
@@ -547,6 +555,9 @@ export default async function ResidentProfilePage({
               <Link href={`/app/documentation/one-to-one/new?residentId=${resident.id}`}>Add 1:1 Note</Link>
             </Button>
             <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
+              <Link href={`/app/documentation/uda/new?residentId=${resident.id}&assessmentType=ADMISSION`}>Start Admission UDA</Link>
+            </Button>
+            <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
               <Link href={`/app/documentation/uda?residentId=${resident.id}`}>Create / View UDA</Link>
             </Button>
             <Button asChild variant="outline" className="h-9 rounded-full border-[#3a5b8f] bg-[#122342] px-4 text-xs text-[#d6e5ff] hover:bg-[#193055]">
@@ -638,6 +649,7 @@ export default async function ResidentProfilePage({
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#92abd6]">Assessment Snapshot</p>
                 <div className="mt-3 space-y-2">
                   {[
+                    { label: "Admission UDA", status: schedule.admission },
                     { label: "Quarterly UDA", status: schedule.quarterly },
                     { label: "Annual UDA", status: schedule.annual },
                     { label: "MDS", status: schedule.mds }
@@ -675,6 +687,7 @@ export default async function ResidentProfilePage({
           <section className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
               {[
+                { title: "Admission UDA", status: schedule.admission, icon: FileClock },
                 { title: "Quarterly UDA", status: schedule.quarterly, icon: FileClock },
                 { title: "Annual UDA", status: schedule.annual, icon: ClipboardList },
                 { title: "MDS", status: schedule.mds, icon: CalendarClock }
@@ -700,7 +713,7 @@ export default async function ResidentProfilePage({
 
             <article className="rounded-2xl border border-[#223a5f] bg-[linear-gradient(180deg,#0f1c35_0%,#0a1325_100%)] p-4">
               <h2 className="text-lg font-bold text-white">Assessment Timeline</h2>
-              <p className="mt-1 text-sm text-[#9eb6df]">Admission anchor and recurring quarterly / annual / MDS checkpoints.</p>
+              <p className="mt-1 text-sm text-[#9eb6df]">Admission anchor with admission, quarterly, annual, and MDS checkpoints.</p>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {timelineMilestones.map((milestone, index) => (

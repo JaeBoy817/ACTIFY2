@@ -43,7 +43,7 @@ import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
 
 type ParticipationBand = "all" | "high" | "moderate" | "low";
-type AssessmentKind = "QUARTERLY_UDA" | "ANNUAL_UDA" | "MDS";
+type AssessmentKind = "ADMISSION_UDA" | "QUARTERLY_UDA" | "ANNUAL_UDA" | "MDS";
 
 const DUE_SOON_LEVELS: AssessmentDueLevel[] = ["DUE_TODAY", "DUE_SOON_7", "DUE_SOON_14", "DUE_SOON_30"];
 
@@ -121,6 +121,7 @@ function nextDueDateMillis(resident: ResidentListRow) {
 
 function maxOverdueDays(resident: ResidentListRow) {
   return Math.max(
+    resident.assessmentSchedule.admission.daysOverdue ?? 0,
     resident.assessmentSchedule.quarterly.daysOverdue ?? 0,
     resident.assessmentSchedule.annual.daysOverdue ?? 0,
     resident.assessmentSchedule.mds.daysOverdue ?? 0
@@ -271,7 +272,14 @@ function ResidentDirectoryRow({
                 <span>Unit: {resident.unitName ?? "Unassigned"}</span>
               </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">Admission UDA</p>
+                  <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.admission.dueDateIso)}</p>
+                  <Badge className={cn("mt-1 border text-[10px]", duePillClass(resident.assessmentSchedule.admission.level))}>
+                    {resident.assessmentSchedule.admission.label}
+                  </Badge>
+                </div>
                 <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">Quarterly UDA</p>
                   <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.quarterly.dueDateIso)}</p>
@@ -339,6 +347,14 @@ function ResidentDirectoryRow({
           <div className="rounded-xl border border-[#314d79] bg-[#0e1b35] p-2">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Mark Assessment Complete</p>
             <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className="rounded-full border border-orange-300/45 bg-orange-500/16 px-2.5 py-1 text-[10px] font-semibold text-orange-100 transition hover:-translate-y-px"
+                onClick={() => void onMarkAssessment(resident.id, "ADMISSION_UDA")}
+                disabled={!canEdit}
+              >
+                Admission
+              </button>
               <button
                 type="button"
                 className="rounded-full border border-amber-300/45 bg-amber-500/16 px-2.5 py-1 text-[10px] font-semibold text-amber-100 transition hover:-translate-y-px"
@@ -531,17 +547,17 @@ export function ResidentsWorkspace({
     const documentationCurrent = activeResidents.filter((resident) => resident.assessmentFlags.overdueCount === 0).length;
 
     const due7 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
+      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
       return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 7);
     }).length;
 
     const due14 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
+      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
       return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 14);
     }).length;
 
     const due30 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
+      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
       return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 30);
     }).length;
 
@@ -551,6 +567,14 @@ export function ResidentsWorkspace({
           ? 100
           : Math.round(
               (activeResidents.filter((resident) => resident.assessmentSchedule.quarterly.level !== "OVERDUE").length /
+                activeResidents.length) *
+                100
+            ),
+      admission:
+        activeResidents.length === 0
+          ? 100
+          : Math.round(
+              (activeResidents.filter((resident) => resident.assessmentSchedule.admission.level !== "OVERDUE").length /
                 activeResidents.length) *
                 100
             ),
@@ -602,6 +626,7 @@ export function ResidentsWorkspace({
 
     for (const resident of residents) {
       const pairs = [
+        { type: "Admission UDA", status: resident.assessmentSchedule.admission },
         { type: "Quarterly UDA", status: resident.assessmentSchedule.quarterly },
         { type: "Annual UDA", status: resident.assessmentSchedule.annual },
         { type: "MDS", status: resident.assessmentSchedule.mds }
@@ -637,6 +662,7 @@ export function ResidentsWorkspace({
 
     for (const resident of residents) {
       const pairs = [
+        { type: "Admission UDA", status: resident.assessmentSchedule.admission },
         { type: "Quarterly UDA", status: resident.assessmentSchedule.quarterly },
         { type: "Annual UDA", status: resident.assessmentSchedule.annual },
         { type: "MDS", status: resident.assessmentSchedule.mds }
@@ -743,7 +769,15 @@ export function ResidentsWorkspace({
         await refreshResidents();
         toast({
           title: "Assessment updated",
-          description: `${kind === "MDS" ? "MDS" : kind === "ANNUAL_UDA" ? "Annual UDA" : "Quarterly UDA"} marked complete.`
+          description: `${
+            kind === "MDS"
+              ? "MDS"
+              : kind === "ANNUAL_UDA"
+                ? "Annual UDA"
+                : kind === "ADMISSION_UDA"
+                  ? "Admission UDA"
+                  : "Quarterly UDA"
+          } marked complete.`
         });
       } catch (error) {
         toast({
@@ -765,6 +799,7 @@ export function ResidentsWorkspace({
       "Admission Date",
       "Quarterly Due",
       "Annual Due",
+      "Admission UDA Due",
       "MDS Due",
       "Participation % (30d)",
       "Overdue Count"
@@ -783,6 +818,7 @@ export function ResidentsWorkspace({
           formatDateLabel(resident.admissionDate),
           formatDateLabel(resident.assessmentSchedule.quarterly.dueDateIso),
           formatDateLabel(resident.assessmentSchedule.annual.dueDateIso),
+          formatDateLabel(resident.assessmentSchedule.admission.dueDateIso),
           formatDateLabel(resident.assessmentSchedule.mds.dueDateIso),
           resident.attendanceSnapshot.participationPercent30d ?? 0,
           resident.assessmentFlags.overdueCount
@@ -869,6 +905,9 @@ export function ResidentsWorkspace({
             </Button>
             <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
               <Link href="/app/documentation/uda">Quarterly UDA Queue</Link>
+            </Button>
+            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
+              <Link href="/app/documentation/uda?assessmentType=ADMISSION">Admission UDA Queue</Link>
             </Button>
             <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
               <Link href="/app/documentation/mds">MDS Queue</Link>
@@ -1092,6 +1131,13 @@ export function ResidentsWorkspace({
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
+                    <span>Admission UDA Health</span>
+                    <span>{summary.assessmentHealth.admission}%</span>
+                  </div>
+                  <GlowProgressBar value={summary.assessmentHealth.admission} tone="orange" />
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
                     <span>Quarterly UDA Health</span>
                     <span>{summary.assessmentHealth.quarterly}%</span>
                   </div>
@@ -1259,6 +1305,7 @@ export function ResidentsWorkspace({
                 {[
                   { label: "Add Resident", href: "#", onClick: openAddResident },
                   { label: "Residents Due This Week", href: "/app/residents?filter=DUE_SOON" },
+                  { label: "Admission UDA Queue", href: "/app/documentation/uda?assessmentType=ADMISSION" },
                   { label: "Quarterly UDA Queue", href: "/app/documentation/uda" },
                   { label: "Annual UDA Queue", href: "/app/documentation/uda" },
                   { label: "MDS Queue", href: "/app/documentation/mds" },

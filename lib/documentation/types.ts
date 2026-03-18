@@ -4,7 +4,7 @@ export type DocumentationStatus = "DRAFT" | "IN_PROGRESS" | "READY_REVIEW" | "CO
 
 export type DocumentationPriority = "LOW" | "MEDIUM" | "HIGH";
 
-export type DocumentationAssessmentType = "ANNUAL" | "QUARTERLY" | "SECTION_F";
+export type DocumentationAssessmentType = "ADMISSION" | "ANNUAL" | "QUARTERLY" | "SECTION_F";
 
 export type DocumentationSectionChangeState = "NO_CHANGE" | "UPDATED" | "SIGNIFICANT_CHANGE";
 

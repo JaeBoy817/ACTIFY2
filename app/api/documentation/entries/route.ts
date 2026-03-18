@@ -38,7 +38,7 @@ const createSchema = z.object({
   dueDate: z.string().trim().optional().nullable(),
   occurredAt: z.string().trim().optional().nullable(),
   sectionProgress: z.number().min(0).max(100).optional().nullable(),
-  assessmentType: z.enum(["ANNUAL", "QUARTERLY", "SECTION_F"]).optional().nullable(),
+  assessmentType: z.enum(["ADMISSION", "ANNUAL", "QUARTERLY", "SECTION_F"]).optional().nullable(),
   reviewDate: z.string().trim().optional().nullable(),
   assignedStaff: z.string().trim().max(120).optional().nullable(),
   noMajorChange: z.boolean().optional().nullable(),

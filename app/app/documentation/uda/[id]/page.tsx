@@ -34,7 +34,7 @@ export default async function UdaDetailPage({
   return (
     <DocumentationShell
       title="UDA Assessment Detail"
-      description="Review, update, and finalize annual or quarterly activity assessments with resident history context."
+      description="Review, update, and finalize admission, annual, or quarterly activity assessments with resident history context."
     >
       <UdaAssessmentEditor timeZone={context.timeZone} residents={residents} history={history} initial={entry} />
     </DocumentationShell>
