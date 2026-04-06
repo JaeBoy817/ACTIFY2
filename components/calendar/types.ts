@@ -24,6 +24,9 @@ export type CalendarEventLite = {
   conflictOverride: boolean;
   checklist: unknown;
   adaptationsEnabled: unknown;
+  attendanceCount?: number;
+  attendanceTaken?: boolean;
+  documentationCount?: number;
 };
 
 export type CalendarFilterState = {

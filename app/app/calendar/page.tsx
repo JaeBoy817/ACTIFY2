@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 
-import { CalendarShell } from "@/components/calendar/CalendarShell";
+import { CalendarCommandCenter } from "@/components/calendar/command-center/CalendarCommandCenter";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
@@ -96,7 +96,7 @@ export default async function CalendarPage({
   const templates = await getCalendarTemplatesSafe(context.facilityId);
 
   return (
-    <CalendarShell
+    <CalendarCommandCenter
       templates={templates.map((template) => ({
         id: template.id,
         title: template.title,

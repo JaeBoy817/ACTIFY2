@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext } from "@/lib/calendar/api-context";
 import { getCalendarRangeActivities } from "@/lib/calendar/service";
+import { prisma } from "@/lib/prisma";
 
 const querySchema = z.object({
   start: z.string().min(1),
@@ -42,6 +43,45 @@ export async function GET(request: Request) {
       rangeEnd
     });
 
+    const activityIds = activities.map((activity) => activity.id);
+
+    const [attendanceCounts, documentationCounts] = activityIds.length
+      ? await Promise.all([
+          prisma.attendance.groupBy({
+            by: ["activityInstanceId"],
+            where: {
+              activityInstanceId: {
+                in: activityIds
+              }
+            },
+            _count: {
+              _all: true
+            }
+          }),
+          prisma.progressNote.groupBy({
+            by: ["activityInstanceId"],
+            where: {
+              activityInstanceId: {
+                in: activityIds
+              },
+              type: "GROUP"
+            },
+            _count: {
+              _all: true
+            }
+          })
+        ])
+      : [[], []];
+
+    const attendanceByActivityId = new Map(
+      attendanceCounts.map((entry) => [entry.activityInstanceId, entry._count._all ?? 0])
+    );
+    const documentationByActivityId = new Map(
+      documentationCounts
+        .filter((entry): entry is typeof entry & { activityInstanceId: string } => Boolean(entry.activityInstanceId))
+        .map((entry) => [entry.activityInstanceId, entry._count._all ?? 0])
+    );
+
     return Response.json({
       range: {
         start: rangeStart.toISOString(),
@@ -61,7 +101,10 @@ export async function GET(request: Request) {
         isOverride: activity.isOverride,
         conflictOverride: activity.conflictOverride,
         checklist: activity.checklist,
-        adaptationsEnabled: activity.adaptationsEnabled
+        adaptationsEnabled: activity.adaptationsEnabled,
+        attendanceCount: attendanceByActivityId.get(activity.id) ?? 0,
+        attendanceTaken: (attendanceByActivityId.get(activity.id) ?? 0) > 0,
+        documentationCount: documentationByActivityId.get(activity.id) ?? 0
       }))
     });
   } catch (error) {
