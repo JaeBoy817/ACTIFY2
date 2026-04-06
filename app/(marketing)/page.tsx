@@ -203,7 +203,7 @@ function SectionShell({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-28">
+    <section id={id} className="mt-12 scroll-mt-28 border-t border-slate-700/60 pt-10 md:mt-14 md:pt-12">
       <header className="mb-6 max-w-3xl">
         {eyebrow ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">{eyebrow}</p>

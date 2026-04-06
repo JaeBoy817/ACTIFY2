@@ -25,15 +25,15 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div
       data-ambient="marketing"
-      className={`${marketingFont.className} relative min-h-screen overflow-hidden text-zinc-900`}
+      className={`${marketingFont.className} relative min-h-screen overflow-x-clip bg-[#060b16] text-slate-100`}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(243,240,233,0.72)_0%,rgba(243,240,233,0.58)_100%),radial-gradient(900px_circle_at_4%_4%,rgba(250,204,21,0.18),transparent_48%),radial-gradient(900px_circle_at_96%_6%,rgba(37,99,235,0.1),transparent_42%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_circle_at_2%_-8%,rgba(56,189,248,0.17),transparent_46%),radial-gradient(1200px_circle_at_98%_0%,rgba(139,92,246,0.16),transparent_42%),radial-gradient(1000px_circle_at_50%_120%,rgba(236,72,153,0.14),transparent_46%),linear-gradient(180deg,rgba(6,11,22,0.98)_0%,rgba(6,11,22,1)_100%)]"
       />
-      <div className="relative z-10 mx-auto w-full max-w-[1280px] px-4 pb-10 md:px-8">
+      <div className="relative z-10 mx-auto w-full max-w-[1320px] px-4 pb-12 md:px-8">
         <MarketingNavBar />
-        <main>{children}</main>
+        <main className="pt-2">{children}</main>
         <MarketingFooter />
       </div>
     </div>
