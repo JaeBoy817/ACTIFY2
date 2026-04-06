@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { ActifyLogo } from "@/components/ActifyLogo";
 
 const NAV_LINKS = [
-  { label: "Home", href: "/" },
+  { label: "Home", href: "/#home" },
   { label: "Features", href: "/#features" },
   { label: "How It Works", href: "/#how-it-works" },
   { label: "For Facilities", href: "/#for-facilities" },
@@ -46,8 +46,9 @@ export function MarketingNavBar() {
       >
         <div className="flex items-center justify-between gap-3">
           <Link
-            href="/"
+            href="/#home"
             prefetch
+            onClick={() => setOpen(false)}
             className="inline-flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
             aria-label="Actify Home"
           >
@@ -60,6 +61,7 @@ export function MarketingNavBar() {
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={() => setOpen(false)}
                 className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
               >
                 {item.label}
@@ -100,6 +102,7 @@ export function MarketingNavBar() {
                 <Link
                   key={item.label}
                   href={item.href}
+                  onClick={() => setOpen(false)}
                   className="rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
                 >
                   {item.label}
@@ -109,12 +112,14 @@ export function MarketingNavBar() {
             <div className="grid gap-2 pt-1">
               <Link
                 href="/request-access"
+                onClick={() => setOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/75 to-blue-600/75 px-4 text-xs font-semibold uppercase tracking-[0.12em] text-white"
               >
                 Request Demo
               </Link>
               <Link
                 href="/sign-in"
+                onClick={() => setOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-full border border-slate-600 bg-slate-900 px-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100"
               >
                 Sign In
