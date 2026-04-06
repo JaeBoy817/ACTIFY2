@@ -5,7 +5,7 @@ import { getDefaultDocumentationEditorData, getDocumentationBaseContext } from "
 export default async function NewProgressNotePage({
   searchParams
 }: {
-  searchParams?: { residentId?: string };
+  searchParams?: { residentId?: string; prefill?: string; title?: string; followUp?: string };
 }) {
   const { context, residents } = await getDocumentationBaseContext();
 
@@ -21,6 +21,9 @@ export default async function NewProgressNotePage({
         initial={getDefaultDocumentationEditorData({
           kind: "PROGRESS",
           residentId: searchParams?.residentId,
+          title: searchParams?.title,
+          narrative: searchParams?.prefill,
+          followUp: searchParams?.followUp,
           timeZone: context.timeZone
         })}
       />

@@ -762,15 +762,18 @@ export async function getDocumentationEntryForEditor(params: {
 export function getDefaultDocumentationEditorData(params: {
   kind: DocumentationKind;
   residentId?: string;
+  title?: string;
+  narrative?: string;
+  followUp?: string;
   timeZone?: string | null;
 }): DocumentationEditorData {
   const defaultResponse = params.kind === "ONE_TO_ONE" ? "POSITIVE" : "NEUTRAL";
 
   return {
     residentId: params.residentId ?? "",
-    title: "",
-    narrative: "",
-    followUp: "",
+    title: params.title?.trim() ?? "",
+    narrative: params.narrative?.trim() ?? "",
+    followUp: params.followUp?.trim() ?? "",
     status: "DRAFT",
     priority: "MEDIUM",
     dueDate: "",
