@@ -1,4 +1,4 @@
-import { DashboardShell } from "@/components/dashboard/v4/DashboardShell";
+import { DashboardCommandCenter } from "@/components/dashboard/command-center/DashboardCommandCenter";
 import { requireFacilityContext } from "@/lib/auth";
 import { getDashboardCommandCenterSummary } from "@/lib/dashboard/getDashboardCommandCenterSummary";
 import { ensureUserNotificationFeed } from "@/lib/notifications/service";
@@ -20,7 +20,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="-mx-2 -mt-4 min-h-[calc(100vh-5.5rem)] bg-transparent px-2 pb-6 pt-4 md:-mx-3 md:px-3">
-      <DashboardShell summary={summary} />
+      <DashboardCommandCenter summary={summary} />
     </div>
   );
 }
