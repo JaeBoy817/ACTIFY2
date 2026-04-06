@@ -1,4 +1,4 @@
-import { AttendancePageShell } from "@/components/attendance/v3/AttendancePageShell";
+import { AttendanceCommandCenter } from "@/components/attendance/command-center/AttendanceCommandCenter";
 import { getAttendanceQuickTakePayload, getAttendanceSessionsHistory } from "@/lib/attendance-tracker/service";
 import { requireModulePage } from "@/lib/page-guards";
 import { canWrite } from "@/lib/permissions";
@@ -35,7 +35,7 @@ export default async function AttendanceQuickTakePage({
   ]);
 
   return (
-    <AttendancePageShell
+    <AttendanceCommandCenter
       initialData={{
         ...quickTake,
         historySessions: history.sessions,
@@ -44,6 +44,7 @@ export default async function AttendanceQuickTakePage({
         historyTo: searchParams?.to ?? defaultTo
       }}
       canEdit={canWrite(context.role)}
+      timeZone={context.timeZone}
     />
   );
 }
