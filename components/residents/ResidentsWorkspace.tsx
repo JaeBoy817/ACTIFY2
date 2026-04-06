@@ -2,21 +2,26 @@
 
 import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  ArrowDownWideNarrow,
   CalendarClock,
-  CircleAlert,
+  CalendarDays,
   Clock3,
   Download,
   FileText,
   Filter,
+  Flag,
+  LayoutGrid,
+  ListFilter,
+  NotebookPen,
   Plus,
   Search,
+  ShieldAlert,
+  Sparkles,
   Upload,
   UserPlus,
-  UserRound
+  Users
 } from "lucide-react";
 
 import { TopContentHeader } from "@/components/app/TopContentHeader";
@@ -28,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { compareResidentsByRoom, formatResidentStatusLabel } from "@/lib/resident-status";
-import { dueLevelTone, type AssessmentDueLevel } from "@/lib/residents/assessment-due";
+import { type AssessmentDueLevel } from "@/lib/residents/assessment-due";
 import {
   isNeedsOneOnOne,
   RESIDENT_FILTER_OPTIONS,
@@ -43,19 +48,43 @@ import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
 
 type ParticipationBand = "all" | "high" | "moderate" | "low";
+type ProfileTab = "overview" | "preferences" | "participation" | "documentation" | "care-plan" | "due";
 type AssessmentKind = "ADMISSION_UDA" | "QUARTERLY_UDA" | "ANNUAL_UDA" | "MDS";
+
+type ResidentDueItem = {
+  id: string;
+  label: string;
+  kind: "ASSESSMENT" | "ONE_TO_ONE";
+  dueDateIso: string | null;
+  level: AssessmentDueLevel;
+  statusLabel: string;
+  daysUntil: number | null;
+  daysOverdue: number | null;
+  actionHref: string;
+  actionLabel: string;
+  assessmentKind?: AssessmentKind;
+};
 
 const DUE_SOON_LEVELS: AssessmentDueLevel[] = ["DUE_TODAY", "DUE_SOON_7", "DUE_SOON_14", "DUE_SOON_30"];
 
-function parseIsoDate(value: string | null) {
+const PROFILE_TABS: Array<{ id: ProfileTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "preferences", label: "Interests & Preferences" },
+  { id: "participation", label: "Participation History" },
+  { id: "documentation", label: "Documentation History" },
+  { id: "care-plan", label: "Care Plan Snapshot" },
+  { id: "due", label: "Upcoming Due Items" }
+];
+
+function parseIsoDate(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
 }
 
-function formatDateLabel(value: string | null) {
-  const parsed = parseIsoDate(value);
+function formatDate(value: string | null | undefined) {
+  const parsed = parseIsoDate(value ?? null);
   if (!parsed) return "Not set";
   return parsed.toLocaleDateString(undefined, {
     month: "short",
@@ -64,13 +93,38 @@ function formatDateLabel(value: string | null) {
   });
 }
 
-function formatMetricDate(value: string | null) {
-  const parsed = parseIsoDate(value);
-  if (!parsed) return "-";
+function formatDateShort(value: string | null | undefined) {
+  const parsed = parseIsoDate(value ?? null);
+  if (!parsed) return "Not set";
   return parsed.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric"
   });
+}
+
+function formatDateTime(value: string | null | undefined) {
+  const parsed = parseIsoDate(value ?? null);
+  if (!parsed) return "Not recorded";
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function toCsvField(value: string | number | null | undefined) {
+  if (value == null) return "";
+  const text = String(value);
+  if (!text.includes(",") && !text.includes('"') && !text.includes("\n")) {
+    return text;
+  }
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function getResidentName(resident: ResidentListRow) {
+  return `${resident.firstName} ${resident.lastName}`;
 }
 
 function formatLengthOfStay(days: number | null) {
@@ -90,53 +144,210 @@ function isDueOrOverdue(level: AssessmentDueLevel) {
   return level === "OVERDUE" || isDueSoon(level);
 }
 
-function duePillClass(level: AssessmentDueLevel) {
+function dueBadgeClass(level: AssessmentDueLevel) {
   if (level === "OVERDUE") {
-    return "border-rose-400/40 bg-rose-500/16 text-rose-100";
+    return "border-rose-300/50 bg-rose-500/15 text-rose-100";
   }
-  if (level === "DUE_TODAY" || level === "DUE_SOON_7" || level === "DUE_SOON_14" || level === "DUE_SOON_30") {
-    return "border-amber-300/45 bg-amber-500/16 text-amber-100";
+  if (isDueSoon(level)) {
+    return "border-amber-300/50 bg-amber-500/15 text-amber-100";
   }
   if (level === "ON_TRACK") {
-    return "border-emerald-300/45 bg-emerald-500/16 text-emerald-100";
+    return "border-emerald-300/45 bg-emerald-500/12 text-emerald-100";
   }
   if (level === "INACTIVE") {
-    return "border-zinc-500/50 bg-zinc-500/20 text-zinc-200";
+    return "border-zinc-500/45 bg-zinc-500/20 text-zinc-200";
   }
-  return "border-slate-500/45 bg-slate-600/20 text-slate-200";
+  return "border-[#3d5e92] bg-[#10223f] text-[#c8daf8]";
 }
 
-function dueToneIconClass(level: AssessmentDueLevel) {
-  const tone = dueLevelTone(level);
-  if (tone === "danger") return "text-rose-300";
-  if (tone === "warning") return "text-amber-300";
-  if (tone === "success") return "text-emerald-300";
-  return "text-zinc-300";
+function duePriority(level: AssessmentDueLevel) {
+  if (level === "OVERDUE") return 0;
+  if (level === "DUE_TODAY") return 1;
+  if (level === "DUE_SOON_7") return 2;
+  if (level === "DUE_SOON_14") return 3;
+  if (level === "DUE_SOON_30") return 4;
+  if (level === "ON_TRACK") return 5;
+  if (level === "UNSCHEDULED") return 6;
+  return 7;
 }
 
-function nextDueDateMillis(resident: ResidentListRow) {
-  const date = parseIsoDate(resident.assessmentSchedule.nextDueDateIso);
-  return date ? date.getTime() : Number.POSITIVE_INFINITY;
+function oneToOneDueModel(resident: ResidentListRow, now: Date) {
+  const lastVisitDate = parseIsoDate(resident.lastOneOnOneAt);
+  if (!lastVisitDate) {
+    return {
+      dueDateIso: null,
+      level: "OVERDUE" as AssessmentDueLevel,
+      statusLabel: "No 1:1 this month",
+      daysUntil: null,
+      daysOverdue: 30
+    };
+  }
+
+  const dueDate = new Date(lastVisitDate.getTime());
+  dueDate.setDate(dueDate.getDate() + 30);
+
+  const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const overdueBy = Math.abs(diffDays);
+    return {
+      dueDateIso: dueDate.toISOString(),
+      level: "OVERDUE" as AssessmentDueLevel,
+      statusLabel: `Overdue by ${overdueBy} day${overdueBy === 1 ? "" : "s"}`,
+      daysUntil: diffDays,
+      daysOverdue: overdueBy
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      dueDateIso: dueDate.toISOString(),
+      level: "DUE_TODAY" as AssessmentDueLevel,
+      statusLabel: "Due today",
+      daysUntil: 0,
+      daysOverdue: null
+    };
+  }
+
+  if (diffDays <= 7) {
+    return {
+      dueDateIso: dueDate.toISOString(),
+      level: "DUE_SOON_7" as AssessmentDueLevel,
+      statusLabel: `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`,
+      daysUntil: diffDays,
+      daysOverdue: null
+    };
+  }
+
+  if (diffDays <= 14) {
+    return {
+      dueDateIso: dueDate.toISOString(),
+      level: "DUE_SOON_14" as AssessmentDueLevel,
+      statusLabel: `Due in ${diffDays} days`,
+      daysUntil: diffDays,
+      daysOverdue: null
+    };
+  }
+
+  return {
+    dueDateIso: dueDate.toISOString(),
+    level: "ON_TRACK" as AssessmentDueLevel,
+    statusLabel: "Current",
+    daysUntil: diffDays,
+    daysOverdue: null
+  };
 }
 
-function maxOverdueDays(resident: ResidentListRow) {
-  return Math.max(
-    resident.assessmentSchedule.admission.daysOverdue ?? 0,
-    resident.assessmentSchedule.quarterly.daysOverdue ?? 0,
-    resident.assessmentSchedule.annual.daysOverdue ?? 0,
-    resident.assessmentSchedule.mds.daysOverdue ?? 0
-  );
+function buildResidentDueItems(resident: ResidentListRow, now: Date): ResidentDueItem[] {
+  const assessmentItems: ResidentDueItem[] = [
+    {
+      id: `${resident.id}-admission-uda`,
+      label: "Admission UDA",
+      kind: "ASSESSMENT",
+      dueDateIso: resident.assessmentSchedule.admission.dueDateIso,
+      level: resident.assessmentSchedule.admission.level,
+      statusLabel: resident.assessmentSchedule.admission.label,
+      daysUntil: resident.assessmentSchedule.admission.daysUntil,
+      daysOverdue: resident.assessmentSchedule.admission.daysOverdue,
+      actionHref: `/app/documentation/uda?residentId=${resident.id}&assessmentType=ADMISSION`,
+      actionLabel: "Open Admission UDA",
+      assessmentKind: "ADMISSION_UDA"
+    },
+    {
+      id: `${resident.id}-quarterly-uda`,
+      label: "Quarterly UDA",
+      kind: "ASSESSMENT",
+      dueDateIso: resident.assessmentSchedule.quarterly.dueDateIso,
+      level: resident.assessmentSchedule.quarterly.level,
+      statusLabel: resident.assessmentSchedule.quarterly.label,
+      daysUntil: resident.assessmentSchedule.quarterly.daysUntil,
+      daysOverdue: resident.assessmentSchedule.quarterly.daysOverdue,
+      actionHref: `/app/documentation/uda?residentId=${resident.id}&assessmentType=QUARTERLY`,
+      actionLabel: "Open Quarterly UDA",
+      assessmentKind: "QUARTERLY_UDA"
+    },
+    {
+      id: `${resident.id}-annual-uda`,
+      label: "Annual UDA",
+      kind: "ASSESSMENT",
+      dueDateIso: resident.assessmentSchedule.annual.dueDateIso,
+      level: resident.assessmentSchedule.annual.level,
+      statusLabel: resident.assessmentSchedule.annual.label,
+      daysUntil: resident.assessmentSchedule.annual.daysUntil,
+      daysOverdue: resident.assessmentSchedule.annual.daysOverdue,
+      actionHref: `/app/documentation/uda?residentId=${resident.id}&assessmentType=ANNUAL`,
+      actionLabel: "Open Annual UDA",
+      assessmentKind: "ANNUAL_UDA"
+    },
+    {
+      id: `${resident.id}-mds`,
+      label: "MDS",
+      kind: "ASSESSMENT",
+      dueDateIso: resident.assessmentSchedule.mds.dueDateIso,
+      level: resident.assessmentSchedule.mds.level,
+      statusLabel: resident.assessmentSchedule.mds.label,
+      daysUntil: resident.assessmentSchedule.mds.daysUntil,
+      daysOverdue: resident.assessmentSchedule.mds.daysOverdue,
+      actionHref: `/app/documentation/mds?residentId=${resident.id}`,
+      actionLabel: "Open MDS",
+      assessmentKind: "MDS"
+    }
+  ];
+
+  const oneToOneStatus = oneToOneDueModel(resident, now);
+
+  const oneToOneItem: ResidentDueItem = {
+    id: `${resident.id}-one-to-one`,
+    label: "1:1 Note",
+    kind: "ONE_TO_ONE",
+    dueDateIso: oneToOneStatus.dueDateIso,
+    level: oneToOneStatus.level,
+    statusLabel: oneToOneStatus.statusLabel,
+    daysUntil: oneToOneStatus.daysUntil,
+    daysOverdue: oneToOneStatus.daysOverdue,
+    actionHref: `/app/documentation/one-to-one/new?residentId=${resident.id}`,
+    actionLabel: "Add 1:1 Note"
+  };
+
+  return [...assessmentItems, oneToOneItem].sort((a, b) => {
+    const priorityDelta = duePriority(a.level) - duePriority(b.level);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    const aDate = parseIsoDate(a.dueDateIso)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const bDate = parseIsoDate(b.dueDateIso)?.getTime() ?? Number.POSITIVE_INFINITY;
+    if (aDate !== bDate) return aDate - bDate;
+
+    return a.label.localeCompare(b.label);
+  });
 }
 
-function participationPercent(resident: ResidentListRow) {
-  return resident.attendanceSnapshot.participationPercent30d ?? 0;
+function participationLabel(percent: number | null) {
+  if (percent == null) {
+    return { text: "No Data", tone: "border-zinc-500/45 bg-zinc-500/20 text-zinc-200" };
+  }
+  if (percent >= 70) {
+    return { text: "High Participation", tone: "border-emerald-300/45 bg-emerald-500/12 text-emerald-100" };
+  }
+  if (percent >= 40) {
+    return { text: "Moderate Participation", tone: "border-blue-300/45 bg-blue-500/12 text-blue-100" };
+  }
+  return { text: "Low Participation", tone: "border-amber-300/45 bg-amber-500/12 text-amber-100" };
+}
+
+function admissionDaysAgo(resident: ResidentListRow, now: Date) {
+  const admission = parseIsoDate(resident.admissionDate);
+  if (!admission) return null;
+  return Math.max(0, Math.floor((now.getTime() - admission.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function isNewAdmission(resident: ResidentListRow, now: Date, thresholdDays = 14) {
+  const days = admissionDaysAgo(resident, now);
+  return days != null && days <= thresholdDays;
 }
 
 function matchesResidentFilter(resident: ResidentListRow, filter: ResidentFilterKey) {
   if (filter === "ALL") return true;
-  if (filter === "ACTIVE") {
-    return resident.status === "ACTIVE" || resident.status === "BED_BOUND";
-  }
+  if (filter === "ACTIVE") return resident.status === "ACTIVE" || resident.status === "BED_BOUND";
   if (filter === "BED_BOUND") return resident.status === "BED_BOUND";
   if (filter === "HOSPITAL") return resident.status === "HOSPITALIZED";
   if (filter === "ON_LEAVE") return resident.status === "ON_LEAVE";
@@ -149,19 +360,33 @@ function matchesResidentFilter(resident: ResidentListRow, filter: ResidentFilter
   return true;
 }
 
-function matchesParticipation(resident: ResidentListRow, filter: ParticipationBand) {
+function matchesParticipationFilter(resident: ResidentListRow, filter: ParticipationBand) {
   if (filter === "all") return true;
-  const percent = resident.attendanceSnapshot.participationPercent30d ?? 0;
-  if (filter === "high") return percent >= 70;
-  if (filter === "moderate") return percent >= 40 && percent < 70;
-  return percent < 40;
+  const participation = resident.attendanceSnapshot.participationPercent30d ?? 0;
+  if (filter === "high") return participation >= 70;
+  if (filter === "moderate") return participation >= 40 && participation < 70;
+  return participation < 40;
+}
+
+function nextDueDateMillis(resident: ResidentListRow) {
+  const parsed = parseIsoDate(resident.assessmentSchedule.nextDueDateIso);
+  return parsed ? parsed.getTime() : Number.POSITIVE_INFINITY;
+}
+
+function maxOverdueDays(resident: ResidentListRow) {
+  return Math.max(
+    resident.assessmentSchedule.admission.daysOverdue ?? 0,
+    resident.assessmentSchedule.quarterly.daysOverdue ?? 0,
+    resident.assessmentSchedule.annual.daysOverdue ?? 0,
+    resident.assessmentSchedule.mds.daysOverdue ?? 0
+  );
 }
 
 function sortResidents(rows: ResidentListRow[], sortBy: ResidentSortKey) {
-  const cloned = [...rows];
+  const sorted = [...rows];
 
   if (sortBy === "NAME") {
-    return cloned.sort((a, b) => {
+    return sorted.sort((a, b) => {
       const last = a.lastName.localeCompare(b.lastName, undefined, { sensitivity: "base" });
       if (last !== 0) return last;
       return a.firstName.localeCompare(b.firstName, undefined, { sensitivity: "base" });
@@ -169,229 +394,182 @@ function sortResidents(rows: ResidentListRow[], sortBy: ResidentSortKey) {
   }
 
   if (sortBy === "ADMISSION_NEWEST") {
-    return cloned.sort((a, b) => {
-      const aDate = parseIsoDate(a.admissionDate)?.getTime() ?? 0;
-      const bDate = parseIsoDate(b.admissionDate)?.getTime() ?? 0;
-      return bDate - aDate;
+    return sorted.sort((a, b) => {
+      const aTime = parseIsoDate(a.admissionDate)?.getTime() ?? 0;
+      const bTime = parseIsoDate(b.admissionDate)?.getTime() ?? 0;
+      return bTime - aTime;
     });
   }
 
   if (sortBy === "ADMISSION_OLDEST") {
-    return cloned.sort((a, b) => {
-      const aDate = parseIsoDate(a.admissionDate)?.getTime() ?? Number.POSITIVE_INFINITY;
-      const bDate = parseIsoDate(b.admissionDate)?.getTime() ?? Number.POSITIVE_INFINITY;
-      return aDate - bDate;
+    return sorted.sort((a, b) => {
+      const aTime = parseIsoDate(a.admissionDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+      const bTime = parseIsoDate(b.admissionDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+      return aTime - bTime;
     });
   }
 
   if (sortBy === "NEXT_DUE") {
-    return cloned.sort((a, b) => nextDueDateMillis(a) - nextDueDateMillis(b));
+    return sorted.sort((a, b) => nextDueDateMillis(a) - nextDueDateMillis(b));
   }
 
   if (sortBy === "MOST_OVERDUE") {
-    return cloned.sort((a, b) => maxOverdueDays(b) - maxOverdueDays(a));
+    return sorted.sort((a, b) => maxOverdueDays(b) - maxOverdueDays(a));
   }
 
   if (sortBy === "PARTICIPATION_HIGH") {
-    return cloned.sort((a, b) => participationPercent(b) - participationPercent(a));
+    return sorted.sort((a, b) => (b.attendanceSnapshot.participationPercent30d ?? 0) - (a.attendanceSnapshot.participationPercent30d ?? 0));
   }
 
   if (sortBy === "PARTICIPATION_LOW") {
-    return cloned.sort((a, b) => participationPercent(a) - participationPercent(b));
+    return sorted.sort((a, b) => (a.attendanceSnapshot.participationPercent30d ?? 0) - (b.attendanceSnapshot.participationPercent30d ?? 0));
   }
 
   if (sortBy === "NEEDS_1TO1") {
-    return cloned.sort((a, b) => {
-      const aScore = a.lastOneOnOneAt ? new Date(a.lastOneOnOneAt).getTime() : 0;
-      const bScore = b.lastOneOnOneAt ? new Date(b.lastOneOnOneAt).getTime() : 0;
-      return aScore - bScore;
+    return sorted.sort((a, b) => {
+      const aLast = parseIsoDate(a.lastOneOnOneAt)?.getTime() ?? 0;
+      const bLast = parseIsoDate(b.lastOneOnOneAt)?.getTime() ?? 0;
+      return aLast - bLast;
     });
   }
 
   if (sortBy === "RECENTLY_SEEN") {
-    return cloned.sort((a, b) => {
-      const aScore = a.lastOneOnOneAt ? new Date(a.lastOneOnOneAt).getTime() : -1;
-      const bScore = b.lastOneOnOneAt ? new Date(b.lastOneOnOneAt).getTime() : -1;
-      return bScore - aScore;
+    return sorted.sort((a, b) => {
+      const aLast = parseIsoDate(a.lastOneOnOneAt)?.getTime() ?? 0;
+      const bLast = parseIsoDate(b.lastOneOnOneAt)?.getTime() ?? 0;
+      return bLast - aLast;
     });
   }
 
-  return cloned.sort(compareResidentsByRoom);
+  return sorted.sort(compareResidentsByRoom);
 }
 
-function getResidentDisplayName(resident: ResidentListRow) {
-  return `${resident.firstName} ${resident.lastName}`;
+function splitTextToChips(value: string | null, max = 12) {
+  if (!value) return [];
+  const chips = value
+    .split(/[\n,;|•]/g)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  return chips.slice(0, max);
 }
 
-function toCsvField(value: string | number | null | undefined) {
-  if (value == null) return "";
-  const text = String(value);
-  if (!text.includes(",") && !text.includes("\"") && !text.includes("\n")) {
-    return text;
-  }
-  return `"${text.replaceAll("\"", "\"\"")}"`;
+function primaryResidentSnippet(resident: ResidentListRow) {
+  const source = resident.preferences || resident.notes || resident.bestTimesOfDay || resident.safetyNotes;
+  if (!source) return "Preferences and engagement details can be added from profile editing.";
+  const compact = source.replace(/\s+/g, " ").trim();
+  if (compact.length <= 92) return compact;
+  return `${compact.slice(0, 92)}...`;
 }
 
-function ResidentDirectoryRow({
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  accentClass
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  accentClass: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-[#28416b] bg-[linear-gradient(180deg,#111f38_0%,#0d182c_100%)] p-3 shadow-[0_20px_38px_-30px_rgba(37,99,235,0.8)]">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#97b1dc]">{label}</p>
+        <span className={cn("rounded-lg border p-1.5", accentClass)}>
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+      </div>
+      <p className="mt-2 text-3xl font-black text-white">{value}</p>
+      <p className="mt-1 text-xs text-[#a8bfe7]">{detail}</p>
+    </article>
+  );
+}
+
+function ResidentListItem({
   resident,
-  canEdit,
-  onOpenEdit,
-  onMarkAssessment
+  selected,
+  now,
+  onSelect,
+  onEdit,
+  canEdit
 }: {
   resident: ResidentListRow;
+  selected: boolean;
+  now: Date;
+  onSelect: () => void;
+  onEdit: () => void;
   canEdit: boolean;
-  onOpenEdit: (resident: ResidentListRow) => void;
-  onMarkAssessment: (residentId: string, kind: AssessmentKind) => Promise<void>;
 }) {
-  const participation = resident.attendanceSnapshot.participationPercent30d ?? 0;
-  const needsOneToOne = isNeedsOneOnOne(resident.lastOneOnOneAt, new Date(), 30);
+  const participation = resident.attendanceSnapshot.participationPercent30d;
+  const participationState = participationLabel(participation);
+  const requiresOneToOne = isNeedsOneOnOne(resident.lastOneOnOneAt, now, 30);
+  const isNew = isNewAdmission(resident, now);
 
   return (
-    <article className="rounded-2xl border border-[#24395f] bg-[linear-gradient(180deg,#0f1b33_0%,#0b1427_100%)] p-3 shadow-[0_16px_34px_-24px_rgba(37,99,235,0.7)] transition hover:border-[#325284] hover:bg-[linear-gradient(180deg,#11203b_0%,#0d1830_100%)]">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]">
-        <div className="min-w-0">
-          <div className="flex items-start gap-3">
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-300/35 bg-cyan-500/18 text-sm font-bold text-cyan-100">
-              {resident.firstName[0]}
-              {resident.lastName[0]}
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-semibold text-white">{getResidentDisplayName(resident)}</p>
-                {resident.preferredName ? (
-                  <Badge className="border-violet-400/30 bg-violet-500/16 text-[10px] text-violet-100">“{resident.preferredName}”</Badge>
-                ) : null}
-                <Badge className="border-[#3a5786] bg-[#11203c] text-[10px] text-[#c4d7f8]">Room {resident.room}</Badge>
-                <Badge className="border-[#3a5786] bg-[#11203c] text-[10px] text-[#c4d7f8]">{toResidentStatusLabel(resident.status)}</Badge>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[#9eb4da]">
-                <span>Admission: {formatDateLabel(resident.admissionDate)}</span>
-                <span className="text-[#607cad]">•</span>
-                <span>Length of Stay: {formatLengthOfStay(resident.assessmentSchedule.lengthOfStayDays)}</span>
-                <span className="text-[#607cad]">•</span>
-                <span>Unit: {resident.unitName ?? "Unassigned"}</span>
-              </div>
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "w-full rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60",
+        selected
+          ? "border-cyan-300/60 bg-[linear-gradient(180deg,#15305a_0%,#102347_100%)] shadow-[0_20px_36px_-28px_rgba(45,212,191,0.75)]"
+          : "border-[#2a436e] bg-[linear-gradient(180deg,#0f1c33_0%,#0d182d_100%)] hover:border-[#44679f] hover:bg-[linear-gradient(180deg,#132744_0%,#10203a_100%)]"
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#3f6298] bg-[#10213f] text-sm font-bold text-[#d8e7ff]">
+          {resident.firstName.charAt(0)}
+          {resident.lastName.charAt(0)}
+        </span>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">Admission UDA</p>
-                  <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.admission.dueDateIso)}</p>
-                  <Badge className={cn("mt-1 border text-[10px]", duePillClass(resident.assessmentSchedule.admission.level))}>
-                    {resident.assessmentSchedule.admission.label}
-                  </Badge>
-                </div>
-                <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">Quarterly UDA</p>
-                  <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.quarterly.dueDateIso)}</p>
-                  <Badge className={cn("mt-1 border text-[10px]", duePillClass(resident.assessmentSchedule.quarterly.level))}>
-                    {resident.assessmentSchedule.quarterly.label}
-                  </Badge>
-                </div>
-                <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">Annual UDA</p>
-                  <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.annual.dueDateIso)}</p>
-                  <Badge className={cn("mt-1 border text-[10px]", duePillClass(resident.assessmentSchedule.annual.level))}>
-                    {resident.assessmentSchedule.annual.label}
-                  </Badge>
-                </div>
-                <div className="rounded-xl border border-[#304972] bg-[#0d1830] px-2.5 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8fa7d3]">MDS</p>
-                  <p className="mt-1 text-[11px] text-[#d6e4ff]">{formatMetricDate(resident.assessmentSchedule.mds.dueDateIso)}</p>
-                  <Badge className={cn("mt-1 border text-[10px]", duePillClass(resident.assessmentSchedule.mds.level))}>
-                    {resident.assessmentSchedule.mds.label}
-                  </Badge>
-                </div>
-              </div>
-            </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="truncate text-sm font-semibold text-white">{getResidentName(resident)}</p>
+            {resident.preferredName ? (
+              <Badge className="border-violet-300/45 bg-violet-500/14 text-[10px] text-violet-100">“{resident.preferredName}”</Badge>
+            ) : null}
+            <Badge className="border-[#3f6298] bg-[#10213f] text-[10px] text-[#d3e4ff]">Room {resident.room}</Badge>
+            <Badge className="border-[#3f6298] bg-[#10213f] text-[10px] text-[#d3e4ff]">{toResidentStatusLabel(resident.status)}</Badge>
           </div>
-        </div>
 
-        <div className="min-w-0 rounded-2xl border border-[#2d456f] bg-[#0d182d] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Participation Snapshot</p>
-          <div className="mt-2 flex items-end justify-between gap-2">
-            <p className="text-2xl font-black text-white">{participation}%</p>
-            <p className="text-[11px] text-[#9fb5da]">
-              {resident.attendanceSnapshot.engaged30d}/{resident.attendanceSnapshot.total30d || 0} engaged (30d)
-            </p>
-          </div>
-          <GlowProgressBar value={participation} tone={participation >= 70 ? "emerald" : participation >= 40 ? "sky" : "orange"} className="mt-2" />
+          <p className="mt-2 line-clamp-2 text-xs text-[#a8bfe8]">{primaryResidentSnippet(resident)}</p>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {resident.followUpFlag ? <Badge className="border-amber-300/40 bg-amber-500/16 text-[10px] text-amber-100">Follow-up flagged</Badge> : null}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Badge className={cn("text-[10px]", participationState.tone)}>{participationState.text}</Badge>
             {resident.assessmentFlags.overdueCount > 0 ? (
-              <Badge className="border-rose-300/40 bg-rose-500/16 text-[10px] text-rose-100">Overdue {resident.assessmentFlags.overdueCount}</Badge>
+              <Badge className="border-rose-300/45 bg-rose-500/14 text-[10px] text-rose-100">Overdue {resident.assessmentFlags.overdueCount}</Badge>
             ) : null}
             {resident.assessmentFlags.dueSoonCount > 0 ? (
-              <Badge className="border-blue-300/40 bg-blue-500/16 text-[10px] text-blue-100">Due soon {resident.assessmentFlags.dueSoonCount}</Badge>
+              <Badge className="border-amber-300/45 bg-amber-500/14 text-[10px] text-amber-100">Due soon {resident.assessmentFlags.dueSoonCount}</Badge>
             ) : null}
-            {needsOneToOne ? <Badge className="border-violet-300/40 bg-violet-500/16 text-[10px] text-violet-100">1:1 Needed</Badge> : null}
-          </div>
-        </div>
-
-        <div className="flex min-w-[220px] flex-col justify-between gap-2">
-          <div className="grid grid-cols-2 gap-2">
-            <Button asChild size="sm" variant="outline" className="h-8 justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
-              <Link href={`/app/residents/${resident.id}`}>Open Profile</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="h-8 justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
-              <Link href={`/app/documentation/progress-notes/new?residentId=${resident.id}`}>Progress Note</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="h-8 justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
-              <Link href={`/app/documentation/one-to-one/new?residentId=${resident.id}`}>1:1 Note</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="h-8 justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
-              <Link href={`/app/documentation?residentId=${resident.id}`}>Documentation</Link>
-            </Button>
-          </div>
-
-          <div className="rounded-xl border border-[#314d79] bg-[#0e1b35] p-2">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Mark Assessment Complete</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="rounded-full border border-orange-300/45 bg-orange-500/16 px-2.5 py-1 text-[10px] font-semibold text-orange-100 transition hover:-translate-y-px"
-                onClick={() => void onMarkAssessment(resident.id, "ADMISSION_UDA")}
-                disabled={!canEdit}
-              >
-                Admission
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-amber-300/45 bg-amber-500/16 px-2.5 py-1 text-[10px] font-semibold text-amber-100 transition hover:-translate-y-px"
-                onClick={() => void onMarkAssessment(resident.id, "QUARTERLY_UDA")}
-                disabled={!canEdit}
-              >
-                Quarterly
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-blue-300/45 bg-blue-500/16 px-2.5 py-1 text-[10px] font-semibold text-blue-100 transition hover:-translate-y-px"
-                onClick={() => void onMarkAssessment(resident.id, "ANNUAL_UDA")}
-                disabled={!canEdit}
-              >
-                Annual
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-emerald-300/45 bg-emerald-500/16 px-2.5 py-1 text-[10px] font-semibold text-emerald-100 transition hover:-translate-y-px"
-                onClick={() => void onMarkAssessment(resident.id, "MDS")}
-                disabled={!canEdit}
-              >
-                MDS
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-[#3f6298] bg-[#10223f] px-2.5 py-1 text-[10px] font-semibold text-[#cde0ff] transition hover:-translate-y-px"
-                onClick={() => onOpenEdit(resident)}
-                disabled={!canEdit}
-              >
-                Edit
-              </button>
-            </div>
+            {resident.followUpFlag ? <Badge className="border-blue-300/45 bg-blue-500/14 text-[10px] text-blue-100">Follow-up</Badge> : null}
+            {requiresOneToOne ? <Badge className="border-violet-300/45 bg-violet-500/14 text-[10px] text-violet-100">1:1 Needed</Badge> : null}
+            {isNew ? <Badge className="border-cyan-300/45 bg-cyan-500/14 text-[10px] text-cyan-100">New Admission</Badge> : null}
           </div>
         </div>
       </div>
-    </article>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#2f4a79] pt-2">
+        <p className="text-[11px] text-[#9db5de]">Admission: {formatDateShort(resident.admissionDate)}</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 border-[#3f6298] bg-[#10213f] px-2.5 text-[11px] text-[#d9e7ff] hover:bg-[#19335a]"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEdit();
+          }}
+          disabled={!canEdit}
+        >
+          Edit
+        </Button>
+      </div>
+    </button>
   );
 }
 
@@ -405,312 +583,231 @@ export function ResidentsWorkspace({
   canEdit: boolean;
 }) {
   const { toast } = useToast();
+  const now = useMemo(() => new Date(), []);
+
   const [residents, setResidents] = useState(initialResidents);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ResidentFilterKey>("ACTIVE");
   const [sortBy, setSortBy] = useState<ResidentSortKey>("ROOM");
   const [unitFilter, setUnitFilter] = useState<string>("all");
-  const [admissionMonthFilter, setAdmissionMonthFilter] = useState<string>("all");
   const [participationFilter, setParticipationFilter] = useState<ParticipationBand>("all");
-  const [addEditOpen, setAddEditOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [editingResident, setEditingResident] = useState<ResidentListRow | null>(null);
-  const [isMarking, startMarkingTransition] = useTransition();
-  const [quickFilterOpen, setQuickFilterOpen] = useState(false);
+  const [admissionMonthFilter, setAdmissionMonthFilter] = useState<string>("all");
+  const [profileTab, setProfileTab] = useState<ProfileTab>("overview");
+  const [selectedResidentId, setSelectedResidentId] = useState<string | null>(initialResidents[0]?.id ?? null);
 
+  const [addEditOpen, setAddEditOpen] = useState(false);
+  const [editingResident, setEditingResident] = useState<ResidentListRow | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [isMarking, startMarkingTransition] = useTransition();
+
+  const queryAppliedRef = useRef(false);
   const deferredSearch = useDeferredValue(search);
-  const scrollParentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    setResidents(initialResidents);
+  }, [initialResidents]);
+
+  useEffect(() => {
+    if (queryAppliedRef.current) return;
+    queryAppliedRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
+
+    const filterParam = params.get("filter");
+    if (filterParam && RESIDENT_FILTER_OPTIONS.some((option) => option.value === filterParam)) {
+      setFilter(filterParam as ResidentFilterKey);
+    }
+
+    const residentParam = params.get("residentId");
+    if (residentParam) {
+      setSelectedResidentId(residentParam);
+    }
+
     const editResidentId = params.get("edit");
     if (!editResidentId) return;
-    const match = residents.find((resident) => resident.id === editResidentId);
+
+    const match = initialResidents.find((resident) => resident.id === editResidentId);
     if (!match) return;
+
     setEditingResident(match);
     setAddEditOpen(true);
+
     params.delete("edit");
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
     window.history.replaceState({}, "", nextUrl);
-  }, [residents]);
-
-  const activeResidents = useMemo(
-    () => residents.filter((resident) => resident.status !== "DISCHARGED" && resident.status !== "DECEASED"),
-    [residents]
-  );
+  }, [initialResidents]);
 
   const monthOptions = useMemo(() => {
-    const monthSet = new Set<string>();
+    const options = new Set<string>();
 
     residents.forEach((resident) => {
-      const date = parseIsoDate(resident.admissionDate);
-      if (!date) return;
-      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      monthSet.add(month);
+      const admission = parseIsoDate(resident.admissionDate);
+      if (!admission) return;
+      const key = `${admission.getFullYear()}-${String(admission.getMonth() + 1).padStart(2, "0")}`;
+      options.add(key);
     });
 
-    return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+    return Array.from(options).sort((a, b) => b.localeCompare(a));
   }, [residents]);
+
+  const filteredResidents = useMemo(() => {
+    const token = deferredSearch.trim().toLowerCase();
+
+    const rows = residents.filter((resident) => {
+      if (!matchesResidentFilter(resident, filter)) return false;
+      if (unitFilter !== "all" && resident.unitId !== unitFilter) return false;
+      if (!matchesParticipationFilter(resident, participationFilter)) return false;
+
+      if (admissionMonthFilter !== "all") {
+        const admission = parseIsoDate(resident.admissionDate);
+        const month = admission ? `${admission.getFullYear()}-${String(admission.getMonth() + 1).padStart(2, "0")}` : null;
+        if (!month || month !== admissionMonthFilter) return false;
+      }
+
+      if (!token) return true;
+
+      const searchableParts = [
+        getResidentName(resident),
+        `${resident.lastName}, ${resident.firstName}`,
+        resident.preferredName ?? "",
+        resident.room,
+        resident.unitName ?? "",
+        toResidentStatusLabel(resident.status),
+        resident.preferences ?? "",
+        resident.notes ?? "",
+        resident.bestTimesOfDay ?? ""
+      ];
+
+      return searchableParts.some((value) => value.toLowerCase().includes(token));
+    });
+
+    return sortResidents(rows, sortBy);
+  }, [admissionMonthFilter, deferredSearch, filter, participationFilter, residents, sortBy, unitFilter]);
+
+  useEffect(() => {
+    if (filteredResidents.length === 0) {
+      setSelectedResidentId(null);
+      return;
+    }
+
+    if (!selectedResidentId || !filteredResidents.some((resident) => resident.id === selectedResidentId)) {
+      setSelectedResidentId(filteredResidents[0].id);
+    }
+  }, [filteredResidents, selectedResidentId]);
+
+  const selectedResident = useMemo(() => {
+    if (!selectedResidentId) return null;
+    return residents.find((resident) => resident.id === selectedResidentId) ?? null;
+  }, [residents, selectedResidentId]);
+
+  const selectedDueItems = useMemo(() => {
+    if (!selectedResident) return [];
+    return buildResidentDueItems(selectedResident, now);
+  }, [now, selectedResident]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search.trim()) count += 1;
     if (filter !== "ACTIVE") count += 1;
     if (unitFilter !== "all") count += 1;
-    if (admissionMonthFilter !== "all") count += 1;
     if (participationFilter !== "all") count += 1;
+    if (admissionMonthFilter !== "all") count += 1;
     if (sortBy !== "ROOM") count += 1;
     return count;
   }, [admissionMonthFilter, filter, participationFilter, search, sortBy, unitFilter]);
 
-  function clearFilters() {
-    setSearch("");
-    setFilter("ACTIVE");
-    setUnitFilter("all");
-    setAdmissionMonthFilter("all");
-    setParticipationFilter("all");
-    setSortBy("ROOM");
-  }
-
-  function toggleQuickFilter(value: ResidentFilterKey) {
-    setFilter((current) => {
-      if (current === value) return "ACTIVE";
-      return value;
-    });
-  }
-
-  const visibleResidents = useMemo(() => {
-    const token = deferredSearch.trim().toLowerCase();
-
-    const filtered = residents.filter((resident) => {
-      if (!matchesResidentFilter(resident, filter)) return false;
-      if (unitFilter !== "all" && resident.unitId !== unitFilter) return false;
-      if (admissionMonthFilter !== "all") {
-        const admission = parseIsoDate(resident.admissionDate);
-        const month = admission ? `${admission.getFullYear()}-${String(admission.getMonth() + 1).padStart(2, "0")}` : null;
-        if (!month || month !== admissionMonthFilter) return false;
-      }
-      if (!matchesParticipation(resident, participationFilter)) return false;
-
-      if (!token) return true;
-      const name = `${resident.firstName} ${resident.lastName}`.toLowerCase();
-      const reverseName = `${resident.lastName}, ${resident.firstName}`.toLowerCase();
-      const preferredName = (resident.preferredName ?? "").toLowerCase();
-      const status = toResidentStatusLabel(resident.status).toLowerCase();
-      const unit = (resident.unitName ?? "").toLowerCase();
-      const admission = formatDateLabel(resident.admissionDate).toLowerCase();
-
-      return (
-        name.includes(token) ||
-        reverseName.includes(token) ||
-        preferredName.includes(token) ||
-        status.includes(token) ||
-        unit.includes(token) ||
-        admission.includes(token) ||
-        resident.room.toLowerCase().includes(token)
-      );
-    });
-
-    return sortResidents(filtered, sortBy);
-  }, [admissionMonthFilter, deferredSearch, filter, participationFilter, residents, sortBy, unitFilter]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: visibleResidents.length,
-    getScrollElement: () => scrollParentRef.current,
-    estimateSize: () => 210,
-    overscan: 10
-  });
-
   const summary = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const activeResidents = residents.filter((resident) => resident.status !== "DISCHARGED" && resident.status !== "DECEASED");
 
-    const totalResidents = residents.length;
-    const activeCensus = residents.filter((resident) => resident.status === "ACTIVE" || resident.status === "BED_BOUND").length;
-    const archivedCount = residents.filter(
-      (resident) => resident.status === "DISCHARGED" || resident.status === "DECEASED" || resident.status === "TRANSFERRED"
-    ).length;
-    const newAdmissionsThisMonth = residents.filter((resident) => {
-      const admission = parseIsoDate(resident.admissionDate);
-      return admission ? admission >= monthStart : false;
-    }).length;
+    const dueThisWeek = activeResidents.filter((resident) => {
+      const statuses = [
+        resident.assessmentSchedule.admission,
+        resident.assessmentSchedule.quarterly,
+        resident.assessmentSchedule.annual,
+        resident.assessmentSchedule.mds
+      ];
 
-    const assessmentsDueThisWeek = activeResidents.filter((resident) => {
-      const due = parseIsoDate(resident.assessmentSchedule.nextDueDateIso);
-      if (!due) return false;
-      const diff = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diff >= 0 && diff <= 7;
-    }).length;
-
-    const overdueAssessments = activeResidents.filter((resident) => resident.assessmentFlags.overdueCount > 0).length;
-    const documentationCurrent = activeResidents.filter((resident) => resident.assessmentFlags.overdueCount === 0).length;
-
-    const due7 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
       return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 7);
     }).length;
 
-    const due14 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
-      return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 14);
+    const newAdmissions = activeResidents.filter((resident) => isNewAdmission(resident, now)).length;
+
+    const followUpNeeded = activeResidents.filter((resident) => {
+      const lowParticipation = (resident.attendanceSnapshot.participationPercent30d ?? 0) < 40;
+      const needsOneToOne = isNeedsOneOnOne(resident.lastOneOnOneAt, now, 30);
+      return resident.followUpFlag || resident.assessmentFlags.overdueCount > 0 || needsOneToOne || lowParticipation;
     }).length;
 
-    const due30 = activeResidents.filter((resident) => {
-      const statuses = [resident.assessmentSchedule.admission, resident.assessmentSchedule.quarterly, resident.assessmentSchedule.annual, resident.assessmentSchedule.mds];
-      return statuses.some((status) => status.daysUntil != null && status.daysUntil >= 0 && status.daysUntil <= 30);
-    }).length;
-
-    const assessmentHealth = {
-      quarterly:
-        activeResidents.length === 0
-          ? 100
-          : Math.round(
-              (activeResidents.filter((resident) => resident.assessmentSchedule.quarterly.level !== "OVERDUE").length /
-                activeResidents.length) *
-                100
-            ),
-      admission:
-        activeResidents.length === 0
-          ? 100
-          : Math.round(
-              (activeResidents.filter((resident) => resident.assessmentSchedule.admission.level !== "OVERDUE").length /
-                activeResidents.length) *
-                100
-            ),
-      annual:
-        activeResidents.length === 0
-          ? 100
-          : Math.round(
-              (activeResidents.filter((resident) => resident.assessmentSchedule.annual.level !== "OVERDUE").length /
-                activeResidents.length) *
-                100
-            ),
-      mds:
-        activeResidents.length === 0
-          ? 100
-          : Math.round(
-              (activeResidents.filter((resident) => resident.assessmentSchedule.mds.level !== "OVERDUE").length /
-                activeResidents.length) *
-                100
-            )
-    };
+    const highEngagement = activeResidents.filter((resident) => (resident.attendanceSnapshot.participationPercent30d ?? 0) >= 70).length;
 
     return {
-      totalResidents,
-      activeCensus,
-      newAdmissionsThisMonth,
-      assessmentsDueThisWeek,
-      overdueAssessments,
-      archivedCount,
-      documentationCurrent,
-      documentationCurrentPercent:
-        activeResidents.length === 0 ? 100 : Math.round((documentationCurrent / activeResidents.length) * 100),
-      due7,
-      due14,
-      due30,
-      assessmentHealth
+      totalResidents: activeResidents.length,
+      dueThisWeek,
+      newAdmissions,
+      followUpNeeded,
+      highEngagement
     };
-  }, [activeResidents, residents]);
+  }, [now, residents]);
 
-  const upcomingEntries = useMemo(() => {
-    const rows: Array<{
-      residentId: string;
-      residentName: string;
-      room: string;
-      type: string;
-      dueDateIso: string;
-      daysUntil: number;
-      level: AssessmentDueLevel;
-    }> = [];
-
-    for (const resident of residents) {
-      const pairs = [
-        { type: "Admission UDA", status: resident.assessmentSchedule.admission },
-        { type: "Quarterly UDA", status: resident.assessmentSchedule.quarterly },
-        { type: "Annual UDA", status: resident.assessmentSchedule.annual },
-        { type: "MDS", status: resident.assessmentSchedule.mds }
-      ];
-
-      for (const pair of pairs) {
-        if (!pair.status.dueDateIso || pair.status.daysUntil == null) continue;
-        if (pair.status.daysUntil < 0 || pair.status.daysUntil > 30) continue;
-        rows.push({
+  const globalDueQueue = useMemo(() => {
+    return residents
+      .flatMap((resident) =>
+        buildResidentDueItems(resident, now).map((item) => ({
+          ...item,
           residentId: resident.id,
-          residentName: getResidentDisplayName(resident),
-          room: resident.room,
-          type: pair.type,
-          dueDateIso: pair.status.dueDateIso,
-          daysUntil: pair.status.daysUntil,
-          level: pair.status.level
-        });
-      }
-    }
+          residentName: getResidentName(resident),
+          room: resident.room
+        }))
+      )
+      .filter((entry) => entry.level === "OVERDUE" || isDueSoon(entry.level))
+      .sort((a, b) => {
+        const priorityDelta = duePriority(a.level) - duePriority(b.level);
+        if (priorityDelta !== 0) return priorityDelta;
 
-    return rows.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 28);
-  }, [residents]);
-
-  const overdueEntries = useMemo(() => {
-    const rows: Array<{
-      residentId: string;
-      residentName: string;
-      room: string;
-      type: string;
-      dueDateIso: string;
-      daysOverdue: number;
-    }> = [];
-
-    for (const resident of residents) {
-      const pairs = [
-        { type: "Admission UDA", status: resident.assessmentSchedule.admission },
-        { type: "Quarterly UDA", status: resident.assessmentSchedule.quarterly },
-        { type: "Annual UDA", status: resident.assessmentSchedule.annual },
-        { type: "MDS", status: resident.assessmentSchedule.mds }
-      ];
-
-      for (const pair of pairs) {
-        if (!pair.status.dueDateIso || pair.status.daysOverdue == null || pair.status.daysOverdue <= 0) continue;
-        rows.push({
-          residentId: resident.id,
-          residentName: getResidentDisplayName(resident),
-          room: resident.room,
-          type: pair.type,
-          dueDateIso: pair.status.dueDateIso,
-          daysOverdue: pair.status.daysOverdue
-        });
-      }
-    }
-
-    return rows.sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, 18);
-  }, [residents]);
+        const aDate = parseIsoDate(a.dueDateIso)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const bDate = parseIsoDate(b.dueDateIso)?.getTime() ?? Number.POSITIVE_INFINITY;
+        return aDate - bDate;
+      })
+      .slice(0, 16);
+  }, [now, residents]);
 
   const recentAdmissions = useMemo(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 45);
-
     return residents
-      .filter((resident) => {
-        const admission = parseIsoDate(resident.admissionDate);
-        return admission ? admission >= cutoff : false;
-      })
+      .filter((resident) => isNewAdmission(resident, now, 45))
       .sort((a, b) => {
-        const aDate = parseIsoDate(a.admissionDate)?.getTime() ?? 0;
-        const bDate = parseIsoDate(b.admissionDate)?.getTime() ?? 0;
-        return bDate - aDate;
+        const aTime = parseIsoDate(a.admissionDate)?.getTime() ?? 0;
+        const bTime = parseIsoDate(b.admissionDate)?.getTime() ?? 0;
+        return bTime - aTime;
       })
-      .slice(0, 10);
-  }, [residents]);
+      .slice(0, 8);
+  }, [now, residents]);
+
+  function clearFilters() {
+    setSearch("");
+    setFilter("ACTIVE");
+    setSortBy("ROOM");
+    setUnitFilter("all");
+    setParticipationFilter("all");
+    setAdmissionMonthFilter("all");
+  }
+
+  function openAddResident() {
+    setEditingResident(null);
+    setAddEditOpen(true);
+  }
 
   async function refreshResidents() {
     const response = await fetch("/api/residents?includeAll=true", { cache: "no-store" });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body?.error ?? "Could not refresh residents.");
-    setResidents(body.residents as ResidentListRow[]);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error ?? "Could not refresh resident records.");
+    setResidents((payload.residents as ResidentListRow[]) ?? []);
   }
 
   async function upsertResident(payload: ResidentUpsertPayload, residentId?: string) {
     const endpoint = residentId ? `/api/residents/${encodeURIComponent(residentId)}` : "/api/residents";
     const method = residentId ? "PATCH" : "POST";
+
     const response = await fetch(endpoint, {
       method,
       headers: {
@@ -718,15 +815,19 @@ export function ResidentsWorkspace({
       },
       body: JSON.stringify(payload)
     });
+
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body?.error ?? "Could not save resident.");
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Could not save resident.");
+    }
 
     const nextResident = body?.resident as ResidentListRow | undefined;
     if (nextResident?.id) {
-      setResidents((previous) => {
-        const without = previous.filter((resident) => resident.id !== nextResident.id);
-        return [...without, nextResident];
+      setResidents((current) => {
+        const withoutTarget = current.filter((resident) => resident.id !== nextResident.id);
+        return [...withoutTarget, nextResident];
       });
+      setSelectedResidentId(nextResident.id);
       return;
     }
 
@@ -736,11 +837,17 @@ export function ResidentsWorkspace({
   async function importResidents(rows: Array<{ firstName: string; lastName: string; room: string; status: string; notes?: string }>) {
     const response = await fetch("/api/residents/import", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json"
+      },
       body: JSON.stringify({ rows })
     });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body?.error ?? "Could not import residents.");
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Could not import residents.");
+    }
+
     await refreshResidents();
     toast({
       title: "Import complete",
@@ -782,7 +889,7 @@ export function ResidentsWorkspace({
       } catch (error) {
         toast({
           title: "Could not update assessment",
-          description: error instanceof Error ? error.message : "Try again.",
+          description: error instanceof Error ? error.message : "Please try again.",
           variant: "destructive"
         });
       }
@@ -796,18 +903,16 @@ export function ResidentsWorkspace({
       "Preferred Name",
       "Room",
       "Status",
+      "Participation %",
       "Admission Date",
-      "Quarterly Due",
-      "Annual Due",
-      "Admission UDA Due",
-      "MDS Due",
-      "Participation % (30d)",
-      "Overdue Count"
+      "Next Due",
+      "Overdue Count",
+      "Follow Up Flag"
     ];
 
     const lines = [headers.join(",")];
 
-    visibleResidents.forEach((resident) => {
+    filteredResidents.forEach((resident) => {
       lines.push(
         [
           resident.firstName,
@@ -815,13 +920,11 @@ export function ResidentsWorkspace({
           resident.preferredName,
           resident.room,
           formatResidentStatusLabel(resident.status),
-          formatDateLabel(resident.admissionDate),
-          formatDateLabel(resident.assessmentSchedule.quarterly.dueDateIso),
-          formatDateLabel(resident.assessmentSchedule.annual.dueDateIso),
-          formatDateLabel(resident.assessmentSchedule.admission.dueDateIso),
-          formatDateLabel(resident.assessmentSchedule.mds.dueDateIso),
           resident.attendanceSnapshot.participationPercent30d ?? 0,
-          resident.assessmentFlags.overdueCount
+          formatDate(resident.admissionDate),
+          formatDate(resident.assessmentSchedule.nextDueDateIso),
+          resident.assessmentFlags.overdueCount,
+          resident.followUpFlag ? "Yes" : "No"
         ]
           .map((value) => toCsvField(value))
           .join(",")
@@ -830,10 +933,10 @@ export function ResidentsWorkspace({
 
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
+
     const link = document.createElement("a");
     link.href = url;
-    const today = new Date();
-    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const stamp = new Date().toISOString().slice(0, 10);
     link.download = `actify-residents-${stamp}.csv`;
     document.body.appendChild(link);
     link.click();
@@ -841,21 +944,19 @@ export function ResidentsWorkspace({
     URL.revokeObjectURL(url);
   }
 
-  function openAddResident() {
-    setEditingResident(null);
-    setAddEditOpen(true);
-  }
+  const selectedParticipation = selectedResident?.attendanceSnapshot.participationPercent30d ?? 0;
+  const selectedParticipationState = participationLabel(selectedResident?.attendanceSnapshot.participationPercent30d ?? null);
 
   return (
-    <div className="relative isolate overflow-hidden rounded-[2rem] border border-[#1a2a48] bg-[#040814] px-3 pb-6 pt-4 md:px-5">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_520px_at_-8%_0%,rgba(56,189,248,0.18),transparent_62%),radial-gradient(980px_420px_at_95%_0%,rgba(139,92,246,0.24),transparent_62%),radial-gradient(800px_380px_at_45%_100%,rgba(59,130,246,0.14),transparent_72%)]" />
+    <div className="relative isolate overflow-hidden rounded-[2rem] border border-[#1e3255] bg-[#060c1a] px-3 pb-6 pt-4 md:px-5">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_520px_at_-4%_0%,rgba(56,189,248,0.18),transparent_58%),radial-gradient(940px_420px_at_96%_0%,rgba(139,92,246,0.22),transparent_58%),radial-gradient(880px_460px_at_60%_100%,rgba(37,99,235,0.18),transparent_66%)]" />
 
       <div className="relative z-10 space-y-4">
         <TopContentHeader
-          eyebrow="Resident Command Center"
+          eyebrow="Resident Management"
           title="Residents"
-          subtitle="Manage resident profiles, participation, documentation, and assessment due dates from one workspace."
-          icon={UserRound}
+          subtitle="Manage resident profiles, engagement, documentation due dates, and follow-up actions from one calm workspace."
+          icon={Users}
           accentGradientClasses="from-cyan-300 via-blue-400 to-indigo-500"
           actions={
             <>
@@ -865,7 +966,7 @@ export function ResidentsWorkspace({
                 disabled={!canEdit}
                 className="h-10 rounded-full border border-cyan-300/50 bg-cyan-500/20 px-4 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/30"
               >
-                <UserPlus className="h-4 w-4" />
+                <UserPlus className="mr-1.5 h-4 w-4" aria-hidden />
                 Add Resident
               </Button>
               <Button
@@ -875,7 +976,7 @@ export function ResidentsWorkspace({
                 onClick={() => setImportOpen(true)}
                 disabled={!canEdit}
               >
-                <Upload className="h-4 w-4" />
+                <Upload className="mr-1.5 h-4 w-4" aria-hidden />
                 Import Residents
               </Button>
               <Button
@@ -884,7 +985,7 @@ export function ResidentsWorkspace({
                 className="h-10 border-[#3b5d90] bg-[#122342] text-[#d4e5ff] hover:bg-[#193055]"
                 onClick={exportVisibleResidents}
               >
-                <Download className="h-4 w-4" />
+                <Download className="mr-1.5 h-4 w-4" aria-hidden />
                 Export
               </Button>
             </>
@@ -897,128 +998,101 @@ export function ResidentsWorkspace({
               disabled={!canEdit}
               className="h-9 rounded-full border border-cyan-300/50 bg-cyan-500/20 px-4 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/30"
             >
-              <Plus className="mr-1 h-3.5 w-3.5" />
+              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
               Add Resident
+            </Button>
+            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
+              <Link href="/app/documentation">Open Documentation</Link>
+            </Button>
+            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
+              <Link href="/app/attendance">Open Attendance</Link>
             </Button>
             <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
               <Link href="/app/residents/archive">Archived Residents</Link>
             </Button>
-            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
-              <Link href="/app/documentation/uda">Quarterly UDA Queue</Link>
-            </Button>
-            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
-              <Link href="/app/documentation/uda?assessmentType=ADMISSION">Admission UDA Queue</Link>
-            </Button>
-            <Button asChild variant="outline" className="h-9 rounded-full border-[#3b5d90] bg-[#122342] px-4 text-xs text-[#d4e5ff] hover:bg-[#193055]">
-              <Link href="/app/documentation/mds">MDS Queue</Link>
-            </Button>
           </div>
         </TopContentHeader>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {[
-            { label: "Total Residents", value: summary.totalResidents, icon: UserRound, tone: "text-cyan-100" },
-            { label: "Active Census", value: summary.activeCensus, icon: CircleAlert, tone: "text-emerald-100" },
-            { label: "New Admissions", value: summary.newAdmissionsThisMonth, icon: UserPlus, tone: "text-blue-100" },
-            { label: "Due This Week", value: summary.assessmentsDueThisWeek, icon: Clock3, tone: "text-amber-100" },
-            { label: "Overdue", value: summary.overdueAssessments, icon: AlertTriangle, tone: "text-rose-100" },
-            { label: "Archived", value: summary.archivedCount, icon: FileText, tone: "text-zinc-200" }
-          ].map((item) => {
-            const Icon = item.icon;
-            return (
-              <article
-                key={item.label}
-                className="rounded-2xl border border-[#24395f] bg-[linear-gradient(180deg,#0f1b33_0%,#0b1427_100%)] p-3 shadow-[0_14px_30px_-24px_rgba(37,99,235,0.7)]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#92a9d4]">{item.label}</p>
-                  <Icon className={cn("h-4 w-4", item.tone)} />
-                </div>
-                <p className="mt-2 text-2xl font-black text-white">{item.value}</p>
-              </article>
-            );
-          })}
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryCard
+            icon={Users}
+            label="Total Residents"
+            value={String(summary.totalResidents)}
+            detail="Active resident census in this workspace"
+            accentClass="border-cyan-300/45 bg-cyan-500/14 text-cyan-100"
+          />
+          <SummaryCard
+            icon={Clock3}
+            label="Due This Week"
+            value={String(summary.dueThisWeek)}
+            detail="Residents with due/overdue UDA, MDS, or 1:1"
+            accentClass="border-amber-300/45 bg-amber-500/14 text-amber-100"
+          />
+          <SummaryCard
+            icon={UserPlus}
+            label="New Admissions"
+            value={String(summary.newAdmissions)}
+            detail="Admitted in the last 14 days"
+            accentClass="border-blue-300/45 bg-blue-500/14 text-blue-100"
+          />
+          <SummaryCard
+            icon={Flag}
+            label="Follow-Up Needed"
+            value={String(summary.followUpNeeded)}
+            detail="Flagged by participation, due logic, or 1:1 gap"
+            accentClass="border-violet-300/45 bg-violet-500/14 text-violet-100"
+          />
+          <SummaryCard
+            icon={Sparkles}
+            label="High Engagement"
+            value={String(summary.highEngagement)}
+            detail="Residents at 70%+ participation in 30 days"
+            accentClass="border-emerald-300/45 bg-emerald-500/14 text-emerald-100"
+          />
         </section>
 
-        <section className="rounded-2xl border border-[#213457] bg-[linear-gradient(180deg,#0f1a2f_0%,#0b1426_100%)] p-4">
+        <section className="rounded-2xl border border-[#223a60] bg-[linear-gradient(180deg,#111f38_0%,#0c162b_100%)] p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Resident Search & Filters</p>
-              <p className="text-sm text-[#c7d9f8]">Search by resident, room, status, unit, admission month, and participation.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#98b2dc]">Resident Search & Filters</p>
+              <p className="text-sm text-[#c8daf7]">Find residents quickly by room, due status, participation, and admission timing.</p>
             </div>
             <div className="flex items-center gap-2">
               {activeFilterCount > 0 ? (
-                <Badge className="border-cyan-300/40 bg-cyan-500/16 text-cyan-100">{activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}</Badge>
+                <Badge className="border-cyan-300/45 bg-cyan-500/16 text-cyan-100">
+                  {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active
+                </Badge>
               ) : (
-                <Badge className="border-[#3a5688] bg-[#11203a] text-[#c6d9fa]">Default view</Badge>
+                <Badge className="border-[#3b5d8f] bg-[#11203a] text-[#c6d9fb]">Default view</Badge>
               )}
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 border-[#395b90] bg-[#122342] text-xs text-[#d4e5ff] hover:bg-[#193055]"
-                onClick={() => setQuickFilterOpen((current) => !current)}
-              >
-                <Filter className="mr-1 h-3.5 w-3.5" />
-                Quick Filters
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 border-[#395b90] bg-[#122342] text-xs text-[#d4e5ff] hover:bg-[#193055]"
+                className="h-9 border-[#3b5d90] bg-[#122342] text-xs text-[#d4e5ff] hover:bg-[#193055]"
                 onClick={clearFilters}
                 disabled={activeFilterCount === 0}
               >
+                <Filter className="mr-1 h-3.5 w-3.5" aria-hidden />
                 Reset
               </Button>
             </div>
           </div>
 
-          {quickFilterOpen ? (
-            <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-[#2c4674] bg-[#0d1a31] p-2.5">
-              {[
-                { value: "ACTIVE", label: "Active" },
-                { value: "OVERDUE", label: "Overdue" },
-                { value: "DUE_SOON", label: "Due Soon" },
-                { value: "QUARTERLY_DUE", label: "Quarterly Due" },
-                { value: "ANNUAL_DUE", label: "Annual Due" },
-                { value: "MDS_DUE", label: "MDS Due" },
-                { value: "DISCHARGED", label: "Discharged" }
-              ].map((quick) => (
-                <button
-                  key={quick.value}
-                  type="button"
-                  onClick={() => toggleQuickFilter(quick.value as ResidentFilterKey)}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                    filter === quick.value
-                      ? "border-cyan-300/55 bg-cyan-500/18 text-cyan-100"
-                      : "border-[#375888] bg-[#10203b] text-[#cce0ff] hover:bg-[#163055]"
-                  )}
-                >
-                  {quick.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           <div className="grid gap-3 lg:grid-cols-12">
-            <label className="group relative flex h-11 items-center rounded-xl border border-[#2f456e] bg-[#0f1a30] px-3 transition focus-within:border-[#4c6ea7] focus-within:bg-[#13203a] lg:col-span-4">
-              <Search className="h-4 w-4 shrink-0 text-[#9bb3db]" />
+            <label className="group relative flex h-11 items-center rounded-xl border border-[#2f456e] bg-[#0f1a30] px-3 transition focus-within:border-[#4f74aa] focus-within:bg-[#13203a] lg:col-span-4">
+              <Search className="h-4 w-4 shrink-0 text-[#9db4dd]" aria-hidden />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search residents by name, room, status, or admission date"
-                className="h-full flex-1 border-none bg-transparent px-2 text-sm text-[#dce8ff] placeholder:text-[#9fb4da] focus-visible:ring-0"
+                placeholder="Search by resident name, room, preference, or notes"
+                className="h-full flex-1 border-none bg-transparent px-2 text-sm text-[#dce9ff] placeholder:text-[#9eb4da] focus-visible:ring-0"
               />
-              <span className="ml-2 hidden rounded-md border border-[#35537f] bg-[#10213f] px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-[#c5d6f4] lg:inline-flex">
-                LIVE
-              </span>
             </label>
 
             <div className="lg:col-span-2">
               <Select value={filter} onValueChange={(value) => setFilter(value as ResidentFilterKey)}>
                 <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                  <Filter className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <ListFilter className="mr-1 h-4 w-4 text-[#9ab1da]" aria-hidden />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1050,7 +1124,7 @@ export function ResidentsWorkspace({
             <div className="lg:col-span-2">
               <Select value={admissionMonthFilter} onValueChange={setAdmissionMonthFilter}>
                 <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                  <CalendarClock className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <CalendarClock className="mr-1 h-4 w-4 text-[#9ab1da]" aria-hidden />
                   <SelectValue placeholder="Admission Month" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1084,7 +1158,7 @@ export function ResidentsWorkspace({
             <div className="lg:col-span-2">
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as ResidentSortKey)}>
                 <SelectTrigger className="h-10 border-[#35517f] bg-[#11203c] text-[#dce8ff]">
-                  <ArrowDownWideNarrow className="mr-1 h-4 w-4 text-[#9ab1da]" />
+                  <LayoutGrid className="mr-1 h-4 w-4 text-[#9ab1da]" aria-hidden />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1099,228 +1173,649 @@ export function ResidentsWorkspace({
           </div>
         </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-4">
-            <section className="rounded-2xl border border-[#223a5f] bg-[linear-gradient(180deg,#10203c_0%,#0b1528_100%)] p-4 shadow-[0_18px_38px_-28px_rgba(56,189,248,0.7)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#95aed9]">Residents Overview</p>
-                  <h2 className="mt-1 text-2xl font-black text-white">{summary.activeCensus} Active Residents</h2>
-                  <p className="mt-1 text-sm text-[#acc1e4]">{summary.newAdmissionsThisMonth} admitted this month • {summary.documentationCurrentPercent}% documentation current</p>
-                </div>
-                <Badge className="border-emerald-300/40 bg-emerald-500/16 text-emerald-100">
-                  {summary.documentationCurrent}/{activeResidents.length || 0} up to date
-                </Badge>
+        <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+          <aside className="rounded-2xl border border-[#21385d] bg-[linear-gradient(180deg,#0f1b31_0%,#0b1527_100%)] p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9bb5de]">Resident Directory</p>
+                <p className="text-sm text-[#c6d9f8]">
+                  {filteredResidents.length} resident{filteredResidents.length === 1 ? "" : "s"} in view
+                </p>
               </div>
+              {isMarking ? <Badge className="border-blue-300/40 bg-blue-500/16 text-blue-100">Updating…</Badge> : null}
+            </div>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <div className="rounded-xl border border-[#34527f] bg-[#11203a] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#95aed9]">Due windows</p>
-                  <p className="mt-1 text-sm text-[#d8e6ff]">7d: {summary.due7} • 14d: {summary.due14} • 30d: {summary.due30}</p>
-                </div>
-                <div className="rounded-xl border border-[#34527f] bg-[#11203a] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#95aed9]">Overdue Residents</p>
-                  <p className="mt-1 text-2xl font-black text-rose-100">{summary.overdueAssessments}</p>
-                </div>
-                <div className="rounded-xl border border-[#34527f] bg-[#11203a] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#95aed9]">New Admissions</p>
-                  <p className="mt-1 text-2xl font-black text-blue-100">{summary.newAdmissionsThisMonth}</p>
-                </div>
+            {filteredResidents.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#3a5688] bg-[#0d1a31] p-8 text-center">
+                <p className="text-base font-semibold text-white">No residents match these filters.</p>
+                <p className="mt-1 text-sm text-[#98b0da]">Try adjusting filters or clearing search terms.</p>
               </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
-                    <span>Admission UDA Health</span>
-                    <span>{summary.assessmentHealth.admission}%</span>
-                  </div>
-                  <GlowProgressBar value={summary.assessmentHealth.admission} tone="orange" />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
-                    <span>Quarterly UDA Health</span>
-                    <span>{summary.assessmentHealth.quarterly}%</span>
-                  </div>
-                  <GlowProgressBar value={summary.assessmentHealth.quarterly} tone="orange" />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
-                    <span>Annual UDA Health</span>
-                    <span>{summary.assessmentHealth.annual}%</span>
-                  </div>
-                  <GlowProgressBar value={summary.assessmentHealth.annual} tone="sky" />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-[11px] text-[#9db5df]">
-                    <span>MDS Tracking Health</span>
-                    <span>{summary.assessmentHealth.mds}%</span>
-                  </div>
-                  <GlowProgressBar value={summary.assessmentHealth.mds} tone="emerald" />
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#213457] bg-[linear-gradient(180deg,#0e192f_0%,#0a1324_100%)] p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8fa7d3]">Resident Directory</p>
-                  <p className="text-sm text-[#c6d8f8]">{visibleResidents.length} resident{visibleResidents.length === 1 ? "" : "s"} in view</p>
-                </div>
-                {isMarking ? <Badge className="border-blue-300/40 bg-blue-500/16 text-blue-100">Updating…</Badge> : null}
-              </div>
-
-              {visibleResidents.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[#3a5688] bg-[#0d1a31] p-10 text-center">
-                  <p className="text-base font-semibold text-white">No residents match these filters.</p>
-                  <p className="mt-1 text-sm text-[#97afd8]">Try adjusting status, due-date filters, or search terms.</p>
-                </div>
-              ) : (
-                <div ref={scrollParentRef} className="max-h-[74vh] overflow-y-auto pr-1">
-                  <div
-                    className="relative"
-                    style={{
-                      height: `${rowVirtualizer.getTotalSize()}px`
+            ) : (
+              <div className="max-h-[72vh] space-y-2 overflow-y-auto pr-1">
+                {filteredResidents.map((resident) => (
+                  <ResidentListItem
+                    key={resident.id}
+                    resident={resident}
+                    selected={selectedResidentId === resident.id}
+                    now={now}
+                    onSelect={() => {
+                      setSelectedResidentId(resident.id);
+                      setProfileTab("overview");
                     }}
-                  >
-                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                      const resident = visibleResidents[virtualRow.index];
-                      if (!resident) return null;
-                      return (
-                        <div
-                          key={resident.id}
-                          className="absolute left-0 top-0 w-full pb-3"
-                          style={{ transform: `translateY(${virtualRow.start}px)` }}
-                        >
-                          <ResidentDirectoryRow
-                            resident={resident}
-                            canEdit={canEdit}
-                            onOpenEdit={(row) => {
-                              setEditingResident(row);
+                    onEdit={() => {
+                      setEditingResident(resident);
+                      setAddEditOpen(true);
+                    }}
+                    canEdit={canEdit}
+                  />
+                ))}
+              </div>
+            )}
+          </aside>
+
+          <section className="rounded-2xl border border-[#213a60] bg-[linear-gradient(180deg,#0f1b32_0%,#0b1528_100%)] p-4">
+            {!selectedResident ? (
+              <div className="flex min-h-[520px] items-center justify-center rounded-2xl border border-dashed border-[#3a5688] bg-[#0d1a31] p-10 text-center">
+                <div className="max-w-md">
+                  <p className="text-lg font-semibold text-white">Select a resident to open profile details.</p>
+                  <p className="mt-2 text-sm text-[#9db5df]">
+                    Profile overview, preferences, participation trends, documentation history, care-plan snapshot, and due timelines appear here.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <header className="rounded-2xl border border-[#2d4874] bg-[linear-gradient(180deg,#13294b_0%,#0f2240_100%)] p-4 shadow-[0_24px_40px_-30px_rgba(37,99,235,0.75)]">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/45 bg-cyan-500/15 text-sm font-black text-cyan-100">
+                        {selectedResident.firstName.charAt(0)}
+                        {selectedResident.lastName.charAt(0)}
+                      </span>
+
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-2xl font-black text-white">{getResidentName(selectedResident)}</h2>
+                          {selectedResident.preferredName ? (
+                            <Badge className="border-violet-300/45 bg-violet-500/14 text-violet-100">Prefers {selectedResident.preferredName}</Badge>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#c7daf8]">
+                          <Badge className="border-[#45699f] bg-[#16305c] text-[#d5e5ff]">Room {selectedResident.room}</Badge>
+                          <Badge className="border-[#45699f] bg-[#16305c] text-[#d5e5ff]">{formatResidentStatusLabel(selectedResident.status)}</Badge>
+                          <Badge className="border-[#45699f] bg-[#16305c] text-[#d5e5ff]">Unit: {selectedResident.unitName ?? "Unassigned"}</Badge>
+                          <Badge className="border-[#45699f] bg-[#16305c] text-[#d5e5ff]">Admission: {formatDate(selectedResident.admissionDate)}</Badge>
+                          <Badge className="border-[#45699f] bg-[#16305c] text-[#d5e5ff]">
+                            LOS: {formatLengthOfStay(selectedResident.assessmentSchedule.lengthOfStayDays)}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild size="sm" className="h-8 rounded-full bg-[#1e4a88] px-3 text-xs font-semibold text-white hover:bg-[#255a9f]">
+                        <Link href={`/app/documentation/progress-notes/new?residentId=${selectedResident.id}`}>
+                          <NotebookPen className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                          Add Progress Note
+                        </Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-8 rounded-full border-[#4a6fa8] bg-[#17315c] px-3 text-xs text-[#d8e7ff] hover:bg-[#1d3d6f]">
+                        <Link href={`/app/documentation/one-to-one/new?residentId=${selectedResident.id}`}>Add 1:1 Note</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-8 rounded-full border-[#4a6fa8] bg-[#17315c] px-3 text-xs text-[#d8e7ff] hover:bg-[#1d3d6f]">
+                        <Link href={`/app/residents/${selectedResident.id}`}>Open Full Profile</Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-full border-[#4a6fa8] bg-[#17315c] px-3 text-xs text-[#d8e7ff] hover:bg-[#1d3d6f]"
+                        onClick={() => {
+                          setEditingResident(selectedResident);
+                          setAddEditOpen(true);
+                        }}
+                        disabled={!canEdit}
+                      >
+                        Edit Resident
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-[#3e5f92] bg-[#15315d] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a8c2ea]">Participation (30d)</p>
+                      <div className="mt-1 flex items-end justify-between gap-2">
+                        <p className="text-2xl font-black text-white">{selectedParticipation}%</p>
+                        <p className="text-xs text-[#c8daf9]">
+                          {selectedResident.attendanceSnapshot.engaged30d}/{selectedResident.attendanceSnapshot.total30d} engaged
+                        </p>
+                      </div>
+                      <GlowProgressBar
+                        value={selectedParticipation}
+                        tone={selectedParticipation >= 70 ? "emerald" : selectedParticipation >= 40 ? "sky" : "orange"}
+                        className="mt-2"
+                      />
+                      <Badge className={cn("mt-2 text-[10px]", selectedParticipationState.tone)}>{selectedParticipationState.text}</Badge>
+                    </div>
+
+                    <div className="rounded-xl border border-[#3e5f92] bg-[#15315d] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a8c2ea]">Documentation Status</p>
+                      <p className="mt-1 text-2xl font-black text-white">
+                        {selectedResident.assessmentFlags.overdueCount > 0 ? "Attention Needed" : "On Track"}
+                      </p>
+                      <p className="mt-1 text-xs text-[#c8daf9]">
+                        Overdue: {selectedResident.assessmentFlags.overdueCount} • Due soon: {selectedResident.assessmentFlags.dueSoonCount}
+                      </p>
+                      <p className="mt-2 text-xs text-[#9eb9e4]">Next due: {formatDate(selectedResident.assessmentSchedule.nextDueDateIso)}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#3e5f92] bg-[#15315d] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a8c2ea]">Admission Timeline</p>
+                      <p className="mt-1 text-2xl font-black text-white">
+                        {admissionDaysAgo(selectedResident, now) == null ? "Unknown" : `${admissionDaysAgo(selectedResident, now)}d`}
+                      </p>
+                      <p className="mt-1 text-xs text-[#c8daf9]">Since admission date</p>
+                      <p className="mt-2 text-xs text-[#9eb9e4]">Admission UDA due: {formatDate(selectedResident.assessmentSchedule.admission.dueDateIso)}</p>
+                    </div>
+                  </div>
+                </header>
+
+                <div className="mt-4 rounded-2xl border border-[#263f68] bg-[linear-gradient(180deg,#0f1b32_0%,#0a1427_100%)] p-3">
+                  <div className="flex flex-wrap gap-2">
+                    {PROFILE_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setProfileTab(tab.id)}
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                          profileTab === tab.id
+                            ? "border-cyan-300/55 bg-cyan-500/17 text-cyan-100"
+                            : "border-[#375888] bg-[#10203b] text-[#cbe0ff] hover:bg-[#163055]"
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  {profileTab === "overview" ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Overview</h3>
+                        <p className="mt-2 text-sm text-[#b2c8ec]">
+                          {selectedResident.followUpFlag
+                            ? "Follow-up has been flagged for this resident."
+                            : "No manual follow-up flag is set right now."}
+                        </p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-[#9eb6df]">Last 1:1</p>
+                            <p className="mt-1 text-sm font-semibold text-white">{formatDate(selectedResident.lastOneOnOneAt)}</p>
+                          </div>
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-[#9eb6df]">1:1 Status</p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {isNeedsOneOnOne(selectedResident.lastOneOnOneAt, now, 30) ? "Due / Missing" : "Current"}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-[#9eb6df]">Care Plan Focuses</p>
+                            <p className="mt-1 text-sm font-semibold text-white">{selectedResident.carePlanAreas.length}</p>
+                          </div>
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-[#9eb6df]">Follow-Up Queue</p>
+                            <p className="mt-1 text-sm font-semibold text-white">{selectedDueItems.filter((item) => isDueOrOverdue(item.level)).length} active items</p>
+                          </div>
+                        </div>
+                      </article>
+
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Immediate Next Actions</h3>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/progress-notes/new?residentId=${selectedResident.id}`}>Add Progress Note</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/one-to-one/new?residentId=${selectedResident.id}`}>Add 1:1 Note</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation?residentId=${selectedResident.id}`}>Open Documentation</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/residents/${selectedResident.id}/care-plan`}>Open Care Plan</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/attendance?residentId=${selectedResident.id}`}>View Attendance History</Link>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]"
+                            onClick={() => {
+                              setEditingResident(selectedResident);
                               setAddEditOpen(true);
                             }}
-                            onMarkAssessment={markAssessmentComplete}
-                          />
+                            disabled={!canEdit}
+                          >
+                            Edit Resident
+                          </Button>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </section>
-          </div>
+                      </article>
+                    </div>
+                  ) : null}
 
-          <aside className="space-y-4">
-            <section className="rounded-2xl border border-[#233a61] bg-[linear-gradient(180deg,#0f1c33_0%,#0a1426_100%)] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#96aed8]">Upcoming Due</p>
-              <div className="mt-3 space-y-3">
-                {upcomingEntries.length === 0 ? (
-                  <p className="text-sm text-[#9ab2db]">No due dates in the next 30 days.</p>
-                ) : (
-                  [
-                    { label: "Due in 7 days", minDays: 0, maxDays: 7 },
-                    { label: "Due in 14 days", minDays: 8, maxDays: 14 },
-                    { label: "Due in 30 days", minDays: 15, maxDays: 30 }
-                  ].map((bucket) => {
-                    const bucketItems = upcomingEntries
-                      .filter((entry) => entry.daysUntil >= bucket.minDays && entry.daysUntil <= bucket.maxDays)
-                      .slice(0, 6);
-                    if (bucketItems.length === 0) return null;
-                    return (
-                      <div key={bucket.label} className="rounded-xl border border-[#2e4672] bg-[#0e1930] p-3">
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8ea7d3]">{bucket.label}</p>
-                        <ul className="space-y-2">
-                          {bucketItems.map((entry) => (
-                            <li key={`${entry.residentId}-${entry.type}`}>
-                              <Link href={`/app/residents/${entry.residentId}`} className="block rounded-lg border border-[#334e7b] bg-[#10203a] p-2 transition hover:border-[#4b71aa]">
-                                <p className="text-xs font-semibold text-white">{entry.residentName} • Room {entry.room}</p>
-                                <p className="mt-1 text-[11px] text-[#a4bbe1]">{entry.type} • {formatDateLabel(entry.dueDateIso)}</p>
-                                <p className={cn("mt-1 text-[10px] font-semibold", dueToneIconClass(entry.level))}>
-                                  Due in {entry.daysUntil} day{entry.daysUntil === 1 ? "" : "s"}
-                                </p>
-                              </Link>
+                  {profileTab === "preferences" ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Interests & Preferences</h3>
+                        {splitTextToChips(selectedResident.preferences).length === 0 ? (
+                          <p className="mt-3 text-sm text-[#9eb7e0]">No documented preferences yet.</p>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {splitTextToChips(selectedResident.preferences).map((item) => (
+                              <Badge key={item} className="border-cyan-300/45 bg-cyan-500/14 text-cyan-100">
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-4 rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9eb7e0]">Best Times / Social Style</p>
+                          <p className="mt-1 text-sm text-[#d6e5ff]">
+                            {selectedResident.bestTimesOfDay || "No preferred time of day documented yet."}
+                          </p>
+                        </div>
+                      </article>
+
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Barriers, Cautions, and Notes</h3>
+                        <div className="mt-3 space-y-3">
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9eb7e0]">Safety Notes</p>
+                            <p className="mt-1 text-sm text-[#d6e5ff]">{selectedResident.safetyNotes || "No safety notes recorded."}</p>
+                          </div>
+                          <div className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9eb7e0]">Resident Notes</p>
+                            <p className="mt-1 text-sm text-[#d6e5ff]">{selectedResident.notes || "No additional resident notes yet."}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedResident.tags.length > 0 ? (
+                              selectedResident.tags.map((tag) => (
+                                <Badge key={tag} className="border-violet-300/45 bg-violet-500/14 text-violet-100">
+                                  {tag}
+                                </Badge>
+                              ))
+                            ) : (
+                              <p className="text-sm text-[#9eb7e0]">No preference tags added.</p>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    </div>
+                  ) : null}
+
+                  {profileTab === "participation" ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Participation Snapshot (Last 30 Days)</h3>
+                        <div className="mt-4 space-y-3">
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-xs text-[#a9c1e8]">
+                              <span>Engaged</span>
+                              <span>{selectedResident.attendanceSnapshot.engaged30d}</span>
+                            </div>
+                            <GlowProgressBar
+                              value={
+                                selectedResident.attendanceSnapshot.total30d > 0
+                                  ? Math.round(
+                                      (selectedResident.attendanceSnapshot.engaged30d /
+                                        selectedResident.attendanceSnapshot.total30d) *
+                                        100
+                                    )
+                                  : 0
+                              }
+                              tone="emerald"
+                            />
+                          </div>
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-xs text-[#a9c1e8]">
+                              <span>Refused</span>
+                              <span>{selectedResident.attendanceSnapshot.refused30d}</span>
+                            </div>
+                            <GlowProgressBar
+                              value={
+                                selectedResident.attendanceSnapshot.total30d > 0
+                                  ? Math.round(
+                                      (selectedResident.attendanceSnapshot.refused30d /
+                                        selectedResident.attendanceSnapshot.total30d) *
+                                        100
+                                    )
+                                  : 0
+                              }
+                              tone="orange"
+                            />
+                          </div>
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-xs text-[#a9c1e8]">
+                              <span>No Show</span>
+                              <span>{selectedResident.attendanceSnapshot.noShow30d}</span>
+                            </div>
+                            <GlowProgressBar
+                              value={
+                                selectedResident.attendanceSnapshot.total30d > 0
+                                  ? Math.round(
+                                      (selectedResident.attendanceSnapshot.noShow30d /
+                                        selectedResident.attendanceSnapshot.total30d) *
+                                        100
+                                    )
+                                  : 0
+                              }
+                              tone="sky"
+                            />
+                          </div>
+                        </div>
+                      </article>
+
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Participation Story</h3>
+                        <div className="mt-3 space-y-3 text-sm text-[#c8dcfb]">
+                          <p>
+                            {selectedResident.attendanceSnapshot.total30d === 0
+                              ? "No attendance logs in the last 30 days."
+                              : `${selectedResident.attendanceSnapshot.engaged30d} of ${selectedResident.attendanceSnapshot.total30d} recent attendance entries were marked engaged.`}
+                          </p>
+                          <p>
+                            {selectedResident.attendanceSnapshot.refused30d > 0
+                              ? `${selectedResident.attendanceSnapshot.refused30d} refusals logged recently. Consider a targeted 1:1 follow-up and alternate offerings.`
+                              : "No recent refusal trend detected in the current snapshot."}
+                          </p>
+                          <p>
+                            {isNeedsOneOnOne(selectedResident.lastOneOnOneAt, now, 30)
+                              ? "Monthly 1:1 is due based on current note cadence."
+                              : "Resident has a recent 1:1 note on file."}
+                          </p>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button asChild variant="outline" className="border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/attendance?residentId=${selectedResident.id}`}>Open Attendance History</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/one-to-one/new?residentId=${selectedResident.id}`}>Create 1:1 Follow-Up</Link>
+                          </Button>
+                        </div>
+                      </article>
+                    </div>
+                  ) : null}
+
+                  {profileTab === "documentation" ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Recent 1:1 Documentation</h3>
+                        {selectedResident.recentNotes.length === 0 ? (
+                          <p className="mt-3 text-sm text-[#9eb7e0]">No recent 1:1 notes on file for this resident.</p>
+                        ) : (
+                          <ul className="mt-3 space-y-2">
+                            {selectedResident.recentNotes.map((note) => (
+                              <li key={note.id} className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                                <p className="text-[11px] font-semibold text-[#9eb8e0]">{formatDateTime(note.createdAt)}</p>
+                                <p className="mt-1 line-clamp-3 text-sm text-[#d7e6ff]">{note.narrative || "No narrative entered."}</p>
+                                <div className="mt-2">
+                                  <Button asChild size="sm" variant="outline" className="h-7 border-[#3f6298] bg-[#10213f] px-2.5 text-[11px] text-[#d9e7ff] hover:bg-[#19335a]">
+                                    <Link href={`/app/documentation/one-to-one/${note.id}`}>Open Note</Link>
+                                  </Button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </article>
+
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Documentation Shortcuts</h3>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation?residentId=${selectedResident.id}`}>Open Full Documentation History</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/progress-notes/new?residentId=${selectedResident.id}`}>Add Progress Note</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/one-to-one/new?residentId=${selectedResident.id}`}>Add 1:1 Note</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/uda?residentId=${selectedResident.id}`}>Open UDA Queue</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/documentation/mds?residentId=${selectedResident.id}`}>Open MDS Queue</Link>
+                          </Button>
+                          <Button asChild variant="outline" className="justify-start border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/residents/${selectedResident.id}`}>Open Resident Detail Page</Link>
+                          </Button>
+                        </div>
+                      </article>
+                    </div>
+                  ) : null}
+
+                  {profileTab === "care-plan" ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Care Plan Snapshot</h3>
+                        {selectedResident.carePlanAreas.length === 0 ? (
+                          <p className="mt-3 text-sm text-[#9eb7e0]">No active care plan focus areas documented yet.</p>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {selectedResident.carePlanAreas.map((area) => (
+                              <Badge key={area} className="border-blue-300/45 bg-blue-500/14 text-blue-100">
+                                {area}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        <p className="mt-4 text-sm text-[#c8dbf9]">
+                          Next care-plan review: {formatDate(selectedResident.carePlanNextReviewAt)}
+                        </p>
+                        <div className="mt-4">
+                          <Button asChild variant="outline" className="border-[#395a8d] bg-[#122442] text-xs text-[#d9e6ff] hover:bg-[#183053]">
+                            <Link href={`/app/residents/${selectedResident.id}/care-plan`}>Open Care Plan</Link>
+                          </Button>
+                        </div>
+                      </article>
+
+                      <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                        <h3 className="text-sm font-semibold text-white">Engagement + Plan Alignment</h3>
+                        <ul className="mt-3 space-y-2 text-sm text-[#c8dbf9]">
+                          <li className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            Participation level: {selectedParticipationState.text.toLowerCase()} over the last 30 days.
+                          </li>
+                          <li className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            {selectedResident.followUpFlag
+                              ? "Manual follow-up flag is active; verify interventions and outreach timing."
+                              : "No manual follow-up flag currently set."}
+                          </li>
+                          <li className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                            Recent 1:1 status: {isNeedsOneOnOne(selectedResident.lastOneOnOneAt, now, 30) ? "due" : "current"}.
+                          </li>
+                        </ul>
+                      </article>
+                    </div>
+                  ) : null}
+
+                  {profileTab === "due" ? (
+                    <article className="rounded-2xl border border-[#2a436f] bg-[#0f1b32] p-4">
+                      <h3 className="text-sm font-semibold text-white">Upcoming Due Items</h3>
+                      <p className="mt-1 text-sm text-[#a8c0e6]">Admission-date timelines and note cadence are surfaced in one queue.</p>
+
+                      {selectedDueItems.length === 0 ? (
+                        <p className="mt-4 text-sm text-[#9eb7e0]">No due items for this resident right now.</p>
+                      ) : (
+                        <ul className="mt-4 space-y-2">
+                          {selectedDueItems.map((item) => (
+                            <li key={item.id} className="rounded-xl border border-[#35517f] bg-[#11203b] p-3">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">{item.label}</p>
+                                  <p className="mt-1 text-xs text-[#aac2e9]">
+                                    Due: {formatDate(item.dueDateIso)} • {item.statusLabel}
+                                  </p>
+                                </div>
+                                <Badge className={cn("text-[10px]", dueBadgeClass(item.level))}>{item.level.replaceAll("_", " ")}</Badge>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button asChild size="sm" variant="outline" className="h-7 border-[#3f6298] bg-[#10213f] px-2.5 text-[11px] text-[#d9e7ff] hover:bg-[#19335a]">
+                                  <Link href={item.actionHref}>{item.actionLabel}</Link>
+                                </Button>
+
+                                {item.assessmentKind ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-emerald-300/45 bg-emerald-500/14 px-2.5 text-[11px] text-emerald-100 hover:bg-emerald-500/22"
+                                    onClick={() => void markAssessmentComplete(selectedResident.id, item.assessmentKind as AssessmentKind)}
+                                    disabled={!canEdit}
+                                  >
+                                    Mark Complete
+                                  </Button>
+                                ) : null}
+                              </div>
                             </li>
                           ))}
                         </ul>
+                      )}
+                    </article>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </section>
+
+          <aside className="space-y-4">
+            <section className="rounded-2xl border border-[#223a61] bg-[linear-gradient(180deg,#10203a_0%,#0b1528_100%)] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ab4de]">Resident Quick Actions</p>
+              {selectedResident ? (
+                <div className="mt-3 grid gap-2">
+                  <Button asChild variant="outline" className="justify-start border-[#375889] bg-[#112341] text-xs text-[#d4e5ff] hover:bg-[#1a3156]">
+                    <Link href={`/app/documentation/progress-notes/new?residentId=${selectedResident.id}`}>Add Progress Note</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="justify-start border-[#375889] bg-[#112341] text-xs text-[#d4e5ff] hover:bg-[#1a3156]">
+                    <Link href={`/app/documentation/one-to-one/new?residentId=${selectedResident.id}`}>Add 1:1 Note</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="justify-start border-[#375889] bg-[#112341] text-xs text-[#d4e5ff] hover:bg-[#1a3156]">
+                    <Link href={`/app/residents/${selectedResident.id}/care-plan`}>Open Care Plan</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="justify-start border-[#375889] bg-[#112341] text-xs text-[#d4e5ff] hover:bg-[#1a3156]">
+                    <Link href={`/app/documentation?residentId=${selectedResident.id}`}>Open Documentation</Link>
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-[#9fb7de]">Select a resident to load contextual actions.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-[#233a61] bg-[linear-gradient(180deg,#0f1d33_0%,#0a1426_100%)] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#96aed8]">Due Queue</p>
+              <div className="mt-3 space-y-2">
+                {globalDueQueue.length === 0 ? (
+                  <p className="text-sm text-[#9ab2db]">No due or overdue items in the current resident set.</p>
+                ) : (
+                  globalDueQueue.map((entry) => (
+                    <div key={`${entry.residentId}-${entry.id}`} className="rounded-xl border border-[#35517f] bg-[#10213a] p-3">
+                      <p className="text-xs font-semibold text-white">
+                        {entry.residentName} • Room {entry.room}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[#a8c0e6]">
+                        {entry.label} • {entry.statusLabel}
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <Badge className={cn("text-[10px]", dueBadgeClass(entry.level))}>{entry.level.replaceAll("_", " ")}</Badge>
+                        <Button asChild size="sm" variant="outline" className="h-7 border-[#3f6298] bg-[#10213f] px-2.5 text-[11px] text-[#d9e7ff] hover:bg-[#19335a]">
+                          <Link href={`/app/residents/${entry.residentId}`}>Open</Link>
+                        </Button>
                       </div>
-                    );
-                  })
+                    </div>
+                  ))
                 )}
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#25345a] bg-[linear-gradient(180deg,#171321_0%,#100d18_100%)] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#d8abbd]">Overdue</p>
+            <section className="rounded-2xl border border-[#233a61] bg-[linear-gradient(180deg,#13253f_0%,#0d182b_100%)] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9ab4de]">New Admissions</p>
               <div className="mt-3 space-y-2">
-                {overdueEntries.length === 0 ? (
-                  <p className="text-sm text-[#c89ab0]">No overdue assessments.</p>
+                {recentAdmissions.length === 0 ? (
+                  <p className="text-sm text-[#9ab2db]">No recent admissions in the current range.</p>
                 ) : (
-                  overdueEntries.map((entry) => (
+                  recentAdmissions.map((resident) => (
                     <Link
-                      key={`${entry.residentId}-${entry.type}`}
-                      href={`/app/residents/${entry.residentId}`}
-                      className="block rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 transition hover:border-rose-400/50"
+                      key={resident.id}
+                      href={`/app/residents/${resident.id}`}
+                      className="block rounded-xl border border-[#35517f] bg-[#10213a] p-3 transition hover:border-[#4b71aa]"
                     >
-                      <p className="text-xs font-semibold text-rose-100">{entry.residentName} • Room {entry.room}</p>
-                      <p className="mt-1 text-[11px] text-rose-200">{entry.type} • due {formatDateLabel(entry.dueDateIso)}</p>
-                      <p className="mt-1 text-[10px] font-semibold text-rose-100">Overdue by {entry.daysOverdue} day{entry.daysOverdue === 1 ? "" : "s"}</p>
+                      <p className="text-xs font-semibold text-white">
+                        {getResidentName(resident)} • Room {resident.room}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[#a8c0e6]">Admitted {formatDate(resident.admissionDate)}</p>
+                      <p className="mt-1 text-[11px] text-[#9fb8de]">
+                        Admission UDA: {formatDate(resident.assessmentSchedule.admission.dueDateIso)}
+                      </p>
                     </Link>
                   ))
                 )}
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#253a60] bg-[linear-gradient(180deg,#12253f_0%,#0c172c_100%)] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#98b2dd]">New Admissions</p>
-              <div className="mt-3 space-y-2">
-                {recentAdmissions.length === 0 ? (
-                  <p className="text-sm text-[#9cb4de]">No recent admissions yet.</p>
-                ) : (
-                  recentAdmissions.map((resident) => {
-                    const admission = parseIsoDate(resident.admissionDate);
-                    const daysSince = admission
-                      ? Math.max(0, Math.floor((Date.now() - admission.getTime()) / (1000 * 60 * 60 * 24)))
-                      : null;
-
-                    return (
-                      <Link
-                        key={resident.id}
-                        href={`/app/residents/${resident.id}`}
-                        className="block rounded-lg border border-[#35517f] bg-[#10203a] p-2 transition hover:border-[#4b71aa]"
-                      >
-                        <p className="text-xs font-semibold text-white">{getResidentDisplayName(resident)} • Room {resident.room}</p>
-                        <p className="mt-1 text-[11px] text-[#a5bce2]">Admitted {formatDateLabel(resident.admissionDate)}</p>
-                        <p className="mt-1 text-[10px] text-[#c9ddff]">
-                          {daysSince == null ? "Admission date missing" : `${daysSince} day${daysSince === 1 ? "" : "s"} since admission`}
-                        </p>
-                      </Link>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#273e64] bg-[linear-gradient(180deg,#10213b_0%,#0b162a_100%)] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9db5e0]">Smart Shortcuts</p>
+            <section className="rounded-2xl border border-[#253e64] bg-[linear-gradient(180deg,#10213b_0%,#0b162a_100%)] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9db5e0]">Workflow Shortcuts</p>
               <div className="mt-3 grid gap-2">
                 {[
-                  { label: "Add Resident", href: "#", onClick: openAddResident },
-                  { label: "Residents Due This Week", href: "/app/residents?filter=DUE_SOON" },
-                  { label: "Admission UDA Queue", href: "/app/documentation/uda?assessmentType=ADMISSION" },
-                  { label: "Quarterly UDA Queue", href: "/app/documentation/uda" },
-                  { label: "Annual UDA Queue", href: "/app/documentation/uda" },
-                  { label: "MDS Queue", href: "/app/documentation/mds" },
-                  { label: "Documentation Due", href: "/app/documentation" },
-                  { label: "Residents Needing 1:1", href: "/app/documentation/one-to-one" },
-                  { label: "Export Compliance Report", href: "#", onClick: exportVisibleResidents }
+                  {
+                    label: "Open Documentation Hub",
+                    href: "/app/documentation",
+                    icon: FileText
+                  },
+                  {
+                    label: "Open Attendance Tracker",
+                    href: "/app/attendance",
+                    icon: CalendarDays
+                  },
+                  {
+                    label: "Open Calendar",
+                    href: "/app/calendar",
+                    icon: CalendarClock
+                  },
+                  {
+                    label: "Residents Due This Week",
+                    href: "/app/residents?filter=DUE_SOON",
+                    icon: AlertTriangle
+                  },
+                  {
+                    label: "Residents Needing Follow-Up",
+                    href: "/app/residents?filter=OVERDUE",
+                    icon: ShieldAlert
+                  },
+                  {
+                    label: "Export Current Resident View",
+                    href: "#",
+                    icon: Download,
+                    onClick: exportVisibleResidents
+                  }
                 ].map((shortcut) => {
+                  const Icon = shortcut.icon;
+
                   if (shortcut.onClick) {
                     return (
                       <button
                         key={shortcut.label}
                         type="button"
                         onClick={shortcut.onClick}
-                        className="rounded-xl border border-[#375888] bg-[#112341] px-3 py-2 text-left text-xs font-semibold text-[#d4e5ff] transition hover:-translate-y-px hover:bg-[#1a3156]"
+                        className="flex items-center gap-2 rounded-xl border border-[#375888] bg-[#112341] px-3 py-2 text-left text-xs font-semibold text-[#d4e5ff] transition hover:-translate-y-px hover:bg-[#1a3156]"
                       >
+                        <Icon className="h-3.5 w-3.5" aria-hidden />
                         {shortcut.label}
                       </button>
                     );
@@ -1330,8 +1825,9 @@ export function ResidentsWorkspace({
                     <Link
                       key={shortcut.label}
                       href={shortcut.href}
-                      className="rounded-xl border border-[#375888] bg-[#112341] px-3 py-2 text-xs font-semibold text-[#d4e5ff] transition hover:-translate-y-px hover:bg-[#1a3156]"
+                      className="flex items-center gap-2 rounded-xl border border-[#375888] bg-[#112341] px-3 py-2 text-xs font-semibold text-[#d4e5ff] transition hover:-translate-y-px hover:bg-[#1a3156]"
                     >
+                      <Icon className="h-3.5 w-3.5" aria-hidden />
                       {shortcut.label}
                     </Link>
                   );
@@ -1346,7 +1842,9 @@ export function ResidentsWorkspace({
         open={addEditOpen}
         onOpenChange={(open) => {
           setAddEditOpen(open);
-          if (!open) setEditingResident(null);
+          if (!open) {
+            setEditingResident(null);
+          }
         }}
         initialResident={editingResident}
         units={initialUnits}
