@@ -64,8 +64,10 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
         },
         activityInstance: {
           select: {
+            id: true,
             title: true,
-            startAt: true
+            startAt: true,
+            location: true
           }
         }
       }
@@ -76,13 +78,16 @@ export async function getMonthlyReportData(facilityId: string, monthDate: Date) 
         createdAt: { gte: from, lte: to }
       },
       select: {
+        residentId: true,
         type: true,
+        followUp: true,
         narrative: true,
         createdAt: true,
         resident: {
           select: {
             firstName: true,
-            lastName: true
+            lastName: true,
+            room: true
           }
         }
       },
