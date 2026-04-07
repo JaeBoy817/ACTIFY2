@@ -17,6 +17,7 @@ import {
   Plus,
   ReceiptText,
   Search,
+  Settings2,
   ShoppingBasket,
   Sparkles,
   Store,
@@ -44,6 +45,7 @@ type RangeMode = "full-month" | "month-to-date";
 type TypeFilter = "all" | "purchases" | "stock" | "prize" | "planned";
 type PlannedStatus = "PLANNED" | "APPROVED" | "PURCHASED" | "DELAYED";
 type PlannedPriority = "Low" | "Medium" | "High";
+type BudgetDistribution = "proportional" | "primary";
 
 type PlannedPurchase = {
   id: string;
@@ -371,6 +373,10 @@ export function BudgetStockHub({
   const [plannedForm, setPlannedForm] = useState<PlannedFormState>(
     emptyPlannedForm(initialSnapshot.categories[0]?.name ?? "Crafts")
   );
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetTotalInput, setBudgetTotalInput] = useState("0");
+  const [budgetDistribution, setBudgetDistribution] = useState<BudgetDistribution>("proportional");
 
   const [plannedPurchases, setPlannedPurchases] = useState<PlannedPurchase[]>(
     plannedSeedFromLowStock(initialSnapshot.items)
@@ -680,6 +686,12 @@ export function BudgetStockHub({
     setPurchaseOpen(true);
   }
 
+  function openBudgetEditor() {
+    setBudgetTotalInput(monthlyBudget.toFixed(2));
+    setBudgetDistribution(monthlyBudget > 0 ? "proportional" : "primary");
+    setBudgetOpen(true);
+  }
+
   function openEditExpense(expense: BudgetStockExpenseDTO) {
     setEditingExpense(expense);
     setPurchaseForm({
@@ -883,6 +895,38 @@ export function BudgetStockHub({
     }
   }
 
+  async function submitBudgetTotal() {
+    if (!canEdit) return;
+    setBudgetSaving(true);
+    try {
+      const total = Number(budgetTotalInput);
+      if (!Number.isFinite(total) || total < 0) {
+        throw new Error("Monthly budget must be a number greater than or equal to 0.");
+      }
+      const response = await fetch("/api/budget-stock/monthly-budget", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          total,
+          distribution: budgetDistribution
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "Could not update monthly budget.");
+      setBudgetOpen(false);
+      refreshMonth(monthKey);
+      toast({ title: "Monthly budget updated" });
+    } catch (error) {
+      toast({
+        title: "Could not update monthly budget",
+        description: error instanceof Error ? error.message : "Try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setBudgetSaving(false);
+    }
+  }
+
   function addPlannedPurchase() {
     const next: PlannedPurchase = {
       id: `planned-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
@@ -998,6 +1042,16 @@ export function BudgetStockHub({
             <Button type="button" className="h-9 rounded-full bg-[#7a5ea8] px-3 text-xs text-white hover:bg-[#8f6fc2]" onClick={openCreateExpense} disabled={!canEdit}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add Purchase
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full border-[#4e6082] bg-[#1b2a42] px-3 text-xs text-[#dbe7ff] hover:bg-[#243858]"
+              onClick={openBudgetEditor}
+              disabled={!canEdit}
+            >
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+              Edit Monthly Budget
             </Button>
             <Button type="button" variant="outline" className="h-9 rounded-full border-[#4e6082] bg-[#1b2a42] px-3 text-xs text-[#dbe7ff] hover:bg-[#243858]" onClick={() => setStockOpen(true)} disabled={!canEdit}>
               <PackagePlus className="mr-1.5 h-3.5 w-3.5" />
@@ -1737,6 +1791,7 @@ export function BudgetStockHub({
         <h3 className="mt-1 text-base font-bold text-white">Move from review to action quickly</h3>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <ActionButton label="Add Purchase" icon={<ReceiptText className="h-4 w-4" />} onClick={openCreateExpense} />
+          <ActionButton label="Edit Monthly Budget" icon={<Settings2 className="h-4 w-4" />} onClick={openBudgetEditor} />
           <ActionButton label="Add Stock Item" icon={<PackagePlus className="h-4 w-4" />} onClick={() => setStockOpen(true)} />
           <ActionButton label="Open Low Stock" icon={<AlertTriangle className="h-4 w-4" />} onClick={() => setTypeFilter("stock")} />
           <ActionButton label="Log Prize Cart Item" icon={<ShoppingBasket className="h-4 w-4" />} onClick={() => setSaleOpen(true)} />
@@ -1748,6 +1803,86 @@ export function BudgetStockHub({
           <ActionLink href="/app/residents" label="Open Residents" icon={<Layers3 className="h-4 w-4" />} />
         </div>
       </section>
+
+      <Dialog open={budgetOpen} onOpenChange={setBudgetOpen}>
+        <DialogContent className="border-[#4e6082] bg-[#101826] text-[#dce8ff] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg text-white">Edit Monthly Budget</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field label="Monthly Budget Total" required>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={budgetTotalInput}
+                onChange={(event) => setBudgetTotalInput(event.target.value)}
+                className="border-[#4e6082] bg-[#17263f] text-[#dce8ff]"
+                placeholder="0.00"
+              />
+            </Field>
+
+            <Field label="How to apply this total">
+              <div className="space-y-2 rounded-xl border border-[#4a607f] bg-[#17263f] p-3">
+                <label className="flex items-start gap-2 text-sm text-[#dbe8ff]">
+                  <input
+                    type="radio"
+                    name="budget-distribution"
+                    value="proportional"
+                    checked={budgetDistribution === "proportional"}
+                    onChange={() => setBudgetDistribution("proportional")}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    Keep current category split
+                    <span className="mt-1 block text-xs text-[#9eb2d8]">
+                      Adjust all category limits proportionally to match the new total.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm text-[#dbe8ff]">
+                  <input
+                    type="radio"
+                    name="budget-distribution"
+                    value="primary"
+                    checked={budgetDistribution === "primary"}
+                    onChange={() => setBudgetDistribution("primary")}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    Put full total in primary category
+                    <span className="mt-1 block text-xs text-[#9eb2d8]">
+                      Sets Activity Supplies (or first category) to the full total and others to $0.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </Field>
+
+            <p className="text-xs text-[#9eb2d8]">
+              This updates your monthly budget baseline for the facility and will be reflected in Budget cards immediately.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-[#4e6082] bg-[#1b2a42] text-[#dbe7ff] hover:bg-[#243858]"
+              onClick={() => setBudgetOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#7a5ea8] text-white hover:bg-[#8f6fc2]"
+              onClick={() => void submitBudgetTotal()}
+              disabled={budgetSaving || Number.isNaN(Number(budgetTotalInput)) || Number(budgetTotalInput) < 0}
+            >
+              {budgetSaving ? "Saving..." : "Save Monthly Budget"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={purchaseOpen} onOpenChange={setPurchaseOpen}>
         <DialogContent className="border-[#4e6082] bg-[#101826] text-[#dce8ff] sm:max-w-xl">

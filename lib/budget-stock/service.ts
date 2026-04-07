@@ -794,6 +794,74 @@ export async function deleteBudgetCategory(params: {
   ]);
 }
 
+export async function setBudgetStockMonthlyTotal(params: {
+  facilityId: string;
+  total: number;
+  distribution?: "proportional" | "primary";
+}) {
+  await ensureBudgetStockCategories(params.facilityId);
+
+  const categories = await prisma.budgetStockCategory.findMany({
+    where: { facilityId: params.facilityId },
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }]
+  });
+
+  if (categories.length < 1) {
+    throw new Error("No budget categories found.");
+  }
+
+  const total = Number(Math.max(params.total, 0).toFixed(2));
+  const distribution = params.distribution ?? "proportional";
+  const primaryCategory =
+    categories.find((category) => normalizeBudgetStockCategory(category.name) === "Activity Supplies") ?? categories[0];
+
+  const updates: Array<{ id: string; monthlyLimit: number }> = [];
+
+  if (distribution === "primary") {
+    for (const category of categories) {
+      updates.push({
+        id: category.id,
+        monthlyLimit: category.id === primaryCategory.id ? total : 0
+      });
+    }
+  } else {
+    const currentTotal = Number(categories.reduce((sum, category) => sum + category.monthlyLimit, 0).toFixed(2));
+    if (currentTotal <= 0) {
+      for (const category of categories) {
+        updates.push({
+          id: category.id,
+          monthlyLimit: category.id === primaryCategory.id ? total : 0
+        });
+      }
+    } else {
+      let remaining = total;
+      for (let index = 0; index < categories.length; index += 1) {
+        const category = categories[index];
+        const isLast = index === categories.length - 1;
+        const nextLimit = isLast
+          ? Number(Math.max(remaining, 0).toFixed(2))
+          : Number(Math.max((total * category.monthlyLimit) / currentTotal, 0).toFixed(2));
+        updates.push({ id: category.id, monthlyLimit: nextLimit });
+        remaining = Number((remaining - nextLimit).toFixed(2));
+      }
+    }
+  }
+
+  await prisma.$transaction(
+    updates.map((update) =>
+      prisma.budgetStockCategory.update({
+        where: { id: update.id },
+        data: { monthlyLimit: update.monthlyLimit }
+      })
+    )
+  );
+
+  return prisma.budgetStockCategory.findMany({
+    where: { facilityId: params.facilityId },
+    orderBy: { name: "asc" }
+  });
+}
+
 export async function createBudgetExpense(params: {
   facilityId: string;
   data: {
