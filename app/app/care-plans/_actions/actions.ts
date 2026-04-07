@@ -5,7 +5,8 @@ import { type Prisma, type ReviewResult } from "@prisma/client";
 
 import { logAudit } from "@/lib/audit";
 import { focusAreaLabel } from "@/lib/care-plans/enums";
-import { stripDocumentationMeta } from "@/lib/documentation/meta";
+import { getGoalTemplateByKey } from "@/lib/care-plans/templates";
+import { parseDocumentationMeta, stripDocumentationMeta } from "@/lib/documentation/meta";
 import {
   type CarePlanReviewPayload,
   type CarePlanWizardPayload,
@@ -39,15 +40,90 @@ export type CarePlansDashboardFilters = {
 export type CarePlanDashboardRow = {
   residentId: string;
   residentName: string;
+  residentFirstName: string;
+  residentLastName: string;
+  residentPreferredName: string | null;
   room: string;
+  unitId: string | null;
   unitName: string | null;
   residentStatus: string;
+  admissionDateIso: string | null;
+  lastOneOnOneAtIso: string | null;
+  residentTags: string[];
+  preferencesText: string | null;
+  residentNotes: string | null;
+  bestTimesOfDay: string | null;
+  followUpFlag: boolean;
   carePlanId: string | null;
+  carePlanStatus: "NONE" | "ACTIVE" | "ARCHIVED";
   displayStatus: CarePlanDisplayStatus;
   displayStatusLabel: string;
   displayStatusTone: string;
   primaryFocuses: string[];
   primaryFocusLabels: string[];
+  focusCards: Array<{
+    key: string;
+    label: string;
+    status: "Active" | "Needs Review" | "Archived";
+    summary: string;
+    goalCount: number;
+    interventionCount: number;
+  }>;
+  goals: Array<{
+    id: string;
+    title: string;
+    description: string;
+    status: "Active" | "In Progress" | "Needs Review" | "Archived";
+    linkedFocus: string;
+    targetDateIso: string | null;
+    timeframeDays: number;
+    interventionCount: number;
+  }>;
+  interventions: Array<{
+    id: string;
+    title: string;
+    type: "GROUP" | "ONE_TO_ONE" | "INDEPENDENT";
+    description: string;
+    tags: string[];
+    status: "Active" | "Needs Review" | "Archived";
+  }>;
+  linkedNotes: Array<{
+    id: string;
+    kind: "PROGRESS" | "ONE_TO_ONE" | "UDA" | "MDS";
+    kindLabel: string;
+    createdAtIso: string;
+    summary: string;
+    mood: string;
+    response: string;
+    followUp: string | null;
+  }>;
+  participation: {
+    total30d: number;
+    engaged30d: number;
+    refused30d: number;
+    noShow30d: number;
+    participationPercent30d: number;
+    participationPercent14d: number;
+    participationTrendLabel: string;
+  };
+  documentationSignals: {
+    progressNotes30d: number;
+    oneToOneNotes30d: number;
+    latestNoteAtIso: string | null;
+  };
+  reviewTimeline: Array<{
+    id: string;
+    type: "REVIEW" | "NEXT_REVIEW";
+    title: string;
+    summary: string;
+    dateIso: string;
+    urgency: "normal" | "due-soon" | "overdue";
+  }>;
+  reviewDueLabel: string;
+  reviewDaysUntil: number | null;
+  followUpNeeded: boolean;
+  updatedAtIso: string | null;
+  searchIndex: string;
   nextReviewDate: string | null;
   lastReviewDate: string | null;
   trend: CarePlanTrend;
@@ -55,6 +131,14 @@ export type CarePlanDashboardRow = {
 
 export type CarePlansDashboardData = {
   rows: CarePlanDashboardRow[];
+  units: Array<{
+    id: string;
+    name: string;
+  }>;
+  focusOptions: Array<{
+    key: string;
+    label: string;
+  }>;
   counts: {
     total: number;
     noPlan: number;
@@ -62,6 +146,11 @@ export type CarePlansDashboardData = {
     dueSoon: number;
     overdue: number;
     archived: number;
+    reviewsDue: number;
+    goalsInProgress: number;
+    followUpNeeded: number;
+    residentsNeedingNewCarePlan: number;
+    interventionsUpdatedThisWeek: number;
   };
   templatePickerResidents: Array<{
     id: string;
@@ -201,8 +290,9 @@ export async function getCarePlansDashboardData(
 ): Promise<CarePlansDashboardData> {
   const context = await getFacilityContextWithSubscription("carePlan");
   const now = new Date();
+  const sevenDaysAgo = addDays(now, -7);
   const fourteenDaysAgo = addDays(now, -14);
-  const twentyEightDaysAgo = addDays(now, -28);
+  const thirtyDaysAgo = addDays(now, -30);
 
   const residents = await prisma.resident.findMany({
     where: {
@@ -215,8 +305,16 @@ export async function getCarePlansDashboardData(
       id: true,
       firstName: true,
       lastName: true,
+      preferredName: true,
       room: true,
       status: true,
+      admissionDate: true,
+      lastOneOnOneAt: true,
+      followUpFlag: true,
+      tags: true,
+      preferences: true,
+      notes: true,
+      bestTimesOfDay: true,
       unit: {
         select: {
           id: true,
@@ -229,13 +327,27 @@ export async function getCarePlansDashboardData(
   if (residents.length === 0) {
     return {
       rows: [],
-      counts: { total: 0, noPlan: 0, active: 0, dueSoon: 0, overdue: 0, archived: 0 },
+      units: [],
+      focusOptions: [],
+      counts: {
+        total: 0,
+        noPlan: 0,
+        active: 0,
+        dueSoon: 0,
+        overdue: 0,
+        archived: 0,
+        reviewsDue: 0,
+        goalsInProgress: 0,
+        followUpNeeded: 0,
+        residentsNeedingNewCarePlan: 0,
+        interventionsUpdatedThisWeek: 0
+      },
       templatePickerResidents: []
     };
   }
 
   const residentIds = residents.map((resident) => resident.id);
-  const [plans, attendanceRows] = await Promise.all([
+  const [plans, attendanceRows, notes] = await Promise.all([
     prisma.carePlan.findMany({
       where: {
         residentId: { in: residentIds }
@@ -254,13 +366,39 @@ export async function getCarePlansDashboardData(
     prisma.attendance.findMany({
       where: {
         residentId: { in: residentIds },
-        createdAt: { gte: twentyEightDaysAgo },
-        status: { in: ["PRESENT", "ACTIVE", "LEADING"] }
+        createdAt: { gte: thirtyDaysAgo }
       },
       select: {
         residentId: true,
+        status: true,
+        barrierReason: true,
+        notes: true,
         createdAt: true
-      }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 9000
+    }),
+    prisma.progressNote.findMany({
+      where: {
+        residentId: { in: residentIds },
+        createdAt: { gte: thirtyDaysAgo }
+      },
+      select: {
+        id: true,
+        residentId: true,
+        type: true,
+        narrative: true,
+        createdAt: true,
+        moodAffect: true,
+        response: true,
+        followUp: true
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: 7000
     })
   ]);
 
@@ -271,22 +409,107 @@ export async function getCarePlansDashboardData(
     plansByResident.set(plan.residentId, bucket);
   }
 
-  const attendanceCountMap = new Map<string, { current: number; previous: number }>();
-  for (const row of attendanceRows) {
-    const bucket = attendanceCountMap.get(row.residentId) ?? { current: 0, previous: 0 };
-    if (row.createdAt >= fourteenDaysAgo) {
-      bucket.current += 1;
-    } else {
-      bucket.previous += 1;
+  const attendanceCountMap = new Map<
+    string,
+    {
+      current: number;
+      previous: number;
+      total30d: number;
+      engaged30d: number;
+      refused30d: number;
+      noShow30d: number;
+      total14d: number;
+      engaged14d: number;
     }
+  >();
+  for (const row of attendanceRows) {
+    const bucket = attendanceCountMap.get(row.residentId) ?? {
+      current: 0,
+      previous: 0,
+      total30d: 0,
+      engaged30d: 0,
+      refused30d: 0,
+      noShow30d: 0,
+      total14d: 0,
+      engaged14d: 0
+    };
+
+    const isEngaged = row.status === "PRESENT" || row.status === "ACTIVE" || row.status === "LEADING";
+    const withinCurrentWindow = row.createdAt >= fourteenDaysAgo;
+
+    bucket.total30d += 1;
+    if (isEngaged) {
+      bucket.engaged30d += 1;
+    }
+    if (row.status === "REFUSED") {
+      bucket.refused30d += 1;
+    }
+    if (row.status === "NO_SHOW") {
+      bucket.noShow30d += 1;
+    }
+
+    if (withinCurrentWindow) {
+      bucket.current += isEngaged ? 1 : 0;
+      bucket.total14d += 1;
+      if (isEngaged) {
+        bucket.engaged14d += 1;
+      }
+    } else {
+      bucket.previous += isEngaged ? 1 : 0;
+    }
+
     attendanceCountMap.set(row.residentId, bucket);
   }
+
+  const notesByResident = new Map<string, typeof notes>();
+  const noteCountsByResident = new Map<
+    string,
+    {
+      progress: number;
+      oneToOne: number;
+      latestNoteAtIso: string | null;
+    }
+  >();
+  for (const note of notes) {
+    const bucket = notesByResident.get(note.residentId) ?? [];
+    if (bucket.length < 8) {
+      bucket.push(note);
+      notesByResident.set(note.residentId, bucket);
+    }
+
+    const counts = noteCountsByResident.get(note.residentId) ?? {
+      progress: 0,
+      oneToOne: 0,
+      latestNoteAtIso: null
+    };
+    if (note.type === "ONE_TO_ONE") {
+      counts.oneToOne += 1;
+    } else {
+      counts.progress += 1;
+    }
+    if (!counts.latestNoteAtIso) {
+      counts.latestNoteAtIso = note.createdAt.toISOString();
+    }
+    noteCountsByResident.set(note.residentId, counts);
+  }
+
+  const units = residents
+    .map((resident) => resident.unit)
+    .filter((unit): unit is { id: string; name: string } => Boolean(unit))
+    .reduce<Array<{ id: string; name: string }>>((acc, unit) => {
+      if (!acc.some((entry) => entry.id === unit.id)) {
+        acc.push(unit);
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   const allRows: CarePlanDashboardRow[] = residents.map((resident) => {
     const residentPlans = plansByResident.get(resident.id) ?? [];
     const activePlan = residentPlans.find((plan) => plan.status === "ACTIVE") ?? null;
     const chosenPlan = activePlan ?? residentPlans[0] ?? null;
     const primaryFocuses = getPrimaryFocusKeys(chosenPlan);
+    const primaryFocusLabels = primaryFocuses.map((item) => focusAreaLabel(item));
     const status = computeCarePlanDisplayStatus({
       hasPlan: Boolean(chosenPlan),
       archived: chosenPlan?.status === "ARCHIVED",
@@ -294,26 +517,238 @@ export async function getCarePlansDashboardData(
       now
     });
 
-    const counts = attendanceCountMap.get(resident.id) ?? { current: 0, previous: 0 };
+    const counts = attendanceCountMap.get(resident.id) ?? {
+      current: 0,
+      previous: 0,
+      total30d: 0,
+      engaged30d: 0,
+      refused30d: 0,
+      noShow30d: 0,
+      total14d: 0,
+      engaged14d: 0
+    };
     const trend = getTrendFromCountsOrReview({
       currentWindowCount: counts.current,
       previousWindowCount: counts.previous,
       latestReviewResult: chosenPlan?.reviews[0]?.result ?? null
     });
 
+    const participationPercent30d =
+      counts.total30d > 0 ? clampPercent((counts.engaged30d / counts.total30d) * 100) : 0;
+    const participationPercent14d =
+      counts.total14d > 0 ? clampPercent((counts.engaged14d / counts.total14d) * 100) : 0;
+
+    const goalCount = chosenPlan?.goals.length ?? 0;
+    const interventionCount = chosenPlan?.interventions.length ?? 0;
+    const residentNotes = notesByResident.get(resident.id) ?? [];
+    const noteCounts = noteCountsByResident.get(resident.id) ?? {
+      progress: 0,
+      oneToOne: 0,
+      latestNoteAtIso: null
+    };
+
+    const focusCards = primaryFocuses.map((focusKey) => {
+      const focusGoals = (chosenPlan?.goals ?? []).filter((goal) => {
+        const template = goal.templateKey ? getGoalTemplateByKey(goal.templateKey) : null;
+        return template?.focusArea === focusKey;
+      });
+
+      const interventionMatches = (chosenPlan?.interventions ?? []).filter((item) =>
+        focusAreaLabel(focusKey)
+          .toLowerCase()
+          .split(" ")
+          .some((token) => token.length > 4 && item.title.toLowerCase().includes(token))
+      );
+
+      const statusLabel =
+        status === "OVERDUE" ? "Needs Review" : chosenPlan?.status === "ARCHIVED" ? "Archived" : "Active";
+
+      return {
+        key: focusKey,
+        label: focusAreaLabel(focusKey),
+        status: statusLabel,
+        summary:
+          chosenPlan?.supports && Array.isArray(chosenPlan.supports) && chosenPlan.supports.length > 0
+            ? `Supports: ${toStringArray(chosenPlan.supports).slice(0, 2).join(", ")}`
+            : "Focus area currently supported by active goals and interventions.",
+        goalCount: focusGoals.length || Math.max(1, Math.ceil(goalCount / Math.max(1, primaryFocuses.length))),
+        interventionCount:
+          interventionMatches.length || Math.max(1, Math.ceil(interventionCount / Math.max(1, primaryFocuses.length)))
+      } as CarePlanDashboardRow["focusCards"][number];
+    });
+
+    const goals = (chosenPlan?.goals ?? []).map((goal) => {
+      const template = goal.templateKey ? getGoalTemplateByKey(goal.templateKey) : null;
+      const linkedFocus = template ? focusAreaLabel(template.focusArea) : primaryFocusLabels[0] ?? "General Engagement";
+      const targetDate = chosenPlan ? addDays(chosenPlan.createdAt, goal.timeframeDays) : null;
+      const goalStatus =
+        status === "OVERDUE"
+          ? ("Needs Review" as const)
+          : chosenPlan?.status === "ARCHIVED"
+            ? ("Archived" as const)
+            : ("In Progress" as const);
+
+      return {
+        id: goal.id,
+        title: template?.title ?? "Custom Goal",
+        description: goal.customText || template?.text || "Goal statement available in care plan editor.",
+        status: goalStatus,
+        linkedFocus,
+        targetDateIso: targetDate?.toISOString() ?? null,
+        timeframeDays: goal.timeframeDays,
+        interventionCount
+      };
+    });
+
+    const interventions = (chosenPlan?.interventions ?? []).map((item) => {
+      const tags: string[] = [];
+      if (item.bedBoundFriendly) tags.push("Bed-bound");
+      if (item.dementiaFriendly) tags.push("Dementia-friendly");
+      if (item.lowVisionFriendly) tags.push("Low vision");
+      if (item.hardOfHearingFriendly) tags.push("Low hearing");
+
+      return {
+        id: item.id,
+        title: item.title,
+        type: item.type,
+        description: `${titleCase(item.type)} intervention supporting ${
+          primaryFocusLabels[0]?.toLowerCase() ?? "engagement goals"
+        }.`,
+        tags,
+        status: status === "OVERDUE" ? ("Needs Review" as const) : chosenPlan?.status === "ARCHIVED" ? ("Archived" as const) : ("Active" as const)
+      };
+    });
+
+    const linkedNotes = residentNotes.map((note) => {
+      const meta = parseDocumentationMeta(note.narrative);
+      const kind: "PROGRESS" | "ONE_TO_ONE" | "UDA" | "MDS" =
+        meta?.kind === "UDA"
+          ? "UDA"
+          : meta?.kind === "MDS"
+            ? "MDS"
+            : note.type === "ONE_TO_ONE"
+              ? "ONE_TO_ONE"
+              : "PROGRESS";
+      const kindLabel =
+        kind === "PROGRESS"
+          ? "Progress Note"
+          : kind === "ONE_TO_ONE"
+            ? "1:1 Note"
+            : kind === "UDA"
+              ? "UDA"
+              : "MDS";
+
+      return {
+        id: note.id,
+        kind,
+        kindLabel,
+        createdAtIso: note.createdAt.toISOString(),
+        summary: stripDocumentationMeta(note.narrative),
+        mood: titleCase(note.moodAffect),
+        response: titleCase(note.response),
+        followUp: note.followUp ?? null
+      };
+    });
+
+    const nextReviewDateIso = isoOrNull(chosenPlan?.nextReviewDate);
+    const reviewDaysUntil = nextReviewDateIso
+      ? Math.ceil((new Date(nextReviewDateIso).getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    const reviewTimeline: CarePlanDashboardRow["reviewTimeline"] = (chosenPlan?.reviews ?? []).slice(0, 8).map((review) => ({
+      id: review.id,
+      type: "REVIEW",
+      title: "Care Plan Review",
+      summary: `${titleCase(review.result)} • ${titleCase(review.participation)} participation • ${titleCase(review.response)} response`,
+      dateIso: review.reviewDate.toISOString(),
+      urgency: "normal"
+    }));
+
+    if (nextReviewDateIso) {
+      reviewTimeline.unshift({
+        id: `${resident.id}-next-review`,
+        type: "NEXT_REVIEW",
+        title: "Next Review Due",
+        summary: formatDueLabelFromIso(nextReviewDateIso, now),
+        dateIso: nextReviewDateIso,
+        urgency: reviewDaysUntil != null && reviewDaysUntil < 0 ? "overdue" : reviewDaysUntil != null && reviewDaysUntil <= 7 ? "due-soon" : "normal"
+      });
+    }
+
+    const followUpNeeded =
+      resident.followUpFlag ||
+      status === "OVERDUE" ||
+      status === "NO_PLAN" ||
+      trend === "DOWN" ||
+      counts.refused30d >= 2 ||
+      participationPercent30d < 40 ||
+      (!noteCounts.latestNoteAtIso && counts.total30d > 0);
+
+    const searchIndex = [
+      resident.firstName,
+      resident.lastName,
+      resident.preferredName ?? "",
+      resident.room,
+      resident.unit?.name ?? "",
+      primaryFocusLabels.join(" "),
+      goals.map((goal) => `${goal.title} ${goal.description}`).join(" "),
+      interventions.map((item) => item.title).join(" "),
+      resident.preferences ?? "",
+      resident.notes ?? "",
+      resident.bestTimesOfDay ?? ""
+    ]
+      .join(" ")
+      .toLowerCase();
+
     return {
       residentId: resident.id,
       residentName: `${resident.firstName} ${resident.lastName}`,
+      residentFirstName: resident.firstName,
+      residentLastName: resident.lastName,
+      residentPreferredName: resident.preferredName ?? null,
       room: resident.room,
+      unitId: resident.unit?.id ?? null,
       unitName: resident.unit?.name ?? null,
       residentStatus: resident.status,
+      admissionDateIso: isoOrNull(resident.admissionDate),
+      lastOneOnOneAtIso: isoOrNull(resident.lastOneOnOneAt),
+      residentTags: parseResidentTags(resident.tags),
+      preferencesText: resident.preferences ?? null,
+      residentNotes: resident.notes ?? null,
+      bestTimesOfDay: resident.bestTimesOfDay ?? null,
+      followUpFlag: resident.followUpFlag,
       carePlanId: chosenPlan?.id ?? null,
+      carePlanStatus: chosenPlan ? chosenPlan.status : "NONE",
       displayStatus: status,
       displayStatusLabel: displayStatusLabel(status),
       displayStatusTone: displayStatusTone(status),
       primaryFocuses,
-      primaryFocusLabels: primaryFocuses.map((item) => focusAreaLabel(item)),
-      nextReviewDate: isoOrNull(chosenPlan?.nextReviewDate),
+      primaryFocusLabels,
+      focusCards,
+      goals,
+      interventions,
+      linkedNotes,
+      participation: {
+        total30d: counts.total30d,
+        engaged30d: counts.engaged30d,
+        refused30d: counts.refused30d,
+        noShow30d: counts.noShow30d,
+        participationPercent30d,
+        participationPercent14d,
+        participationTrendLabel: participationTrendLabel(trend)
+      },
+      documentationSignals: {
+        progressNotes30d: noteCounts.progress,
+        oneToOneNotes30d: noteCounts.oneToOne,
+        latestNoteAtIso: noteCounts.latestNoteAtIso
+      },
+      reviewTimeline,
+      reviewDueLabel: formatDueLabelFromIso(nextReviewDateIso, now),
+      reviewDaysUntil,
+      followUpNeeded,
+      updatedAtIso: isoOrNull(chosenPlan?.updatedAt),
+      searchIndex,
+      nextReviewDate: nextReviewDateIso,
       lastReviewDate: isoOrNull(chosenPlan?.reviews[0]?.reviewDate ?? null),
       trend
     };
@@ -323,12 +758,12 @@ export async function getCarePlansDashboardData(
   const rows = allRows
     .filter((row) => {
       if (!search) return true;
-      return row.residentName.toLowerCase().includes(search) || row.room.toLowerCase().includes(search);
+      return row.searchIndex.includes(search);
     })
     .filter((row) => filterStatuses(filters.status, row.displayStatus))
     .filter((row) => (filters.bedBound ? row.residentStatus === "BED_BOUND" : true))
     .filter((row) => (filters.primaryFocus ? row.primaryFocuses.includes(filters.primaryFocus) : true))
-    .filter((row) => (filters.unitId ? residents.find((item) => item.id === row.residentId)?.unit?.id === filters.unitId : true))
+    .filter((row) => (filters.unitId ? row.unitId === filters.unitId : true))
     .sort(compareByRoomThenName);
 
   const counts = {
@@ -337,11 +772,31 @@ export async function getCarePlansDashboardData(
     active: allRows.filter((row) => row.displayStatus === "ACTIVE").length,
     dueSoon: allRows.filter((row) => row.displayStatus === "DUE_SOON").length,
     overdue: allRows.filter((row) => row.displayStatus === "OVERDUE").length,
-    archived: allRows.filter((row) => row.displayStatus === "ARCHIVED").length
+    archived: allRows.filter((row) => row.displayStatus === "ARCHIVED").length,
+    reviewsDue: allRows.filter((row) => row.displayStatus === "DUE_SOON" || row.displayStatus === "OVERDUE").length,
+    goalsInProgress: allRows.reduce((total, row) => total + row.goals.length, 0),
+    followUpNeeded: allRows.filter((row) => row.followUpNeeded).length,
+    residentsNeedingNewCarePlan: allRows.filter((row) => row.displayStatus === "NO_PLAN").length,
+    interventionsUpdatedThisWeek: allRows.filter((row) => {
+      const updated = row.updatedAtIso ? new Date(row.updatedAtIso) : null;
+      return Boolean(updated && updated >= sevenDaysAgo && row.interventions.length > 0);
+    }).length
   };
 
   return {
     rows,
+    units,
+    focusOptions: allRows
+      .flatMap((row) => row.primaryFocuses)
+      .reduce<string[]>((acc, focusKey) => {
+        if (!acc.includes(focusKey)) acc.push(focusKey);
+        return acc;
+      }, [])
+      .map((focusKey) => ({
+        key: focusKey,
+        label: focusAreaLabel(focusKey)
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" })),
     counts,
     templatePickerResidents: residents
       .map((resident) => ({

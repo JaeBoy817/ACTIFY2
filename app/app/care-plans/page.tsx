@@ -5,10 +5,13 @@ import { resolveTimeZone } from "@/lib/timezone";
 
 type SearchParams = {
   search?: string;
-  status?: "ALL" | "NO_PLAN" | "ACTIVE" | "DUE_SOON" | "OVERDUE" | "ARCHIVED";
+  status?: string;
   bedBound?: "true" | "false";
   primaryFocus?: string;
   unitId?: string;
+  sort?: string;
+  followUp?: "true" | "false";
+  residentId?: string;
 };
 
 export default async function CarePlansPage({
@@ -17,15 +20,7 @@ export default async function CarePlansPage({
   searchParams?: SearchParams;
 }) {
   const context = await getFacilityContextWithSubscription("carePlan");
-  const filters = {
-    search: searchParams?.search ?? "",
-    status: searchParams?.status ?? "ALL",
-    bedBound: searchParams?.bedBound === "true",
-    primaryFocus: searchParams?.primaryFocus ?? "",
-    unitId: searchParams?.unitId ?? ""
-  } as const;
-
-  const data = await getCarePlansDashboardData(filters);
+  const data = await getCarePlansDashboardData();
 
   return (
     <CarePlansDashboard
@@ -33,8 +28,11 @@ export default async function CarePlansPage({
       filters={{
         search: searchParams?.search ?? "",
         status: searchParams?.status ?? "ALL",
-        bedBound: searchParams?.bedBound ?? "false",
-        primaryFocus: searchParams?.primaryFocus ?? ""
+        primaryFocus: searchParams?.primaryFocus ?? "",
+        unitId: searchParams?.unitId ?? "all",
+        sort: searchParams?.sort ?? "REVIEW_DUE",
+        followUp: searchParams?.followUp ?? "false",
+        residentId: searchParams?.residentId ?? ""
       }}
       timeZone={resolveTimeZone(context.timeZone)}
     />
