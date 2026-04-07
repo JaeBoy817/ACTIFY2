@@ -30,6 +30,7 @@ export default async function BudgetStockHubPage({
       initialMonthKey={snapshot.summary.monthKey}
       monthOptions={monthOptions}
       canEdit={canWrite(context.role)}
+      timeZone={timeZone}
     />
   );
 }
