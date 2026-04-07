@@ -14,6 +14,12 @@ type SearchParams = {
   residentId?: string;
 };
 
+function normalizeToken(value: string | undefined, fallback: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  return trimmed;
+}
+
 export default async function CarePlansPage({
   searchParams
 }: {
@@ -26,13 +32,13 @@ export default async function CarePlansPage({
     <CarePlansDashboard
       data={data}
       filters={{
-        search: searchParams?.search ?? "",
-        status: searchParams?.status ?? "ALL",
-        primaryFocus: searchParams?.primaryFocus ?? "",
-        unitId: searchParams?.unitId ?? "all",
-        sort: searchParams?.sort ?? "REVIEW_DUE",
+        search: normalizeToken(searchParams?.search, ""),
+        status: normalizeToken(searchParams?.status, "ALL"),
+        primaryFocus: normalizeToken(searchParams?.primaryFocus, "all"),
+        unitId: normalizeToken(searchParams?.unitId, "all"),
+        sort: normalizeToken(searchParams?.sort, "REVIEW_DUE"),
         followUp: searchParams?.followUp ?? "false",
-        residentId: searchParams?.residentId ?? ""
+        residentId: normalizeToken(searchParams?.residentId, "")
       }}
       timeZone={resolveTimeZone(context.timeZone)}
     />

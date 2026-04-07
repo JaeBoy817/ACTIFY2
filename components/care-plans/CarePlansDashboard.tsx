@@ -100,6 +100,12 @@ function normalizeSort(value: string | undefined): SortKey {
   return "REVIEW_DUE";
 }
 
+function normalizeFilterValue(value: string | undefined, fallback: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  return trimmed;
+}
+
 function formatDate(value: string | null, timeZone: string) {
   if (!value) return "Not set";
   return formatInTimeZone(new Date(value), timeZone, {
@@ -261,8 +267,8 @@ export function CarePlansDashboard({
 }) {
   const [search, setSearch] = useState(filters.search ?? "");
   const [status, setStatus] = useState<StatusFilter>(normalizeStatus(filters.status));
-  const [unitId, setUnitId] = useState(filters.unitId ?? "all");
-  const [primaryFocus, setPrimaryFocus] = useState(filters.primaryFocus ?? "all");
+  const [unitId, setUnitId] = useState(normalizeFilterValue(filters.unitId, "all"));
+  const [primaryFocus, setPrimaryFocus] = useState(normalizeFilterValue(filters.primaryFocus, "all"));
   const [sortBy, setSortBy] = useState<SortKey>(normalizeSort(filters.sort));
   const [followUpOnly, setFollowUpOnly] = useState(filters.followUp === "true");
   const [activeTab, setActiveTab] = useState<ViewTab>("overview");

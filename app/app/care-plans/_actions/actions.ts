@@ -402,6 +402,10 @@ export async function getCarePlansDashboardData(
     })
   ]);
 
+  const primaryFocusFilter =
+    filters.primaryFocus && filters.primaryFocus !== "all" ? filters.primaryFocus : null;
+  const unitFilter = filters.unitId && filters.unitId !== "all" ? filters.unitId : null;
+
   const plansByResident = new Map<string, CarePlanWithRelations[]>();
   for (const plan of plans) {
     const bucket = plansByResident.get(plan.residentId) ?? [];
@@ -762,8 +766,8 @@ export async function getCarePlansDashboardData(
     })
     .filter((row) => filterStatuses(filters.status, row.displayStatus))
     .filter((row) => (filters.bedBound ? row.residentStatus === "BED_BOUND" : true))
-    .filter((row) => (filters.primaryFocus ? row.primaryFocuses.includes(filters.primaryFocus) : true))
-    .filter((row) => (filters.unitId ? row.unitId === filters.unitId : true))
+    .filter((row) => (primaryFocusFilter ? row.primaryFocuses.includes(primaryFocusFilter) : true))
+    .filter((row) => (unitFilter ? row.unitId === unitFilter : true))
     .sort(compareByRoomThenName);
 
   const counts = {
