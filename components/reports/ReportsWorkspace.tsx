@@ -146,6 +146,8 @@ export function ReportsWorkspace({
 
   const selectedReport = data.reportTypes.find((report) => report.id === selectedReportType) ?? data.reportTypes[0];
   const previewMetrics = data.reportMetricsByType[selectedReportType] ?? [];
+  const supportsDirectFileExport = selectedReportType === "monthly-activity-recap";
+  const canExportFiles = data.canExport && supportsDirectFileExport;
 
   const handleMonthChange = (nextMonth: string) => {
     setMonthValue(nextMonth);
@@ -218,7 +220,7 @@ export function ReportsWorkspace({
                 <Printer className="mr-1.5 h-4 w-4" />
                 Print Preview
               </Button>
-              <Button asChild disabled={!data.canExport} variant="outline" className="rounded-xl border-[#4e6488] bg-[#132037] text-[#d5e3ff]">
+              <Button asChild disabled={!canExportFiles} variant="outline" className="rounded-xl border-[#4e6488] bg-[#132037] text-[#d5e3ff]">
                 <Link href={data.exports.pdf}>
                   <Download className="mr-1.5 h-4 w-4" />
                   Export PDF
@@ -480,7 +482,7 @@ export function ReportsWorkspace({
               <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#abc2e8]">Live Preview</h2>
               <p className="text-xs text-[#9ab3dc]">Presentation-ready report layout before export.</p>
             </div>
-            <Button asChild size="sm" variant="outline" className="rounded-lg border-[#4d6489] bg-[#13233c] text-[#d8e6ff]" disabled={!data.canExport}>
+            <Button asChild size="sm" variant="outline" className="rounded-lg border-[#4d6489] bg-[#13233c] text-[#d8e6ff]" disabled={!canExportFiles}>
               <Link href={data.exports.preview} target="_blank" rel="noreferrer">
                 <Eye className="mr-1.5 h-4 w-4" />
                 Open PDF
@@ -668,13 +670,13 @@ export function ReportsWorkspace({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline" className="rounded-lg border-[#4d6487] bg-[#13233c] text-[#d8e6ff]" disabled={!data.canExport}>
+            <Button asChild variant="outline" className="rounded-lg border-[#4d6487] bg-[#13233c] text-[#d8e6ff]" disabled={!canExportFiles}>
               <Link href={data.exports.pdf}>
                 <Download className="mr-1.5 h-4 w-4" />
                 Export PDF
               </Link>
             </Button>
-            <Button asChild variant="outline" className="rounded-lg border-[#4d6487] bg-[#13233c] text-[#d8e6ff]" disabled={!data.canExport}>
+            <Button asChild variant="outline" className="rounded-lg border-[#4d6487] bg-[#13233c] text-[#d8e6ff]" disabled={!canExportFiles}>
               <Link href={data.exports.csv}>
                 <FileSpreadsheet className="mr-1.5 h-4 w-4" />
                 Download CSV
@@ -686,6 +688,11 @@ export function ReportsWorkspace({
             </Button>
           </div>
           {isPending ? <p className="text-xs text-[#9eb6dd]">Updating report workspace...</p> : null}
+          {data.canExport && !supportsDirectFileExport ? (
+            <p className="rounded-xl border border-sky-300/35 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+              Direct PDF/CSV export is currently enabled for Monthly Activity Recap. Use Print Preview for this report type.
+            </p>
+          ) : null}
           {!data.canExport ? (
             <p className="rounded-xl border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               Your role can build and preview reports, but export is restricted.
