@@ -16,6 +16,11 @@ import {
   residentCouncilTopicTemplates,
   withoutDueDateLine
 } from "@/lib/resident-council/service";
+import {
+  formatResidentCouncilMeetingMetadata,
+  parseResidentCouncilMeetingMetadata,
+  RESIDENT_COUNCIL_MEAL_DEFAULT
+} from "@/lib/resident-council/meeting-metadata";
 import type { ResidentCouncilSection } from "@/lib/resident-council/types";
 import { compareResidentsByRoom } from "@/lib/resident-status";
 
@@ -62,6 +67,17 @@ const optionalBoolean = z.preprocess((value) => {
   return false;
 }, z.boolean());
 
+const optionalBooleanField = z.preprocess((value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === "true" || normalized === "1" || normalized === "on" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "off" || normalized === "no") return false;
+  return undefined;
+}, z.boolean().optional());
+
 const departmentFields = [
   { key: "departmentActivities", label: "Activities" },
   { key: "departmentNursing", label: "Nursing" },
@@ -71,13 +87,21 @@ const departmentFields = [
   { key: "departmentLaundry", label: "Laundry" },
   { key: "departmentMaintenance", label: "Maintenance" },
   { key: "departmentSocialServices", label: "Social Services" },
-  { key: "departmentAdministrator", label: "Administrator" }
+  { key: "departmentAdministrator", label: "Administration" }
 ] as const;
 
 const meetingSheetSchema = z.object({
   heldAt: z.string().min(1),
   attendanceCountOverride: optionalCount,
   residentsAttendedIds: z.array(z.string().min(1)).default([]),
+  residentsInAttendanceManual: nullableText,
+  staffInAttendance: nullableText,
+  timeIn: nullableText,
+  timeOut: nullableText,
+  residentRightsReviewed: optionalBooleanField,
+  policyUpdates: nullableText,
+  mealOfMonth: nullableText,
+  meetingStatus: z.enum(["DRAFT", "FINALIZED"]).optional(),
   summary: optionalText,
   oldBusiness: optionalText,
   newBusiness: optionalText,
@@ -99,6 +123,15 @@ const meetingSheetSchema = z.object({
 const minutesSheetSchema = z.object({
   meetingId: z.string().min(1),
   attendanceCountOverride: optionalCount,
+  residentsAttendedIds: z.array(z.string().min(1)).default([]),
+  residentsInAttendanceManual: nullableText,
+  staffInAttendance: nullableText,
+  timeIn: nullableText,
+  timeOut: nullableText,
+  residentRightsReviewed: optionalBooleanField,
+  policyUpdates: nullableText,
+  mealOfMonth: nullableText,
+  meetingStatus: z.enum(["DRAFT", "FINALIZED"]).optional(),
   summary: optionalText,
   oldBusiness: optionalText,
   newBusiness: optionalText,
@@ -164,6 +197,19 @@ const createTopicSchema = z.object({
   text: z.string().min(3)
 });
 
+const duplicateMeetingSchema = z.object({
+  sourceMeetingId: z.string().min(1),
+  heldAt: z.string().optional()
+});
+
+function parseEntries(value?: string | null) {
+  if (!value) return [];
+  return value
+    .split(/\n|,/)
+    .map((entry) => entry.replace(/^\s*-\s*/, "").trim())
+    .filter(Boolean);
+}
+
 function parseSectionLine(value?: string | null): ResidentCouncilSection | null {
   if (!value) return null;
   const lines = value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
@@ -201,6 +247,14 @@ export async function createResidentCouncilMeetingAction(formData: FormData) {
     heldAt: formData.get("heldAt"),
     attendanceCountOverride: formData.get("attendanceCountOverride"),
     residentsAttendedIds: formData.getAll("residentsAttendedIds").map((value) => String(value)),
+    residentsInAttendanceManual: formData.get("residentsInAttendanceManual"),
+    staffInAttendance: formData.get("staffInAttendance"),
+    timeIn: formData.get("timeIn"),
+    timeOut: formData.get("timeOut"),
+    residentRightsReviewed: formData.get("residentRightsReviewed"),
+    policyUpdates: formData.get("policyUpdates"),
+    mealOfMonth: formData.get("mealOfMonth"),
+    meetingStatus: formData.get("meetingStatus") || undefined,
     summary: formData.get("summary"),
     oldBusiness: formData.get("oldBusiness"),
     newBusiness: formData.get("newBusiness"),
@@ -237,9 +291,12 @@ export async function createResidentCouncilMeetingAction(formData: FormData) {
 
   residentRows.sort(compareResidentsByRoom);
 
-  const residentsInAttendance = residentRows.map(
+  const residentRosterEntries = residentRows.map(
     (resident) => `${resident.lastName}, ${resident.firstName} (Room ${resident.room})`
   );
+  const manualResidentEntries = parseEntries(parsed.residentsInAttendanceManual);
+  const residentsInAttendance = Array.from(new Set([...residentRosterEntries, ...manualResidentEntries]));
+  const staffInAttendance = parseEntries(parsed.staffInAttendance);
 
   const departmentUpdates = departmentFields.flatMap((item) => {
     const notes = parsed[item.key];
@@ -254,9 +311,19 @@ export async function createResidentCouncilMeetingAction(formData: FormData) {
   const locationLine = parsed.location ? `Location: ${parsed.location}` : null;
   const facilitatorLine = parsed.facilitator ? `Facilitator: ${parsed.facilitator}` : null;
   const templateLine = template ? `Template Applied: ${template.title}` : null;
-  const appendedNotes = [parsed.additionalNotes, locationLine, facilitatorLine, templateLine]
+  const freeformContext = [parsed.additionalNotes, locationLine, facilitatorLine, templateLine]
     .filter(Boolean)
     .join("\n");
+  const additionalNotes = formatResidentCouncilMeetingMetadata({
+    timeIn: parsed.timeIn,
+    timeOut: parsed.timeOut,
+    staffInAttendance,
+    residentRightsReviewed: parsed.residentRightsReviewed ?? true,
+    policyUpdates: parsed.policyUpdates,
+    mealOfTheMonth: parsed.mealOfMonth ?? RESIDENT_COUNCIL_MEAL_DEFAULT,
+    meetingStatus: parsed.meetingStatus === "FINALIZED" ? "Finalized" : "Draft",
+    additionalContext: freeformContext
+  });
 
   const oldBusiness = parsed.oldBusiness ?? (template?.section === "OLD" ? template.prompt : undefined);
   const newBusiness = parsed.newBusiness ?? (template?.section === "NEW" ? template.prompt : undefined);
@@ -268,7 +335,7 @@ export async function createResidentCouncilMeetingAction(formData: FormData) {
     departmentUpdates,
     oldBusiness,
     newBusiness,
-    additionalNotes: appendedNotes || undefined
+    additionalNotes
   });
 
   const meeting = await prisma.residentCouncilMeeting.create({
@@ -303,6 +370,15 @@ export async function updateResidentCouncilMeetingMinutesAction(formData: FormDa
   const parsed = minutesSheetSchema.parse({
     meetingId: formData.get("meetingId"),
     attendanceCountOverride: formData.get("attendanceCountOverride"),
+    residentsAttendedIds: formData.getAll("residentsAttendedIds").map((value) => String(value)),
+    residentsInAttendanceManual: formData.get("residentsInAttendanceManual"),
+    staffInAttendance: formData.get("staffInAttendance"),
+    timeIn: formData.get("timeIn"),
+    timeOut: formData.get("timeOut"),
+    residentRightsReviewed: formData.get("residentRightsReviewed"),
+    policyUpdates: formData.get("policyUpdates"),
+    mealOfMonth: formData.get("mealOfMonth"),
+    meetingStatus: formData.get("meetingStatus") || undefined,
     summary: formData.get("summary"),
     oldBusiness: formData.get("oldBusiness"),
     newBusiness: formData.get("newBusiness"),
@@ -340,6 +416,7 @@ export async function updateResidentCouncilMeetingMinutesAction(formData: FormDa
     newBusiness: null,
     additionalNotes: null
   };
+  const existingMetadata = parseResidentCouncilMeetingMetadata(existingParsed.additionalNotes);
 
   const existingDeptMap = new Map(
     existingParsed.departmentUpdates.map((department) => [department.label.toLowerCase(), department.notes])
@@ -351,13 +428,64 @@ export async function updateResidentCouncilMeetingMinutesAction(formData: FormDa
     return [{ label: item.label, notes: notes.trim() }];
   });
 
+  const residentIds = Array.from(new Set(parsed.residentsAttendedIds));
+  const residentRows = residentIds.length
+    ? await prisma.resident.findMany({
+      where: {
+        facilityId: scoped.facilityId,
+        id: { in: residentIds }
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        room: true
+      }
+    })
+    : [];
+  residentRows.sort(compareResidentsByRoom);
+
+  const rosterEntries = residentRows.map(
+    (resident) => `${resident.lastName}, ${resident.firstName} (Room ${resident.room})`
+  );
+  const manualEntries = parseEntries(parsed.residentsInAttendanceManual);
+  const hasAttendanceInput = rosterEntries.length > 0 || manualEntries.length > 0 || parsed.residentsInAttendanceManual === null;
+  const residentsInAttendance = hasAttendanceInput
+    ? Array.from(new Set([...rosterEntries, ...manualEntries]))
+    : existingParsed.residentsInAttendance ?? [];
+
+  const providedStaffAttendance = parseEntries(parsed.staffInAttendance);
+  const staffInAttendance =
+    parsed.staffInAttendance !== undefined
+      ? providedStaffAttendance
+      : existingMetadata.staffInAttendance;
+  const freeformAdditionalContext =
+    parsed.additionalNotes === undefined ? existingMetadata.additionalContext : parsed.additionalNotes;
+
   const nextNotes = buildMeetingSheetNotes({
     summary: parsed.summary ?? existingParsed.summary ?? undefined,
-    residentsInAttendance: existingParsed.residentsInAttendance ?? [],
+    residentsInAttendance,
     departmentUpdates,
     oldBusiness: parsed.oldBusiness ?? existingParsed.oldBusiness ?? undefined,
     newBusiness: parsed.newBusiness ?? existingParsed.newBusiness ?? undefined,
-    additionalNotes: parsed.additionalNotes ?? existingParsed.additionalNotes ?? undefined
+    additionalNotes: formatResidentCouncilMeetingMetadata({
+      timeIn: parsed.timeIn === undefined ? existingMetadata.timeIn : parsed.timeIn,
+      timeOut: parsed.timeOut === undefined ? existingMetadata.timeOut : parsed.timeOut,
+      staffInAttendance,
+      residentRightsReviewed:
+        parsed.residentRightsReviewed === undefined
+          ? existingMetadata.residentRightsReviewed
+          : parsed.residentRightsReviewed,
+      policyUpdates: parsed.policyUpdates === undefined ? existingMetadata.policyUpdates : parsed.policyUpdates,
+      mealOfTheMonth: parsed.mealOfMonth === undefined ? existingMetadata.mealOfTheMonth : parsed.mealOfMonth,
+      meetingStatus:
+        parsed.meetingStatus === undefined
+          ? existingMetadata.meetingStatus
+          : parsed.meetingStatus === "FINALIZED"
+            ? "Finalized"
+            : "Draft",
+      additionalContext: freeformAdditionalContext
+    })
   });
 
   const updated = await prisma.residentCouncilMeeting.update({
@@ -609,6 +737,94 @@ export async function deleteResidentCouncilMeetingAction(formData: FormData) {
   });
 
   invalidateResidentCouncil(scoped.facilityId);
+}
+
+export async function duplicateResidentCouncilMeetingAction(formData: FormData) {
+  const scoped = await requireModulePage("residentCouncil");
+  assertWritable(scoped.role);
+
+  const parsed = duplicateMeetingSchema.parse({
+    sourceMeetingId: formData.get("sourceMeetingId"),
+    heldAt: typeof formData.get("heldAt") === "string" ? String(formData.get("heldAt")) : undefined
+  });
+
+  const sourceMeeting = await prisma.residentCouncilMeeting.findFirst({
+    where: {
+      id: parsed.sourceMeetingId,
+      facilityId: scoped.facilityId
+    },
+    include: {
+      items: {
+        where: {
+          status: "UNRESOLVED"
+        },
+        orderBy: { updatedAt: "desc" }
+      }
+    }
+  });
+
+  if (!sourceMeeting) {
+    throw new Error("Source meeting not found.");
+  }
+
+  const parsedSheet = parseMeetingSheetNotes(sourceMeeting.notes);
+  const parsedMetadata = parseResidentCouncilMeetingMetadata(parsedSheet?.additionalNotes);
+  const unresolvedCarryForward = sourceMeeting.items.map((item) => `- ${item.category}: ${item.concern}`);
+
+  const oldBusiness = [
+    parsedSheet?.oldBusiness?.trim(),
+    unresolvedCarryForward.length > 0 ? "Carry Forward from prior meeting:\n" + unresolvedCarryForward.join("\n") : null
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const notes = buildMeetingSheetNotes({
+    summary: parsedSheet?.summary ?? "Resident council meeting carried forward from previous template.",
+    residentsInAttendance: parsedSheet?.residentsInAttendance ?? [],
+    departmentUpdates: parsedSheet?.departmentUpdates ?? [],
+    oldBusiness: oldBusiness || undefined,
+    newBusiness: parsedSheet?.newBusiness ?? undefined,
+    additionalNotes: formatResidentCouncilMeetingMetadata({
+      timeIn: null,
+      timeOut: null,
+      staffInAttendance: parsedMetadata.staffInAttendance,
+      residentRightsReviewed: parsedMetadata.residentRightsReviewed,
+      policyUpdates: parsedMetadata.policyUpdates,
+      mealOfTheMonth: parsedMetadata.mealOfTheMonth ?? RESIDENT_COUNCIL_MEAL_DEFAULT,
+      meetingStatus: "Draft",
+      additionalContext: parsedMetadata.additionalContext
+    })
+  });
+
+  const duplicateHeldAt =
+    typeof parsed.heldAt === "string" && parsed.heldAt.trim().length > 0
+      ? new Date(parsed.heldAt)
+      : new Date();
+  const heldAt = Number.isNaN(duplicateHeldAt.getTime()) ? new Date() : duplicateHeldAt;
+
+  const meeting = await prisma.residentCouncilMeeting.create({
+    data: {
+      facilityId: scoped.facilityId,
+      heldAt,
+      attendanceCount: parsedSheet?.residentsInAttendance?.length ?? sourceMeeting.attendanceCount,
+      notes
+    }
+  });
+
+  await logAudit({
+    facilityId: scoped.facilityId,
+    actorUserId: scoped.user.id,
+    action: "CREATE",
+    entityType: "ResidentCouncilMeeting",
+    entityId: meeting.id,
+    after: {
+      sourceMeetingId: sourceMeeting.id,
+      copiedUnresolvedItems: unresolvedCarryForward.length
+    }
+  });
+
+  invalidateResidentCouncil(scoped.facilityId, meeting.id);
+  return { meetingId: meeting.id };
 }
 
 export async function applyResidentCouncilTemplateAction(formData: FormData) {
