@@ -19,12 +19,20 @@ const VolunteersHubClient = dynamic(
 export function VolunteersHubLazy({
   initialPayload,
   initialTab,
-  canEdit
+  canEdit,
+  timeZone
 }: {
   initialPayload: VolunteerHubPayload;
   initialTab: "directory" | "schedule" | "hours";
   canEdit: boolean;
+  timeZone: string;
 }) {
-  return <VolunteersHubClient initialPayload={initialPayload} initialTab={initialTab} canEdit={canEdit} />;
+  return (
+    <VolunteersHubClient
+      initialPayload={initialPayload}
+      initialTab={initialTab}
+      canEdit={canEdit}
+      timeZone={timeZone}
+    />
+  );
 }
-
