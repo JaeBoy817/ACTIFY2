@@ -56,6 +56,13 @@ function toDateTimeLabel(date: Date, timeZone: string) {
   });
 }
 
+function safeDateLabelFromIso(value: string | null | undefined, timeZone: string, fallback: string) {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return toDateLabel(parsed, timeZone);
+}
+
 function toStatusLabel(value: string) {
   return value
     .toLowerCase()
@@ -423,7 +430,7 @@ export async function getReportsWorkspaceData(params: {
       statusLabel: toStatusLabel(row.complianceStatus ?? row.status),
       dueDateIso: row.dueDateIso,
       dueDateLabel: row.dueDateIso
-        ? toDateLabel(new Date(row.dueDateIso), timeZone)
+        ? safeDateLabelFromIso(row.dueDateIso, timeZone, "Due date pending")
         : row.daysOverdue
           ? `${row.daysOverdue} day(s) overdue`
           : "Due date pending",
