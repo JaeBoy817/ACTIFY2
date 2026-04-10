@@ -3,7 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 import { SubscriptionStatus } from "@prisma/client";
 import { CheckCircle2, Lock, ShieldCheck, Sparkles } from "lucide-react";
 
+import { getAccessStateForUser } from "@/lib/access-control";
 import { CheckoutButton } from "@/components/billing/CheckoutButton";
+import { ManageBillingButton } from "@/components/billing/ManageBillingButton";
 import { requireUser } from "@/lib/auth";
 import { getFacilityBillingState } from "@/lib/billing";
 
@@ -54,20 +56,29 @@ export default async function SubscribePage({
   }
 
   const user = await requireUser();
-  const billing = await getFacilityBillingState(user.facilityId).catch((error) => {
-    console.error("[billing] subscribe page billing lookup failed", error);
+  const accessState = await getAccessStateForUser({
+    id: user.id,
+    clerkUserId: user.clerkUserId,
+    email: user.email,
+    facilityId: user.facilityId,
+    role: user.role
+  }).catch((error) => {
+    console.error("[billing] subscribe page access lookup failed", error);
     return {
-      facilityId: user.facilityId,
+      isCreatorBypass: false,
+      hasActiveSubscription: false,
+      allowed: false
+    };
+  });
+  const billing = await getFacilityBillingState(user.facilityId).catch((error) => {
+    console.error("[billing] subscribe page billing snapshot failed", error);
+    return {
       stripeCustomerId: null,
-      stripeSubscriptionId: null,
-      stripePriceId: null,
-      subscriptionStatus: SubscriptionStatus.NONE,
-      subscriptionCurrentPeriodEnd: null,
-      hasActiveSubscription: false
+      subscriptionStatus: SubscriptionStatus.NONE
     };
   });
 
-  if (billing.hasActiveSubscription) {
+  if (accessState.allowed) {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-3xl items-center px-4 py-12">
         <section className="w-full rounded-[2rem] border border-emerald-300/40 bg-[linear-gradient(180deg,#0e182a_0%,#0b1322_50%,#080f1c_100%)] p-6 shadow-[0_36px_80px_-46px_rgba(16,185,129,0.45)] md:p-8">
@@ -75,9 +86,13 @@ export default async function SubscribePage({
             <CheckCircle2 className="h-4 w-4" />
             Subscription Active
           </p>
-          <h1 className="mt-3 text-3xl font-black text-white md:text-4xl">Actify Pro is active for your facility.</h1>
+          <h1 className="mt-3 text-3xl font-black text-white md:text-4xl">
+            {accessState.isCreatorBypass ? "Creator access is active." : "Actify Pro is active for your facility."}
+          </h1>
           <p className="mt-2 text-sm text-[#c6d5ed]">
-            Your billing is current. Continue to your dashboard.
+            {accessState.isCreatorBypass
+              ? "This account bypasses subscription enforcement and can access the app."
+              : "Your billing is current. Continue to your dashboard."}
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             <Link
@@ -142,8 +157,14 @@ export default async function SubscribePage({
             </div>
 
             <CheckoutButton className="mt-5 h-11 w-full rounded-xl bg-white text-slate-900 hover:bg-slate-100" />
+            {billing.stripeCustomerId ? (
+              <ManageBillingButton className="mt-2 h-11 w-full rounded-xl border-[#5e79a6] bg-[#13213a] text-[#d8e6ff] hover:bg-[#1b2e4d]" />
+            ) : null}
             <p className="mt-3 text-xs text-[#93a8cc]">
               You’ll return here after checkout while we confirm billing via webhook.
+            </p>
+            <p className="mt-1 text-xs text-[#93a8cc]">
+              Current status: {billing.subscriptionStatus?.toLowerCase().replaceAll("_", " ") ?? "none"}
             </p>
           </article>
         </div>

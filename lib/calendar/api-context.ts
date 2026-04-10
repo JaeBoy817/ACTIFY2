@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
+import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
 import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { canWrite } from "@/lib/permissions";
@@ -60,6 +61,17 @@ export async function requireCalendarApiContext(options: { writable?: boolean } 
 
   if (!user) {
     throw new CalendarApiError("User not found", 404);
+  }
+
+  try {
+    await requireAppAccessForUser(user);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      throw new CalendarApiError(error.message, error.status, {
+        code: error.code
+      });
+    }
+    throw error;
   }
 
   const modules = asModuleFlags(user.facility.moduleFlags);

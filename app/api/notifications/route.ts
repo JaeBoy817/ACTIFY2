@@ -1,6 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
+import { Role } from "@prisma/client";
 import { z } from "zod";
 
+import { asAppAccessErrorResponse, requireAppAccessForUser } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import {
   clearAllNotifications,
@@ -27,6 +29,10 @@ const deletePayloadSchema = z.object({
 
 type ApiUser = {
   id: string;
+  clerkUserId: string;
+  email: string;
+  facilityId: string;
+  role: Role;
 };
 
 async function requireNotificationsApiUser(): Promise<ApiUser> {
@@ -40,12 +46,28 @@ async function requireNotificationsApiUser(): Promise<ApiUser> {
       clerkUserId: userId
     },
     select: {
-      id: true
+      id: true,
+      clerkUserId: true,
+      email: true,
+      facilityId: true,
+      role: true
     }
   });
 
   if (!user) {
     throw new Response(JSON.stringify({ error: "User not found" }), { status: 404 });
+  }
+
+  const access = await requireAppAccessForUser(user).catch((error) => {
+    const response = asAppAccessErrorResponse(error);
+    if (response) throw response;
+    throw error;
+  });
+
+  if (!access.allowed) {
+    throw new Response(JSON.stringify({ error: "An active subscription is required to access Actify." }), {
+      status: 403
+    });
   }
 
   return user;

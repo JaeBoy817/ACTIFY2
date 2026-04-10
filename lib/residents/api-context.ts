@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
+import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getRequestTimeZone } from "@/lib/request-timezone";
@@ -58,6 +59,17 @@ export async function requireResidentsApiContext(options: { writable?: boolean }
 
   if (!user) {
     throw new ResidentsApiError("User not found", 404);
+  }
+
+  try {
+    await requireAppAccessForUser(user);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      throw new ResidentsApiError(error.message, error.status, {
+        code: error.code
+      });
+    }
+    throw error;
   }
 
   if (options.writable && !canWrite(user.role as Role)) {

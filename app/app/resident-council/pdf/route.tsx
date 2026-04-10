@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 
+import { asAppAccessErrorResponse, requireAppAccessForUser } from "@/lib/access-control";
 import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { resolveReportTheme } from "@/lib/report-pdf/ReportTheme";
@@ -28,6 +29,17 @@ export async function GET(req: Request) {
   });
 
   if (!user) return new Response("User not found", { status: 404 });
+
+  const accessResponse = await requireAppAccessForUser({
+    id: user.id,
+    clerkUserId: userId,
+    email: user.email,
+    facilityId: user.facilityId,
+    role: user.role
+  }).catch((error) => asAppAccessErrorResponse(error));
+  if (accessResponse instanceof Response) {
+    return accessResponse;
+  }
 
   const moduleFlags = asModuleFlags(user.facility?.moduleFlags);
   if (!moduleFlags.modules.residentCouncil) {

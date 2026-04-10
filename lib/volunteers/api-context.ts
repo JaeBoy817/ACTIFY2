@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
+import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -66,6 +67,17 @@ export async function requireVolunteersApiContext(options: { writable?: boolean 
 
   if (!user) {
     throw new VolunteersApiError("User not found", 404);
+  }
+
+  try {
+    await requireAppAccessForUser(user);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      throw new VolunteersApiError(error.message, error.status, {
+        code: error.code
+      });
+    }
+    throw error;
   }
 
   const flags = asModuleFlags(user.facility.moduleFlags);

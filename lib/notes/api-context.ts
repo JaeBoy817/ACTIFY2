@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
+import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
 import { asModuleFlags } from "@/lib/module-flags";
 import { canWrite } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -59,6 +60,17 @@ export async function requireNotesApiContext(options: { writable?: boolean } = {
 
   if (!user) {
     throw new NotesApiError("User not found.", 404);
+  }
+
+  try {
+    await requireAppAccessForUser(user);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      throw new NotesApiError(error.message, error.status, {
+        code: error.code
+      });
+    }
+    throw error;
   }
 
   const modules = asModuleFlags(user.facility.moduleFlags).modules;

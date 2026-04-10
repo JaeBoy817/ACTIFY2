@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { Prisma, Role } from "@prisma/client";
 import { redirect } from "next/navigation";
 
+import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
 import { defaultModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { getRequestTimeZone } from "@/lib/request-timezone";
@@ -118,6 +119,18 @@ export async function getOptionalUser() {
 
 export async function requireFacilityContext() {
   const user = await requireUser();
+  try {
+    await requireAppAccessForUser(user);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      if (error.status === 401) {
+        redirect("/sign-in");
+      }
+      redirect("/subscribe");
+    }
+    throw error;
+  }
+
   const timeZone = getRequestTimeZone(user.facility.timezone);
   return {
     user,

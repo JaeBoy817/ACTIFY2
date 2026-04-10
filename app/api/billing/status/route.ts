@@ -1,37 +1,22 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-import { getBillingStateByClerkUserId } from "@/lib/billing";
+import { getCurrentAccessState } from "@/lib/access-control";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
+  const accessState = await getCurrentAccessState();
+  if (!accessState.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const billing = await getBillingStateByClerkUserId(userId).catch((error) => {
-    console.error("[billing][status] lookup failed", error);
-    return null;
-  });
-
-  if (!billing) {
-    return NextResponse.json(
-      {
-        hasActiveSubscription: false,
-        subscriptionStatus: "NONE",
-        currentPeriodEnd: null
-      },
-      { status: 200 }
-    );
   }
 
   return NextResponse.json(
     {
-      hasActiveSubscription: billing.hasActiveSubscription,
-      subscriptionStatus: billing.subscriptionStatus,
-      currentPeriodEnd: billing.subscriptionCurrentPeriodEnd?.toISOString() ?? null
+      hasActiveSubscription: accessState.hasActiveSubscription,
+      subscriptionStatus: accessState.subscriptionStatus,
+      currentPeriodEnd: accessState.currentPeriodEnd?.toISOString() ?? null,
+      isCreatorBypass: accessState.isCreatorBypass,
+      allowed: accessState.allowed
     },
     { status: 200 }
   );

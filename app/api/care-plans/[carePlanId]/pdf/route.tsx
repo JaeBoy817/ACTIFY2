@@ -8,6 +8,7 @@ import {
   pdf
 } from "@react-pdf/renderer";
 
+import { asAppAccessErrorResponse, requireAppAccessForUser } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
 import { focusAreaLabel } from "@/lib/care-plans/enums";
 import { computeCarePlanDisplayStatus, displayStatusLabel } from "@/lib/care-plans/status";
@@ -321,11 +322,28 @@ export async function GET(
 
   const user = await prisma.user.findUnique({
     where: { clerkUserId: userId },
-    select: { facilityId: true }
+    select: {
+      id: true,
+      clerkUserId: true,
+      email: true,
+      facilityId: true,
+      role: true
+    }
   });
 
   if (!user) {
     return Response.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const accessResponse = await requireAppAccessForUser({
+    id: user.id,
+    clerkUserId: userId,
+    email: user.email,
+    facilityId: user.facilityId,
+    role: user.role
+  }).catch((error) => asAppAccessErrorResponse(error));
+  if (accessResponse instanceof Response) {
+    return accessResponse;
   }
 
   const carePlan = await prisma.carePlan.findFirst({
