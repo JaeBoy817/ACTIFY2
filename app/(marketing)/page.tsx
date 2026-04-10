@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ArrowRight,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -13,6 +12,8 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
 
 export const dynamic = "force-static";
 
@@ -332,6 +333,22 @@ function PreviewMockCard({ title, body, accent }: { title: string; body: string;
   );
 }
 
+function InlineSectionCta({
+  title,
+  body
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-700/70 bg-slate-950/75 p-4">
+      <h3 className="text-base font-semibold text-white">{title}</h3>
+      <p className="mt-1 text-sm text-slate-300">{body}</p>
+      <MarketingAuthCtas size="sm" className="mt-3" />
+    </div>
+  );
+}
+
 export default function LandingPage() {
   return (
     <div className="pb-10 pt-6 md:pb-14 md:pt-8">
@@ -353,17 +370,12 @@ export default function LandingPage() {
               Schedule activities, track attendance, manage resident follow-ups, and keep documentation organized in one system.
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/request-access"
-                className="inline-flex h-11 items-center rounded-full border border-cyan-300/40 bg-gradient-to-r from-cyan-500/70 to-blue-600/70 px-5 text-sm font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-              >
+            <MarketingAuthCtas className="mt-6" />
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-300">
+              <Link href="/request-access" className="text-cyan-200 transition hover:text-cyan-100">
                 Request Demo
               </Link>
-              <Link
-                href="#product-preview"
-                className="inline-flex h-11 items-center rounded-full border border-slate-600/90 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-              >
+              <Link href="#product-preview" className="transition hover:text-white">
                 Watch Product Tour
               </Link>
             </div>
@@ -422,6 +434,10 @@ export default function LandingPage() {
               );
             })}
           </div>
+          <InlineSectionCta
+            title="See the full workflow in one account"
+            body="Create your account to run calendar, attendance, resident context, and documentation in one connected system."
+          />
         </SectionShell>
 
         <SectionShell
@@ -455,6 +471,10 @@ export default function LandingPage() {
               </article>
             ))}
           </div>
+          <InlineSectionCta
+            title="Move from plan to charting faster"
+            body="Sign up and run the full daily cycle without jumping between disconnected systems."
+          />
         </SectionShell>
 
         <SectionShell
@@ -488,6 +508,10 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
+          <InlineSectionCta
+            title="Bring your whole department into one platform"
+            body="Create your account for cleaner daily operations and clearer leadership visibility."
+          />
         </SectionShell>
 
         <SectionShell
@@ -544,6 +568,10 @@ export default function LandingPage() {
               </details>
             ))}
           </div>
+          <InlineSectionCta
+            title="Ready to start?"
+            body="Sign up in minutes, or sign in to continue in your existing workspace."
+          />
         </SectionShell>
 
         <section className="rounded-3xl border border-cyan-300/35 bg-gradient-to-r from-cyan-500/15 via-blue-500/15 to-violet-500/15 p-6 md:p-7">
@@ -551,21 +579,13 @@ export default function LandingPage() {
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200 md:text-base">
             Give your team a cleaner system for scheduling, participation tracking, and documentation follow-through.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/request-access"
-              className="inline-flex h-11 items-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/80 to-blue-600/80 px-5 text-sm font-semibold text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-            >
-              Request Demo
-            </Link>
-            <Link
-              href="/sign-up"
-              className="inline-flex h-11 items-center rounded-full border border-slate-500 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-            >
-              Start Free Trial
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </div>
+          <MarketingAuthCtas className="mt-6" />
+          <Link
+            href="/contact"
+            className="mt-3 inline-flex items-center text-sm font-medium text-cyan-100 transition hover:text-white"
+          >
+            Need a walkthrough first? Contact / Demo
+          </Link>
         </section>
       </div>
     </div>

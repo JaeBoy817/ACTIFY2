@@ -171,13 +171,13 @@ export default async function SignInPage({ searchParams }: { searchParams?: Sear
 
             <div className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700">
               <p className="font-semibold text-zinc-900">Need an account?</p>
-              <p className="mt-1">Create one now and start your workspace setup.</p>
+              <p className="mt-1">Sign up now and start your workspace setup.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href={clerkSignUpUrl}
                   className="inline-flex items-center gap-2 rounded-xl border border-yellow-500 bg-yellow-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-400"
                 >
-                  Create Account
+                  Sign Up
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link

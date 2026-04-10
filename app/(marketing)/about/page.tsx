@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Compass, Lightbulb, ShieldCheck, UsersRound } from "lucide-react";
+import { Compass, Lightbulb, ShieldCheck, UsersRound } from "lucide-react";
+
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
 
 export const dynamic = "force-static";
 
@@ -47,20 +49,10 @@ export default function AboutPage() {
               Actify helps activity teams in SNFs, assisted living, and long-term care run daily workflows with less
               fragmentation. Planning, participation, resident follow-up, and documentation are connected in one place.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/request-access"
-                className="inline-flex h-11 items-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/75 to-blue-600/75 px-5 text-sm font-semibold text-white transition hover:brightness-110"
-              >
-                Request Demo
-              </Link>
-              <Link
-                href="/sign-in"
-                className="inline-flex h-11 items-center rounded-full border border-slate-600 bg-slate-900/90 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-400"
-              >
-                Sign In
-              </Link>
-            </div>
+            <MarketingAuthCtas className="mt-6" />
+            <Link href="/contact" className="mt-3 inline-flex text-sm font-medium text-cyan-200 transition hover:text-cyan-100">
+              Need a facility walkthrough? Contact / Demo
+            </Link>
           </article>
 
           <article className="grid gap-3">
@@ -153,27 +145,10 @@ export default function AboutPage() {
             If your team is juggling fragmented systems, Actify can consolidate planning, attendance, documentation,
             resident tracking, and reporting into one practical platform.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/request-access"
-              className="inline-flex h-11 items-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/80 to-blue-600/80 px-5 text-sm font-semibold text-white transition hover:brightness-110"
-            >
-              Request Demo
-            </Link>
-            <Link
-              href="/"
-              className="inline-flex h-11 items-center rounded-full border border-slate-500 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-300"
-            >
-              Back Home
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-            <Link
-              href="/contact"
-              className="inline-flex h-11 items-center rounded-full border border-slate-500 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-300"
-            >
-              Contact Team
-            </Link>
-          </div>
+          <MarketingAuthCtas className="mt-6" />
+          <Link href="/contact" className="mt-3 inline-flex text-sm font-medium text-cyan-100 transition hover:text-white">
+            Contact Team
+          </Link>
         </section>
       </section>
     </div>

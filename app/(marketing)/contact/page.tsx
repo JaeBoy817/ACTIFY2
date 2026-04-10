@@ -1,5 +1,6 @@
-import Link from "next/link";
 import { Building2, Clock3, Mail, MessagesSquare, Phone, UserCheck } from "lucide-react";
+
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
 
 export const dynamic = "force-static";
 
@@ -32,6 +33,7 @@ export default function ContactPage() {
           <p className="mt-4 text-base leading-7 text-slate-300 md:text-lg">
             Reach out for support, onboarding guidance, implementation planning, or a live product walkthrough.
           </p>
+          <MarketingAuthCtas className="mt-6" />
         </header>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
@@ -68,12 +70,7 @@ export default function ContactPage() {
               ))}
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/request-access"
-                className="inline-flex h-11 items-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/80 to-blue-600/80 px-5 text-sm font-semibold text-white transition hover:brightness-110"
-              >
-                Request Demo
-              </Link>
+              <MarketingAuthCtas size="sm" />
               <a
                 href="mailto:actifysupport@gmail.com?subject=Actify%20Support%20Request"
                 className="inline-flex h-11 items-center rounded-full border border-slate-500 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-300"
@@ -106,6 +103,14 @@ export default function ContactPage() {
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-200">Demo sessions available by request through the access form.</p>
           </article>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-cyan-300/30 bg-gradient-to-r from-cyan-500/14 via-blue-500/14 to-violet-500/14 p-5">
+          <h2 className="text-2xl font-black text-white md:text-3xl">Ready to join now?</h2>
+          <p className="mt-2 text-sm leading-7 text-slate-200">
+            Sign up and start your workspace immediately, or sign in if your facility already has access.
+          </p>
+          <MarketingAuthCtas className="mt-5" />
         </section>
       </section>
     </div>

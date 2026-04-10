@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, BookOpenCheck, CalendarDays, ClipboardPenLine, FileBarChart2, Users } from "lucide-react";
 
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
+
 export const dynamic = "force-static";
 
 const DOC_BLOCKS = [
@@ -36,6 +38,7 @@ export default function DocsPage() {
           <p className="mt-4 text-base leading-7 text-slate-300 md:text-lg">
             A quick guide to how Actify supports planning, participation tracking, resident follow-up, and documentation operations.
           </p>
+          <MarketingAuthCtas className="mt-6" />
         </header>
 
         <div className="mt-8 grid gap-3 md:grid-cols-3">
@@ -82,12 +85,7 @@ export default function DocsPage() {
               If your team wants a focused setup walkthrough, request a demo and we&apos;ll map the best path for your facility.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/request-access"
-                className="inline-flex h-11 items-center rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/80 to-blue-600/80 px-5 text-sm font-semibold text-white transition hover:brightness-110"
-              >
-                Request Demo
-              </Link>
+              <MarketingAuthCtas size="sm" />
               <Link
                 href="/"
                 className="inline-flex h-11 items-center rounded-full border border-slate-500 bg-slate-900/85 px-5 text-sm font-semibold text-slate-100 transition hover:border-slate-300"

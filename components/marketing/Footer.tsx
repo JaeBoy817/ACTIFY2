@@ -1,21 +1,29 @@
 import Link from "next/link";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
 
 const FOOTER_LINKS = [
   { label: "Features", href: "/#features" },
   { label: "Pricing", href: "/pricing" },
   { label: "About", href: "/about" },
   { label: "FAQ", href: "/#faq" },
-  { label: "Contact / Demo", href: "/contact" },
-  { label: "Sign In", href: "/sign-in" }
+  { label: "Contact / Demo", href: "/contact" }
 ] as const;
 
 export function MarketingFooter() {
   return (
     <footer className="pt-10">
       <div className="rounded-2xl border border-slate-700/80 bg-[#090f1cd9] px-4 py-6 text-slate-200 md:px-6">
-        <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+        <section className="rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4 md:p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">Ready to get started?</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-300">Start your workspace in minutes, then manage billing inside Actify.</p>
+            <MarketingAuthCtas size="sm" />
+          </div>
+        </section>
+
+        <div className="mt-6 grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <div className="inline-flex items-center gap-2">
               <ActifyLogo variant="icon" size={28} />

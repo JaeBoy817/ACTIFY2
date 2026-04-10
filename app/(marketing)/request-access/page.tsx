@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { ArrowLeft, Building2, ClipboardList, Mail, ShieldCheck, UserCheck } from "lucide-react";
 
+import { MarketingAuthCtas } from "@/components/marketing/MarketingAuthCtas";
+
 export default function RequestAccessPage() {
   return (
     <div className="min-h-screen bg-transparent text-zinc-100">
       <div className="mx-auto w-full max-w-5xl px-4 py-10 md:px-8 md:py-14">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link href="/sign-in" className="inline-flex items-center gap-2 rounded-xl border border-zinc-600 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-100 transition hover:bg-zinc-800">
             <ArrowLeft className="h-4 w-4" />
             Back to Sign In
           </Link>
-          <span className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
-            Access Request
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+              Access Request
+            </span>
+            <MarketingAuthCtas size="sm" />
+          </div>
         </div>
 
         <section className="rounded-[2rem] border border-zinc-700 bg-[linear-gradient(165deg,#121826_0%,#0d111b_60%,#090c13_100%)] p-7 shadow-[0_34px_70px_-42px_rgba(0,0,0,0.9)] md:p-10">
@@ -48,6 +53,11 @@ export default function RequestAccessPage() {
               Send your request to support. We typically respond within one business day.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
+              <MarketingAuthCtas
+                size="sm"
+                primaryClassName="!border-yellow-500 !bg-yellow-500 !text-zinc-950 hover:!bg-yellow-400"
+                secondaryClassName="!border-zinc-300 !bg-zinc-100 !text-zinc-800 hover:!bg-zinc-200"
+              />
               <a
                 href="mailto:actifysupport@gmail.com?subject=Actify%20Access%20Request&body=Name:%0AWork%20Email:%0AFacility:%0ARole:%0AApproving%20Manager:%0A"
                 className="inline-flex items-center gap-2 rounded-xl border border-yellow-500 bg-yellow-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-yellow-400"
