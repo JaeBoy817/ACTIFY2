@@ -2,6 +2,6 @@ import { POST as createCustomerPortalSession } from "@/app/api/stripe/customer-p
 
 export const runtime = "nodejs";
 
-export async function POST() {
-  return createCustomerPortalSession();
+export async function POST(request: Request) {
+  return createCustomerPortalSession(request);
 }

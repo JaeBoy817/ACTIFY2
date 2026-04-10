@@ -1,13 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
 
 import { requireUser } from "@/lib/auth";
 import { ensureFacilitySubscriptionRecord } from "@/lib/billing";
-import { getStripe, getStripeAppUrl } from "@/lib/stripe";
+import { StripeConfigurationError, getStripe, getStripeAppUrlWithFallback } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -25,7 +26,7 @@ export async function POST() {
     }
 
     const stripe = getStripe();
-    const appUrl = getStripeAppUrl();
+    const appUrl = getStripeAppUrlWithFallback(new URL(request.url).origin);
 
     const session = await stripe.billingPortal.sessions.create({
       customer: billing.stripeCustomerId,
@@ -35,6 +36,20 @@ export async function POST() {
     return NextResponse.json({ url: session.url }, { status: 200 });
   } catch (error) {
     console.error("[stripe][customer-portal]", error);
+
+    if (error instanceof StripeConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (error instanceof Stripe.errors.StripeAuthenticationError) {
+      return NextResponse.json(
+        {
+          error: "Billing is not configured correctly. Please verify your Stripe secret key."
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ error: "Unable to create customer portal session." }, { status: 500 });
   }
 }

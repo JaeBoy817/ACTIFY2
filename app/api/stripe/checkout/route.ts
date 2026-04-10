@@ -2,6 +2,6 @@ import { POST as createCheckoutSession } from "@/app/api/stripe/create-checkout-
 
 export const runtime = "nodejs";
 
-export async function POST() {
-  return createCheckoutSession();
+export async function POST(request: Request) {
+  return createCheckoutSession(request);
 }
