@@ -37,7 +37,7 @@ export default async function SignUpPage() {
     try {
       const { userId } = await auth();
       if (userId) {
-        redirect("/dashboard");
+        redirect("/subscribe");
       }
     } catch (error) {
       console.error("[sign-up] auth precheck failed; rendering sign-up page", {

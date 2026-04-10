@@ -1,6 +1,7 @@
 import { SubscriptionStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 
+import { getFacilityBillingState } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 
 export const ACTIVE_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING];
@@ -10,14 +11,14 @@ export async function getFacilitySubscription(facilityId: string) {
 }
 
 export async function hasActiveSubscription(facilityId: string) {
-  const subscription = await getFacilitySubscription(facilityId);
-  return Boolean(subscription && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status));
+  const billing = await getFacilityBillingState(facilityId);
+  return billing.hasActiveSubscription || ACTIVE_SUBSCRIPTION_STATUSES.includes(billing.subscriptionStatus);
 }
 
 export async function requireSubscription(facilityId: string) {
   const active = await hasActiveSubscription(facilityId);
   if (!active) {
-    redirect("/app/settings");
+    redirect("/subscribe");
   }
 }
 

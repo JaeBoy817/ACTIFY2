@@ -4,7 +4,20 @@ import { NextResponse } from "next/server";
 
 import { isClerkBackendConfigured } from "@/lib/clerk-config";
 
-const isProtectedRoute = createRouteMatcher(["/app(.*)", "/dashboard(.*)"]);
+const isProtectedRoute = createRouteMatcher([
+  "/app(.*)",
+  "/dashboard(.*)",
+  "/calendar(.*)",
+  "/documentation(.*)",
+  "/residents(.*)",
+  "/analytics(.*)",
+  "/care-plan(.*)",
+  "/care-plans(.*)",
+  "/attendance(.*)",
+  "/notes(.*)",
+  "/templates(.*)",
+  "/volunteers(.*)"
+]);
 
 const protectedMiddleware = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
@@ -34,6 +47,7 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
     console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
   }
 
+  // Subscription gating remains server-side in app layouts/pages (DB-backed source of truth).
   return NextResponse.next();
 });
 

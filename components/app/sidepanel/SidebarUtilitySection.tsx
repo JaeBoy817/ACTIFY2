@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LifeBuoy, LogOut, Settings } from "lucide-react";
+import { CreditCard, LifeBuoy, LogOut, Settings } from "lucide-react";
 import { SignOutButton } from "@clerk/nextjs";
 
 import { SidebarNavItem } from "@/components/app/sidepanel/SidebarNavItem";
@@ -22,6 +22,13 @@ const helpLink: SidebarLink = {
   accentGradientClasses: "from-sky-300 to-blue-500 text-zinc-950"
 };
 
+const billingLink: SidebarLink = {
+  href: "/app/billing",
+  label: "Billing",
+  icon: CreditCard,
+  accentGradientClasses: "from-sky-200 to-indigo-300 text-zinc-900"
+};
+
 export function SidebarUtilitySection({
   pathname,
   onPrefetch,
@@ -39,6 +46,12 @@ export function SidebarUtilitySection({
       <SidebarNavItem
         link={settingsLink}
         active={pathname === "/app/settings" || pathname.startsWith("/app/settings/")}
+        onPrefetch={onPrefetch}
+        onNavigate={onNavigate}
+      />
+      <SidebarNavItem
+        link={billingLink}
+        active={pathname === "/app/billing"}
         onPrefetch={onPrefetch}
         onNavigate={onNavigate}
       />

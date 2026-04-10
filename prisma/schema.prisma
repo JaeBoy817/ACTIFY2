@@ -1048,12 +1048,15 @@ model Subscription {
   facilityId           String             @unique
   stripeCustomerId     String?
   stripeSubscriptionId String?            @unique
+  stripePriceId        String?
   status               SubscriptionStatus @default(NONE)
+  hasActiveSubscription Boolean           @default(false)
   currentPeriodEnd     DateTime?
   updatedAt            DateTime           @updatedAt
   facility             Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
   @@index([status])
+  @@index([hasActiveSubscription])
 }
 
 model AuditLog {

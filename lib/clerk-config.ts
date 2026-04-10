@@ -4,6 +4,7 @@ export type ClerkDiagnostic = {
 };
 
 const APP_DASHBOARD_PATH = "/dashboard";
+const APP_SUBSCRIBE_PATH = "/subscribe";
 
 export const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 export const clerkSecretKey = process.env.CLERK_SECRET_KEY;
@@ -29,7 +30,7 @@ export const clerkSignInFallbackRedirectUrl = normalizeRoutePath(
 );
 export const clerkSignUpFallbackRedirectUrl = normalizeRoutePath(
   process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL || process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL,
-  APP_DASHBOARD_PATH
+  APP_SUBSCRIBE_PATH
 );
 
 export const isClerkConfigured = Boolean(

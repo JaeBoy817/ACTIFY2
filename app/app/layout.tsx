@@ -1,5 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
 import { AppRouteHeader } from "@/components/app/AppRouteHeader";
@@ -14,6 +15,7 @@ import { AppSidebar } from "@/components/app/sidebar";
 import { RouteTransition } from "@/components/motion/RouteTransition";
 import { Badge } from "@/components/ui/badge";
 import { ensureUserAndFacility } from "@/lib/auth";
+import { getFacilityBillingState } from "@/lib/billing";
 import { actifyUserButtonAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
 import { getUnreadNotificationCount } from "@/lib/notifications/service";
@@ -24,6 +26,16 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
+  try {
+    const billing = await getFacilityBillingState(user.facilityId);
+    if (!billing.hasActiveSubscription) {
+      redirect("/subscribe");
+    }
+  } catch (error) {
+    // Never hard-crash the app shell on billing lookup failures.
+    // We log and continue so users don't land on a blank page.
+    console.error("[billing] app layout gating check failed", error);
+  }
 
   const [settingsResult, unreadResult] = await Promise.allSettled([
     prisma.facilitySettings.findUnique({
