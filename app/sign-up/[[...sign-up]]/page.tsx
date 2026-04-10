@@ -2,8 +2,8 @@ import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { ArrowRight, CalendarDays, ClipboardCheck, Users2 } from "lucide-react";
-import { redirect } from "next/navigation";
 
+import { ForceClerkReauth } from "@/components/auth/ForceClerkReauth";
 import { MattePanel } from "@/components/public/PublicPrimitives";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
 import {
@@ -37,7 +37,7 @@ export default async function SignUpPage() {
     try {
       const { userId } = await auth();
       if (userId) {
-        redirect("/subscribe");
+        return <ForceClerkReauth redirectTo="/sign-up" mode="sign-up" />;
       }
     } catch (error) {
       console.error("[sign-up] auth precheck failed; rendering sign-up page", {

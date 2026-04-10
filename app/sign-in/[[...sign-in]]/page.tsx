@@ -2,8 +2,8 @@ import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { AlertTriangle, ArrowRight, Building2, Bug, Mail, ShieldCheck, UserRound } from "lucide-react";
-import { redirect } from "next/navigation";
 
+import { ForceClerkReauth } from "@/components/auth/ForceClerkReauth";
 import { MattePanel } from "@/components/public/PublicPrimitives";
 import { actifyClerkAppearance } from "@/lib/clerk/appearance";
 import {
@@ -83,11 +83,19 @@ function DevAuthDebugCard({ redirectUrl, authFlag }: { redirectUrl: string; auth
 }
 
 export default async function SignInPage({ searchParams }: { searchParams?: SearchParams }) {
+  const redirectUrl = paramToString(searchParams?.redirect_url);
+  const authFlag = paramToString(searchParams?.auth);
+
   if (isClerkBackendConfigured) {
     try {
       const { userId } = await auth();
       if (userId) {
-        redirect("/dashboard");
+        const nextParams = new URLSearchParams();
+        nextParams.set("fresh", "1");
+        if (redirectUrl) nextParams.set("redirect_url", redirectUrl);
+        if (authFlag) nextParams.set("auth", authFlag);
+        const redirectTo = `/sign-in?${nextParams.toString()}`;
+        return <ForceClerkReauth redirectTo={redirectTo} mode="sign-in" />;
       }
     } catch (error) {
       console.error("[sign-in] auth precheck failed; rendering sign-in page", {
@@ -95,9 +103,6 @@ export default async function SignInPage({ searchParams }: { searchParams?: Sear
       });
     }
   }
-
-  const redirectUrl = paramToString(searchParams?.redirect_url);
-  const authFlag = paramToString(searchParams?.auth);
 
   return (
     <div className="min-h-screen bg-transparent text-zinc-100">
