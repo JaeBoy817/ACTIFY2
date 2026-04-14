@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import { ActivityTag } from "@/components/assistant-dashboard/ActivityTag";
-import { AssistantChat } from "@/components/assistant-dashboard/AssistantChat";
+import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { CalendarActionCard } from "@/components/assistant-dashboard/CalendarActionCard";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
 import { LoadingSkeleton } from "@/components/assistant-dashboard/LoadingSkeleton";
