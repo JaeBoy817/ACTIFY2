@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { OpenRouter } from "@openrouter/sdk";
 
 import type { AssistantChatMessageInput, AssistantMode } from "@/lib/assistant/schema";
@@ -12,11 +14,66 @@ export class AssistantConfigurationError extends Error {
 
 let openRouterClient: OpenRouter | null = null;
 
-function getOpenRouterApiKey() {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) {
-    throw new AssistantConfigurationError("Assistant is not configured. Missing OPENROUTER_API_KEY.");
+function sanitizeEnvValue(value: string | undefined | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // Allow quoted values in env files.
+  return trimmed.replace(/^['"]|['"]$/g, "");
+}
+
+function readLocalEnvFileValue(key: string) {
+  if (process.env.NODE_ENV === "production") return null;
+
+  const candidates = [".env.local", ".env"];
+  for (const fileName of candidates) {
+    const filePath = path.join(process.cwd(), fileName);
+    if (!existsSync(filePath)) continue;
+
+    try {
+      const raw = readFileSync(filePath, "utf8");
+      const lines = raw.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+
+        const separatorIndex = trimmed.indexOf("=");
+        if (separatorIndex <= 0) continue;
+
+        const name = trimmed.slice(0, separatorIndex).trim();
+        if (name !== key) continue;
+
+        const value = trimmed.slice(separatorIndex + 1);
+        return sanitizeEnvValue(value);
+      }
+    } catch {
+      // Ignore file read errors in dev fallback.
+    }
   }
+
+  return null;
+}
+
+function getOpenRouterApiKey() {
+  const apiKey =
+    sanitizeEnvValue(process.env.OPENROUTER_API_KEY) ??
+    sanitizeEnvValue(process.env.OPEN_ROUTER_API_KEY) ??
+    readLocalEnvFileValue("OPENROUTER_API_KEY") ??
+    readLocalEnvFileValue("OPEN_ROUTER_API_KEY");
+
+  if (!apiKey) {
+    throw new AssistantConfigurationError(
+      "Assistant is not configured. Missing OPENROUTER_API_KEY. If you just updated .env, restart the server."
+    );
+  }
+
+  // Catch placeholder values like <OPENROUTER_API_KEY>.
+  if (apiKey.startsWith("<") && apiKey.endsWith(">")) {
+    throw new AssistantConfigurationError(
+      "Assistant is not configured. OPENROUTER_API_KEY appears to be a placeholder value."
+    );
+  }
+
   return apiKey;
 }
 
