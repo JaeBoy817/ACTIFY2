@@ -1,100 +1,107 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { Bell, Search, Settings2 } from "lucide-react";
 
 import { ActifyLogo } from "@/components/ActifyLogo";
-import { AppRouteHeader } from "@/components/app/AppRouteHeader";
-import { ActifyThemeShell } from "@/components/app/ActifyThemeShell";
-import { GlobalCommandPalette } from "@/components/app/GlobalCommandPalette";
-import { IdleComplianceGuard } from "@/components/app/IdleComplianceGuard";
-import { NotificationBellDropdown } from "@/components/app/NotificationBellDropdown";
-import { PerformanceReporter } from "@/components/app/PerformanceReporter";
-import { RoutePrefetcher } from "@/components/app/RoutePrefetcher";
-import { TimezoneSync } from "@/components/app/TimezoneSync";
-import { AppSidebar } from "@/components/app/sidebar";
-import { RouteTransition } from "@/components/motion/RouteTransition";
-import { Badge } from "@/components/ui/badge";
 import { redirectIfNoAppAccessForUser } from "@/lib/access-control";
 import { ensureUserAndFacility } from "@/lib/auth";
 import { actifyUserButtonAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
-import { getUnreadNotificationCount } from "@/lib/notifications/service";
-import { prisma } from "@/lib/prisma";
-import { asComplianceDefaults } from "@/lib/settings/defaults";
 
 export const dynamic = "force-dynamic";
+
+function firstNameFromName(name: string | null | undefined) {
+  if (!name) return "there";
+  const first = name.trim().split(/\s+/)[0];
+  return first || "there";
+}
+
+function formatToday(timeZone?: string | null) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: timeZone || "America/Chicago"
+    }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    }).format(new Date());
+  }
+}
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
   await redirectIfNoAppAccessForUser(user, { blockedRedirectPath: "/subscribe" });
 
-  const [settingsResult, unreadResult] = await Promise.allSettled([
-    prisma.facilitySettings.findUnique({
-      where: { facilityId: user.facilityId },
-      select: { complianceJson: true }
-    }),
-    getUnreadNotificationCount(user.id)
-  ]);
-  const settings = settingsResult.status === "fulfilled" ? settingsResult.value : null;
-  const unreadNotificationCount = unreadResult.status === "fulfilled" ? unreadResult.value : 0;
-  const compliance = asComplianceDefaults(settings?.complianceJson);
+  const firstName = firstNameFromName(user.name);
+  const todayLabel = formatToday(user.facility.timezone);
 
   return (
-    <ActifyThemeShell className="actify-editorial-shell actify-app-shell min-h-screen md:flex">
-      <div className="actify-shell-sidebar-layer w-full p-3 md:sticky md:top-0 md:h-screen md:w-[88px] md:shrink-0 md:px-2 md:py-3">
-        <AppSidebar moduleFlagsRaw={user.facility.moduleFlags} />
-      </div>
-      <div className="actify-shell-content-layer min-w-0 flex-1 pb-8 pr-3">
-        {isClerkConfigured ? (
-          <IdleComplianceGuard
-            enabled={compliance.hipaaMode.enabled}
-            autoLogoutMinutes={compliance.hipaaMode.autoLogoutMinutes}
-          />
-        ) : null}
-        <div className="actify-shell-header-layer px-2 pt-3 md:px-3">
-          <header className="relative overflow-hidden rounded-[1.8rem] border border-[#2a3f67] bg-[linear-gradient(180deg,#091327_0%,#0b1428_46%,#090f1f_100%)] shadow-[0_30px_50px_-36px_rgba(37,99,235,0.65)]">
-            <div className="pointer-events-none absolute inset-[1px] rounded-[1.7rem] border border-white/10" />
-            <div className="pointer-events-none absolute inset-x-4 top-2 h-6 rounded-full bg-blue-300/10 blur-md" />
-            <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-5">
-              <div className="flex items-center gap-3">
-                <Link href="/app" className="inline-flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <ActifyLogo variant="icon" size={34} aria-label="ACTIFY app home" />
-                </Link>
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9bb3db]">Facility</p>
-                  <p className="text-base font-bold text-white">{user.facility.name}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="border-[#35537f] bg-[#132542] text-[#d7e6ff]">
-                  Workspace
-                </Badge>
-                <Badge variant="outline" className="border-[#3d5e8c] bg-[#0f1d35] text-[#bdd0f0]">{user.role}</Badge>
-                <NotificationBellDropdown
-                  viewerId={user.id}
-                  unreadCount={unreadNotificationCount}
-                />
-                {isClerkConfigured ? (
-                  <UserButton afterSignOutUrl="/signed-out" appearance={actifyUserButtonAppearance} />
-                ) : (
-                  <Badge variant="secondary">Clerk not configured</Badge>
-                )}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_10%_8%,rgba(186,230,253,0.45),transparent_35%),radial-gradient(circle_at_88%_15%,rgba(187,247,208,0.36),transparent_40%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] text-slate-900">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-4 pb-8 pt-4 md:px-6 lg:px-8">
+        <header className="mb-5 rounded-[2rem] border border-white/70 bg-white/80 p-4 shadow-[0_28px_58px_-42px_rgba(15,23,42,0.5)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex min-w-[220px] items-center gap-3">
+              <Link href="/app" className="inline-flex rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">
+                <ActifyLogo variant="icon" size={38} aria-label="Actify home" />
+              </Link>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Actify Assistant Workspace</p>
+                <p className="text-lg font-semibold text-slate-900">Good morning, {firstName}</p>
               </div>
             </div>
-          </header>
-        </div>
-        <main className="px-2 py-4 md:px-3">
-          <div className="space-y-4">
-            <AppRouteHeader />
+
+            <div className="flex min-w-[260px] flex-1 items-center gap-2 md:max-w-md">
+              <label className="relative w-full">
+                <span className="sr-only">Quick search</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                <input
+                  type="search"
+                  placeholder="Quick search prompts, tools, residents..."
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                />
+              </label>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="hidden rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 md:inline-flex">
+                {todayLabel}
+              </span>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+              </button>
+              <Link
+                href="/app/settings"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                aria-label="Open settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Link>
+              {isClerkConfigured ? (
+                <UserButton afterSignOutUrl="/signed-out" appearance={actifyUserButtonAppearance} />
+              ) : (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  Auth setup needed
+                </span>
+              )}
+            </div>
           </div>
-          <RoutePrefetcher />
-          <TimezoneSync />
-          <PerformanceReporter />
-          <GlobalCommandPalette />
-          <div className="mt-4">
-            <RouteTransition>{children}</RouteTransition>
-          </div>
+        </header>
+
+        <main id="app-main" className="flex-1">
+          {children}
         </main>
       </div>
-    </ActifyThemeShell>
+    </div>
   );
 }
