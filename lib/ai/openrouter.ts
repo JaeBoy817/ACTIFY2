@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { buildActifySystemPrompt, type ActifyAssistantMode } from "@/lib/ai/buildActifySystemPrompt";
 
 export type OpenRouterChatRole = "system" | "user" | "assistant";
@@ -51,12 +54,63 @@ type OpenRouterResponseShape = {
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 25_000;
 
+function sanitizeEnvValue(value: string | undefined | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/^['"]|['"]$/g, "");
+}
+
+function readLocalEnvFileValue(key: string) {
+  if (process.env.NODE_ENV === "production") return null;
+
+  const candidates = [".env.local", ".env"];
+  for (const fileName of candidates) {
+    const filePath = path.join(process.cwd(), fileName);
+    if (!existsSync(filePath)) continue;
+
+    try {
+      const raw = readFileSync(filePath, "utf8");
+      const lines = raw.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+
+        const separatorIndex = trimmed.indexOf("=");
+        if (separatorIndex <= 0) continue;
+
+        const name = trimmed.slice(0, separatorIndex).trim();
+        if (name !== key) continue;
+
+        const value = trimmed.slice(separatorIndex + 1);
+        return sanitizeEnvValue(value);
+      }
+    } catch {
+      // Ignore local env read failures.
+    }
+  }
+
+  return null;
+}
+
 function getOpenRouterApiKey() {
-  const value = process.env.OPENROUTER_API_KEY?.trim();
+  const value =
+    sanitizeEnvValue(process.env.OPENROUTER_API_KEY) ??
+    sanitizeEnvValue(process.env.OPEN_ROUTER_API_KEY) ??
+    readLocalEnvFileValue("OPENROUTER_API_KEY") ??
+    readLocalEnvFileValue("OPEN_ROUTER_API_KEY");
+
   if (!value) {
     throw new OpenRouterRequestError(
       "MISSING_API_KEY",
-      "Assistant is not configured. Missing OPENROUTER_API_KEY.",
+      "Assistant is not configured. Missing OPENROUTER_API_KEY. If you just updated env vars, restart the server.",
+      { status: 503, retryable: false }
+    );
+  }
+  if (value.startsWith("<") && value.endsWith(">")) {
+    throw new OpenRouterRequestError(
+      "MISSING_API_KEY",
+      "Assistant is not configured. OPENROUTER_API_KEY appears to be a placeholder value.",
       { status: 503, retryable: false }
     );
   }
