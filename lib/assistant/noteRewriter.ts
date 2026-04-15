@@ -9,6 +9,14 @@ export type NoteRewriteIntent = {
   noteText: string;
 };
 
+export type ParsedRewriteRequest = {
+  intent: "rewriteNote" | "none";
+  noteType: NoteRewriteType | "unknown";
+  rawNoteText: string;
+  style: NoteRewriteStyle;
+  wrapperText: string;
+};
+
 export type RewriteDiffResult = {
   isMeaningfullyDifferent: boolean;
   similarity: number;
@@ -37,6 +45,7 @@ export type NotePreservationReport = {
   missingDetails: string[];
   preservationScore: number;
   genericPhrasesFound: string[];
+  tooShortComparedToInput: boolean;
   passed: boolean;
 };
 
@@ -86,6 +95,16 @@ const REWRITE_TRIGGERS = [
   "clean up",
   "cleanup",
   "polish",
+  "make this sound more professional",
+  "make this note sound more professional",
+  "clean this up for pcc",
+  "clean up this pcc note",
+  "reword this note for documentation",
+  "rewrite this note for documentation",
+  "rewrite this 1:1 for pcc",
+  "reword this 1:1 for pcc",
+  "rewrite this progress note",
+  "reword this progress note",
   "professional",
   "pcc",
   "documentation",
@@ -124,6 +143,7 @@ const DETAIL_RULES: DetailRule[] = [
   { detail: "word searches", category: "activitiesMentioned", patterns: [/\bword searches?\b/i, /wordsearch/i] },
   { detail: "magazines", category: "activitiesMentioned", patterns: [/\bmagazines?\b/i] },
   { detail: "puzzle book", category: "activitiesMentioned", patterns: [/\bpuzzle book\b/i] },
+  { detail: "nail painting", category: "activitiesMentioned", patterns: [/\bpaint(?:ed|ing)? nails?\b/i, /\bnail painting\b/i] },
   { detail: "coloring", category: "activitiesMentioned", patterns: [/\bcoloring\b/i] },
   { detail: "tv", category: "activitiesMentioned", patterns: [/\btv\b/i, /television/i] },
   { detail: "movies", category: "activitiesMentioned", patterns: [/\bmovies?\b/i] },
@@ -133,7 +153,7 @@ const DETAIL_RULES: DetailRule[] = [
   {
     detail: "talked with peers",
     category: "socialDetails",
-    patterns: [/talk(ed|ing)? (to|with) other residents/i, /interact(ed|ing)? with peers/i, /social/i]
+    patterns: [/talk(ed|ing)? (to|with) other residents/i, /talk(ed|ing)? with peers/i, /interact(ed|ing)? with peers/i, /social/i]
   },
   {
     detail: "required initial encouragement",
@@ -162,6 +182,7 @@ const DETAIL_RULES: DetailRule[] = [
   },
   { detail: "smiling", category: "moodDetails", patterns: [/\bsmil(ed|ing)\b/i] },
   { detail: "calm", category: "moodDetails", patterns: [/\bcalm\b/i] },
+  { detail: "positive response", category: "moodDetails", patterns: [/\bwas positive\b/i, /\bresponded positively\b/i, /\bpositive throughout\b/i] },
   { detail: "agitated", category: "moodDetails", patterns: [/\bagitat(ed|ion)\b/i] },
   { detail: "upset", category: "moodDetails", patterns: [/\bupset\b/i] },
   {
@@ -183,6 +204,11 @@ const DETAIL_RULES: DetailRule[] = [
     detail: "follow-up needed",
     category: "followupDetails",
     patterns: [/follow[- ]?up/i, /reassess/i, /check back/i]
+  },
+  {
+    detail: "interested in participating again",
+    category: "followupDetails",
+    patterns: [/would like to .*again/i, /wants? to .*again/i, /interested in .*again/i, /asked to .*again/i]
   },
   {
     detail: "motorized wheelchair",
@@ -414,51 +440,90 @@ function findNoteTypeFromPrompt(normalizedPrompt: string): NoteRewriteType | "un
   return "unknown";
 }
 
-function extractQuotedNote(prompt: string) {
-  const quoteMatch = prompt.match(/["“]([^"”]+)["”]/);
-  return quoteMatch?.[1]?.trim() ?? "";
+function isRewriteCommandText(text: string) {
+  const normalized = text.toLowerCase().trim();
+  return REWRITE_TRIGGERS.some((trigger) => normalized.includes(trigger));
 }
 
-function stripRewriteCommand(prompt: string) {
-  return prompt
+function detectDelimiterSplit(input: string) {
+  const delimiterMatch = input.match(/^(.{0,180}?)(?:\:\s+|\s-\s|\n)([\s\S]+)$/);
+  if (!delimiterMatch) return null;
+  const wrapper = delimiterMatch[1]?.trim() ?? "";
+  const body = delimiterMatch[2]?.trim() ?? "";
+  if (!wrapper || !body) return null;
+  if (!isRewriteCommandText(wrapper)) return null;
+  return { wrapper, body };
+}
+
+function stripRewriteWrapper(input: string) {
+  return input
     .replace(
-      /^(please\s+)?(reword|rewrite|clean up|cleanup|polish|make this|turn this|help me rewrite)\s+(this\s+)?(note|progress note|1:1 note|one-to-one note)?\s*:?\s*/i,
+      /^(please\s+)?(reword|rewrite|clean up|cleanup|polish|make this sound more professional|make this note sound more professional|make this more professional|clean this up for pcc|clean up this pcc note|reword this note for documentation|rewrite this note for documentation|reword this|rewrite this|clean this up|make this|turn this|help me rewrite)\s*/i,
       ""
     )
+    .replace(/^(for\s+(pcc|documentation))\s*/i, "")
+    .replace(/^(this\s+)?(1:1|one[- ]to[- ]one|one to one|progress)\s*(note)?\s*/i, "")
+    .replace(/^(note|progress note|1:1 note|one-to-one note)\s*/i, "")
+    .replace(/^(for\s+(pcc|documentation))\s*/i, "")
+    .replace(/^[:\-]\s*/, "")
     .trim();
 }
 
-function extractNoteText(prompt: string) {
-  const normalized = prompt.trim();
-  if (!normalized) return "";
+export function parseRewriteRequest(input: string): ParsedRewriteRequest {
+  const trimmed = input.trim();
+  const lower = trimmed.toLowerCase();
+  const style = findStyleFromPrompt(lower);
+  const noteType = findNoteTypeFromPrompt(lower);
+  const hasRewriteIntent = isRewriteCommandText(lower);
 
-  const quoted = extractQuotedNote(normalized);
-  if (quoted.length >= 12) return quoted;
-
-  if (normalized.includes("\n")) {
-    const [head, ...rest] = normalized.split("\n");
-    const trailing = rest.join(" ").trim();
-    if (REWRITE_TRIGGERS.some((trigger) => head.toLowerCase().includes(trigger)) && trailing.length >= 12) {
-      return trailing;
-    }
+  if (!trimmed || !hasRewriteIntent) {
+    return {
+      intent: "none",
+      noteType,
+      rawNoteText: "",
+      style,
+      wrapperText: ""
+    };
   }
 
-  const stripped = stripRewriteCommand(normalized);
-  if (stripped.length >= 12) return stripped;
+  const split = detectDelimiterSplit(trimmed);
+  if (split) {
+    return {
+      intent: "rewriteNote",
+      noteType: findNoteTypeFromPrompt(split.wrapper.toLowerCase()) !== "unknown" ? findNoteTypeFromPrompt(split.wrapper.toLowerCase()) : noteType,
+      rawNoteText: split.body,
+      style,
+      wrapperText: split.wrapper
+    };
+  }
 
-  return "";
+  const stripped = stripRewriteWrapper(trimmed);
+  if (stripped.length > 0) {
+    return {
+      intent: "rewriteNote",
+      noteType,
+      rawNoteText: stripped,
+      style,
+      wrapperText: trimmed.slice(0, Math.max(0, trimmed.length - stripped.length)).trim()
+    };
+  }
+
+  return {
+    intent: "rewriteNote",
+    noteType,
+    rawNoteText: "",
+    style,
+    wrapperText: trimmed
+  };
 }
 
 export function detectNoteRewriteIntent(prompt: string): NoteRewriteIntent {
-  const normalizedPrompt = prompt.toLowerCase().trim();
-  const isRewriteIntent = REWRITE_TRIGGERS.some((trigger) => normalizedPrompt.includes(trigger));
-  const noteText = extractNoteText(prompt);
-
+  const parsed = parseRewriteRequest(prompt);
   return {
-    isRewriteIntent,
-    noteType: findNoteTypeFromPrompt(normalizedPrompt),
-    style: findStyleFromPrompt(normalizedPrompt),
-    noteText
+    isRewriteIntent: parsed.intent === "rewriteNote",
+    noteType: parsed.noteType,
+    style: parsed.style,
+    noteText: parsed.rawNoteText
   };
 }
 
@@ -478,6 +543,10 @@ function detectLocation(normalized: string) {
   if (/in (his|her|the)?\s*room|room visit|bedside|at bedside/i.test(normalized)) {
     return "in room";
   }
+  if (/dining room/i.test(normalized)) return "in dining room";
+  if (/activity room/i.test(normalized)) return "in activity room";
+  if (/hallway/i.test(normalized)) return "in hallway";
+  if (/patio/i.test(normalized)) return "on patio";
   if (/bed[- ]bound/i.test(normalized)) return "bed-bound";
   if (/day room|dayroom/i.test(normalized)) return "in day room";
   return "";
@@ -548,8 +617,13 @@ function inferConversationTopics(normalized: string, details: ExtractedNoteDetai
 function inferActivityNouns(normalized: string, details: ExtractedNoteDetails) {
   const lookedAtRegex = /look(?:ed|ing)? (?:at|through)\s+([^.,;]+)/gi;
   for (const match of normalized.matchAll(lookedAtRegex)) {
-    const item = match[1]?.trim();
+    const rawItem = match[1]?.trim();
+    const item = rawItem?.replace(/\s+while\s+talking\s+about.*$/i, "").trim();
     if (item && item.length > 2) pushUnique(details.activitiesMentioned, item);
+  }
+
+  if (/\bpaint(?:ed|ing)? nails?\b|\bnail painting\b/i.test(normalized)) {
+    pushUnique(details.activitiesMentioned, "nail painting");
   }
 }
 
@@ -684,6 +758,14 @@ function formatActivityForProgress(activity: string) {
   return activity;
 }
 
+function formatOneToOneLocation(location: string) {
+  if (!location) return "in room";
+  if (location.startsWith("in ")) return `in the ${location.replace(/^in\s+/i, "")}`;
+  if (location.startsWith("on ")) return `on the ${location.replace(/^on\s+/i, "")}`;
+  if (location === "bed-bound") return "at bedside";
+  return location;
+}
+
 function removeEmptySentences(sentences: string[]) {
   return sentences.map((item) => ensureSentencePunctuation(titleCaseFirst(item))).filter(Boolean);
 }
@@ -762,7 +844,7 @@ export function buildProgressNoteFromDetails(details: ExtractedNoteDetails, styl
 export function buildOneToOneNoteFromDetails(details: ExtractedNoteDetails, style: NoteRewriteStyle) {
   const sentences: string[] = [];
 
-  const location = details.location === "bed-bound" ? "at bedside" : details.location || "in room";
+  const location = formatOneToOneLocation(details.location || "in room");
   const hasDeclinedGroup =
     details.reason.toLowerCase().includes("declined group") || details.refusalDetails.includes("declined group participation");
 
@@ -780,8 +862,21 @@ export function buildOneToOneNoteFromDetails(details: ExtractedNoteDetails, styl
   }
 
   const activityItems = details.activitiesMentioned.filter((item) => !["bingo", "music", "cards"].includes(item.toLowerCase()));
-  if (activityItems.length > 0) {
-    actionParts.push(`looked through ${joinWithAnd(activityItems)}`);
+  const passiveItems = activityItems.filter((item) =>
+    /(magazine|puzzle|crossword|word search|book|tv|movie)/i.test(item.toLowerCase())
+  );
+  const activeItems = activityItems.filter((item) => !passiveItems.includes(item));
+
+  if (activeItems.length > 0) {
+    if (activeItems.some((item) => /nail painting|paint.*nail/i.test(item.toLowerCase()))) {
+      actionParts.push("participated in nail painting");
+    } else {
+      actionParts.push(`participated in ${joinWithAnd(activeItems)}`);
+    }
+  }
+
+  if (passiveItems.length > 0) {
+    actionParts.push(`looked through ${joinWithAnd(passiveItems)}`);
   }
 
   if (details.equipmentDetails.length > 0) {
@@ -797,14 +892,22 @@ export function buildOneToOneNoteFromDetails(details: ExtractedNoteDetails, styl
   }
 
   if (details.moodDetails.length > 0) {
+    if (details.moodDetails.includes("positive response")) {
+      sentences.push("Resident responded positively to the interaction");
+    }
     if (details.moodDetails.includes("calm")) {
       sentences.push("Resident appeared calm throughout the interaction");
-    } else {
+    } else if (!details.moodDetails.includes("positive response")) {
       sentences.push(`Resident mood observed: ${joinWithAnd(details.moodDetails)}`);
     }
   }
 
-  if (details.followupDetails.length > 0 && style !== "shorter") {
+  if (details.followupDetails.includes("interested in participating again")) {
+    const repeatedActivity = activeItems.some((item) => /nail painting|paint.*nail/i.test(item.toLowerCase()))
+      ? "nail painting"
+      : activeItems[0] ?? details.activitiesMentioned[0] ?? "this activity";
+    sentences.push(`Resident expressed interest in participating in ${repeatedActivity} again during future visits`);
+  } else if (details.followupDetails.length > 0 && style !== "shorter") {
     sentences.push("Follow-up support will continue based on resident preference and response");
   }
 
@@ -876,11 +979,19 @@ function getDetailPreservationPatterns(detail: string) {
   if (lower.includes("kids") || lower.includes("children")) patterns.push(/\bkids?|children\b/i);
   if (lower.includes("cars")) patterns.push(/\bcars?\b/i);
   if (lower.includes("wheelchair")) patterns.push(/\bwheelchair\b/i);
+  if (lower.includes("dining room")) patterns.push(/\bdining room\b/i);
+  if (lower.includes("activity room")) patterns.push(/\bactivity room\b/i);
+  if (lower.includes("hallway")) patterns.push(/\bhallway\b/i);
+  if (lower.includes("patio")) patterns.push(/\bpatio\b/i);
+  if (lower.includes("nail painting")) patterns.push(/\bnail painting\b|paint(ed|ing)? nails?/i);
   if (lower.includes("declined group")) patterns.push(/declined group participation|hesitant to engage in group|not interested in group/i);
   if (lower.includes("encouragement")) patterns.push(/encouragement/i);
   if (lower.includes("engagement increased")) patterns.push(/engagement increased|improved participation|more engaged/i);
   if (lower.includes("clapped along")) patterns.push(/clapp(ed|ing)\s+along|clapped some/i);
   if (lower.includes("smiling")) patterns.push(/smil(ed|ing)/i);
+  if (lower.includes("positive response")) patterns.push(/responded positively|was positive|positive throughout/i);
+  if (lower.includes("interested in participating again"))
+    patterns.push(/would like to .*again|wants? to .*again|interested in .*again|expressed interest in participating.*again/i);
   if (lower.includes("calm")) patterns.push(/\bcalm\b/i);
   if (lower.includes("left early")) patterns.push(/left before|did not remain|departed/i);
   if (lower.includes("stayed the whole time")) patterns.push(/duration|full session|remained for the duration/i);
@@ -894,7 +1005,7 @@ function isDetailPreserved(detail: string, rewritten: string) {
 }
 
 export function validatePreservedDetails(
-  _originalInput: string,
+  originalInput: string,
   details: ExtractedNoteDetails,
   rewrittenOutput: string
 ): NotePreservationReport {
@@ -908,9 +1019,13 @@ export function validatePreservedDetails(
   const minRequired = totalImportantDetailCount >= 4 ? 3 : totalImportantDetailCount >= 2 ? 2 : totalImportantDetailCount >= 1 ? 1 : 0;
   const genericPhrasesFound = detectGenericPhrases(rewrittenOutput);
   const preservationScore = totalImportantDetailCount === 0 ? 1 : preservedDetailCount / totalImportantDetailCount;
+  const originalWordCount = normalizeForDiff(originalInput).split(" ").filter(Boolean).length;
+  const rewrittenWordCount = normalizeForDiff(rewrittenOutput).split(" ").filter(Boolean).length;
+  const tooShortComparedToInput = originalWordCount >= 10 && rewrittenWordCount < Math.max(8, Math.floor(originalWordCount * 0.45));
 
   const passed =
     preservedDetailCount >= minRequired &&
+    !tooShortComparedToInput &&
     !(genericPhrasesFound.length >= 2) &&
     !(genericPhrasesFound.length >= 1 && preservedDetailCount < Math.max(1, minRequired));
 
@@ -921,6 +1036,7 @@ export function validatePreservedDetails(
     missingDetails,
     preservationScore,
     genericPhrasesFound,
+    tooShortComparedToInput,
     passed
   };
 }

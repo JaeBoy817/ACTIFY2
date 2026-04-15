@@ -1,6 +1,6 @@
 import { matchPromptToIntent } from "@/lib/assistant/matchPromptToIntent";
 import {
-  detectNoteRewriteIntent,
+  parseRewriteRequest,
   rewordOneToOneNote,
   rewordProgressNote,
   type NoteRewriteStyle
@@ -52,21 +52,21 @@ export function getAssistantResponseFromPrompt(options: {
   forceIntent?: AssistantResponseIntent;
   excludeResponseId?: string;
 }): AssistantResponseResult {
-  const rewriteIntent = detectNoteRewriteIntent(options.prompt);
+  const rewriteRequest = parseRewriteRequest(options.prompt);
 
   if (
     options.forceIntent === "noteRewordProgress" ||
     options.forceIntent === "noteRewordOneToOne" ||
-    rewriteIntent.isRewriteIntent
+    rewriteRequest.intent === "rewriteNote"
   ) {
-    const noteText = rewriteIntent.noteText;
-    const style = rewriteIntent.style;
+    const noteText = rewriteRequest.rawNoteText;
+    const style = rewriteRequest.style;
     const forcedType =
       options.forceIntent === "noteRewordProgress"
         ? "progress"
         : options.forceIntent === "noteRewordOneToOne"
           ? "one_to_one"
-          : rewriteIntent.noteType;
+          : rewriteRequest.noteType;
 
     if (noteText.length < 20) {
       return {
