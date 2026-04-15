@@ -7,8 +7,14 @@ import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { AssistantMessage } from "@/components/assistant/AssistantMessage";
 import { PromptChips } from "@/components/assistant/PromptChips";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
-import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
-import type { AssistantResponseIntent } from "@/lib/assistant/getAssistantResponse";
+import type {
+  AssistantApiErrorResponse,
+  AssistantApiResponse,
+  AssistantApiRequest,
+  AssistantApiSuccessResponse,
+  AssistantConversationMessage,
+  AssistantIntent
+} from "@/lib/assistant/types";
 
 type ChatRole = "assistant" | "user";
 
@@ -16,56 +22,148 @@ type ChatMessage = {
   id: string;
   role: ChatRole;
   text: string;
-  intent?: AssistantResponseIntent;
-  responseId?: string;
+  intent?: AssistantIntent;
   sourcePrompt?: string;
+  model?: string | null;
 };
 
-const STORAGE_KEY = "actify-assistant-chat-v3";
+type RequestSnapshot = {
+  prompt: string;
+  historySnapshot: AssistantConversationMessage[];
+  forceNewConversation: boolean;
+};
+
+type PersistedAssistantChatState = {
+  messages: ChatMessage[];
+  conversationId: string | null;
+  model: string | null;
+};
+
+const STORAGE_KEY = "actify-assistant-chat-v4";
 const MAX_MESSAGES = 24;
-const RESPONSE_DELAY_MS = 180;
 
 const QUICK_PROMPTS = [
-  "Give me a 15-minute group activity for low-energy residents",
-  "Write a progress note for bingo participation",
-  "Reword this progress note: Resident came to bingo and played some. Needed encouragement at first but got more into it later. Was smiling and talking to other residents.",
+  "Give me a backup activity",
+  "Reword this progress note: Resident attended bingo, needed encouragement at first, then smiled and talked with peers.",
+  "Write a 1:1 note",
   "Help me plan next week’s calendar",
-  "Give me a 1:1 idea for a bed-bound resident",
-  "Reword this 1:1 note: Met with resident in room because she didnt want to come out. We talked about her family and she looked at magazines with me. Seemed calm."
+  "Give me a 1:1 idea for a bed-bound resident"
 ];
 
-function safeParseStoredMessages(raw: string | null): ChatMessage[] {
-  if (!raw) return [];
+function parsePersistedChatState(raw: string | null): PersistedAssistantChatState {
+  const emptyState: PersistedAssistantChatState = {
+    messages: [],
+    conversationId: null,
+    model: null
+  };
+
+  if (!raw) return emptyState;
+
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
 
-    return parsed
-      .filter((item) => item && typeof item === "object")
-      .map((item) => {
-        const typed = item as {
-          id?: unknown;
-          role?: unknown;
-          text?: unknown;
-          intent?: unknown;
-          responseId?: unknown;
-          sourcePrompt?: unknown;
-        };
-        const role: ChatRole = typed.role === "user" ? "user" : "assistant";
-        return {
-          id: typeof typed.id === "string" ? typed.id : crypto.randomUUID(),
-          role,
-          text: typeof typed.text === "string" ? typed.text : "",
-          intent: typeof typed.intent === "string" ? (typed.intent as AssistantResponseIntent) : undefined,
-          responseId: typeof typed.responseId === "string" ? typed.responseId : undefined,
-          sourcePrompt: typeof typed.sourcePrompt === "string" ? typed.sourcePrompt : undefined
-        } satisfies ChatMessage;
-      })
-      .filter((item) => item.text.trim().length > 0)
-      .slice(-MAX_MESSAGES);
+    if (Array.isArray(parsed)) {
+      return {
+        messages: parsed
+          .filter((item) => item && typeof item === "object")
+          .map((item) => {
+            const typed = item as { id?: unknown; role?: unknown; text?: unknown };
+            return {
+              id: typeof typed.id === "string" ? typed.id : crypto.randomUUID(),
+              role: typed.role === "user" ? "user" : "assistant",
+              text: typeof typed.text === "string" ? typed.text : ""
+            } satisfies ChatMessage;
+          })
+          .filter((item) => item.text.trim().length > 0)
+          .slice(-MAX_MESSAGES),
+        conversationId: null,
+        model: null
+      };
+    }
+
+    if (!parsed || typeof parsed !== "object") return emptyState;
+    const typed = parsed as {
+      messages?: unknown;
+      conversationId?: unknown;
+      model?: unknown;
+    };
+
+    const messages = Array.isArray(typed.messages)
+      ? typed.messages
+          .filter((item) => item && typeof item === "object")
+          .map((item) => {
+            const value = item as {
+              id?: unknown;
+              role?: unknown;
+              text?: unknown;
+              intent?: unknown;
+              sourcePrompt?: unknown;
+              model?: unknown;
+            };
+
+            return {
+              id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+              role: value.role === "user" ? "user" : "assistant",
+              text: typeof value.text === "string" ? value.text : "",
+              intent: typeof value.intent === "string" ? (value.intent as AssistantIntent) : undefined,
+              sourcePrompt: typeof value.sourcePrompt === "string" ? value.sourcePrompt : undefined,
+              model: typeof value.model === "string" ? value.model : null
+            } satisfies ChatMessage;
+          })
+          .filter((item) => item.text.trim().length > 0)
+          .slice(-MAX_MESSAGES)
+      : [];
+
+    return {
+      messages,
+      conversationId: typeof typed.conversationId === "string" ? typed.conversationId : null,
+      model: typeof typed.model === "string" ? typed.model : null
+    };
   } catch {
-    return [];
+    return emptyState;
   }
+}
+
+function mapMessagesToConversationHistory(messages: ChatMessage[]): AssistantConversationMessage[] {
+  return messages
+    .map((message) => ({
+      role: message.role,
+      content: message.text
+    }))
+    .filter((entry) => entry.content.trim().length > 0)
+    .slice(-MAX_MESSAGES);
+}
+
+function isAssistantApiError(data: AssistantApiResponse): data is AssistantApiErrorResponse {
+  return data.ok === false;
+}
+
+async function requestAssistantResponse(payload: AssistantApiRequest) {
+  const response = await fetch("/api/assistant", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = (await response.json().catch(() => null)) as AssistantApiResponse | null;
+  if (!data) {
+    throw new Error("We couldn’t generate a response right now. Please try again.");
+  }
+
+  if (!response.ok) {
+    if (isAssistantApiError(data)) {
+      throw new Error(data.error || "We couldn’t generate a response right now. Please try again.");
+    }
+    throw new Error("We couldn’t generate a response right now. Please try again.");
+  }
+
+  if (isAssistantApiError(data)) {
+    throw new Error(data.error || "We couldn’t generate a response right now. Please try again.");
+  }
+
+  return data as AssistantApiSuccessResponse;
 }
 
 export function AssistantChat() {
@@ -74,28 +172,39 @@ export function AssistantChat() {
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [lastAssistantMeta, setLastAssistantMeta] = useState<{
-    prompt: string;
-    intent: AssistantResponseIntent;
-    responseId: string;
-  } | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [lastAttempt, setLastAttempt] = useState<RequestSnapshot | null>(null);
+  const [lastAssistantSnapshot, setLastAssistantSnapshot] = useState<RequestSnapshot | null>(null);
   const [copyStateByMessageId, setCopyStateByMessageId] = useState<Record<string, "idle" | "copied">>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
-    const stored = safeParseStoredMessages(window.sessionStorage.getItem(STORAGE_KEY));
-    if (stored.length > 0) {
-      setMessages(stored);
+    const persisted = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
+    if (persisted.messages.length > 0) {
+      setMessages(persisted.messages);
     }
+    if (persisted.conversationId) {
+      setConversationId(persisted.conversationId);
+    }
+    if (persisted.model) {
+      setActiveModel(persisted.model);
+    }
+
     hydratedRef.current = true;
   }, []);
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_MESSAGES)));
-  }, [messages]);
+    const payload: PersistedAssistantChatState = {
+      messages: messages.slice(-MAX_MESSAGES),
+      conversationId,
+      model: activeModel
+    };
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }, [messages, conversationId, activeModel]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -104,55 +213,70 @@ export function AssistantChat() {
 
   const quickPrompts = useMemo(() => QUICK_PROMPTS, []);
 
-  const waitForPolish = async () => {
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, RESPONSE_DELAY_MS);
-    });
-  };
-
-  const sendPrompt = async (value: string) => {
+  const sendPrompt = async (
+    value: string,
+    options?: {
+      appendUserMessage?: boolean;
+      historySnapshot?: AssistantConversationMessage[];
+      forceNewConversation?: boolean;
+    }
+  ) => {
     const content = value.trim();
     if (!content) {
-      setErrorMessage("Please enter a prompt or choose a quick action.");
+      setErrorMessage("Please enter a prompt before sending.");
       return;
     }
     if (isSubmitting) return;
 
-    const nextUserMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      text: content
+    const appendUserMessage = options?.appendUserMessage ?? true;
+    const historySnapshot = options?.historySnapshot ?? mapMessagesToConversationHistory(messages);
+    const forceNewConversation = options?.forceNewConversation ?? false;
+
+    if (appendUserMessage) {
+      const nextUserMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        text: content
+      };
+      setMessages((current) => [...current, nextUserMessage].slice(-MAX_MESSAGES));
+      setPrompt("");
+    }
+
+    const snapshot: RequestSnapshot = {
+      prompt: content,
+      historySnapshot,
+      forceNewConversation
     };
 
-    setMessages((current) => [...current, nextUserMessage].slice(-MAX_MESSAGES));
-    setPrompt("");
+    setLastAttempt(snapshot);
     setIsSubmitting(true);
     setErrorMessage(null);
     setActivePrompt(content);
 
     try {
-      await waitForPolish();
-
-      const result = getAssistantResponseFromPrompt({
-        prompt: content,
-        excludeResponseId: undefined
+      const apiResponse = await requestAssistantResponse({
+        message: content,
+        conversationHistory: historySnapshot,
+        mode: "auto",
+        conversationId: forceNewConversation ? null : conversationId
       });
 
       const assistantReply: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: result.formattedMessage,
-        intent: result.intent,
-        responseId: result.responseId,
-        sourcePrompt: content
+        text: apiResponse.message,
+        intent: apiResponse.meta.intent,
+        sourcePrompt: content,
+        model: apiResponse.meta.model ?? null
       };
 
       setMessages((current) => [...current, assistantReply].slice(-MAX_MESSAGES));
-      setLastAssistantMeta({
-        prompt: content,
-        intent: result.intent,
-        responseId: result.responseId
-      });
+      setLastAssistantSnapshot(snapshot);
+      setConversationId(apiResponse.meta.conversationId ?? null);
+
+      if (apiResponse.meta.model) {
+        setActiveModel(apiResponse.meta.model);
+      }
     } catch (error) {
       if (error instanceof Error && error.message) {
         setErrorMessage(error.message);
@@ -165,47 +289,22 @@ export function AssistantChat() {
     }
   };
 
-  const retryLastPrompt = async () => {
-    if (!lastAssistantMeta || isSubmitting) return;
+  const retryLastAttempt = async () => {
+    if (!lastAttempt || isSubmitting) return;
+    await sendPrompt(lastAttempt.prompt, {
+      appendUserMessage: false,
+      historySnapshot: lastAttempt.historySnapshot,
+      forceNewConversation: lastAttempt.forceNewConversation
+    });
+  };
 
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    setActivePrompt(lastAssistantMeta.prompt);
-
-    try {
-      await waitForPolish();
-
-      const result = getAssistantResponseFromPrompt({
-        prompt: lastAssistantMeta.prompt,
-        forceIntent: lastAssistantMeta.intent,
-        excludeResponseId: lastAssistantMeta.responseId
-      });
-
-      const assistantReply: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        text: result.formattedMessage,
-        intent: result.intent,
-        responseId: result.responseId,
-        sourcePrompt: lastAssistantMeta.prompt
-      };
-
-      setMessages((current) => [...current, assistantReply].slice(-MAX_MESSAGES));
-      setLastAssistantMeta({
-        prompt: lastAssistantMeta.prompt,
-        intent: result.intent,
-        responseId: result.responseId
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("We couldn’t generate a response right now. Please try again.");
-      }
-    } finally {
-      setIsSubmitting(false);
-      setActivePrompt(null);
-    }
+  const regenerateLastAssistant = async () => {
+    if (!lastAssistantSnapshot || isSubmitting) return;
+    await sendPrompt(lastAssistantSnapshot.prompt, {
+      appendUserMessage: false,
+      historySnapshot: lastAssistantSnapshot.historySnapshot,
+      forceNewConversation: true
+    });
   };
 
   const copyMessage = async (messageId: string, text: string) => {
@@ -240,7 +339,7 @@ export function AssistantChat() {
           <EmptyState
             icon={Sparkles}
             title="What do you need help with today?"
-            description="Ask for activity ideas, notes, planning support, or resident-focused suggestions."
+            description="Ask for activity ideas, note rewording, planning support, or resident-focused suggestions."
           />
         ) : (
           <div className="space-y-4">
@@ -258,7 +357,7 @@ export function AssistantChat() {
                   copyState={copyStateByMessageId[message.id] || "idle"}
                   onCopy={copyMessage}
                   onRegenerate={() => {
-                    void retryLastPrompt();
+                    void regenerateLastAssistant();
                   }}
                 />
               );
@@ -267,7 +366,7 @@ export function AssistantChat() {
             {isSubmitting ? (
               <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Pulling a practical response...
+                Actify is drafting a response...
               </div>
             ) : null}
           </div>
@@ -280,9 +379,9 @@ export function AssistantChat() {
           <button
             type="button"
             onClick={() => {
-              void retryLastPrompt();
+              void retryLastAttempt();
             }}
-            disabled={isSubmitting || !lastAssistantMeta}
+            disabled={isSubmitting || !lastAttempt}
             className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Retry
@@ -300,7 +399,13 @@ export function AssistantChat() {
       />
 
       <p className="text-xs text-slate-500">
-        Engine: <span className="font-medium text-slate-700">Local Preset Assistant</span>
+        Engine: <span className="font-medium text-slate-700">Mistral Agent</span>
+        {activeModel ? (
+          <>
+            {" "}
+            <span className="text-slate-400">({activeModel})</span>
+          </>
+        ) : null}
       </p>
     </div>
   );
