@@ -39,8 +39,23 @@ type PersistedAssistantChatState = {
   model: string | null;
 };
 
-const STORAGE_KEY = "actify-assistant-chat-v4";
+type AssistantHistoryThread = {
+  id: string;
+  createdAt: string;
+  conversationId: string | null;
+  model: string | null;
+  title: string;
+  messages: ChatMessage[];
+};
+
+type PersistedAssistantStore = {
+  current: PersistedAssistantChatState;
+  history: AssistantHistoryThread[];
+};
+
+const STORAGE_KEY = "actify-assistant-chat-v5";
 const MAX_MESSAGES = 24;
+const MAX_HISTORY_THREADS = 14;
 
 const QUICK_PROMPTS = [
   "Give me a backup activity",
@@ -50,78 +65,170 @@ const QUICK_PROMPTS = [
   "Give me a 1:1 idea for a bed-bound resident"
 ];
 
-function parsePersistedChatState(raw: string | null): PersistedAssistantChatState {
-  const emptyState: PersistedAssistantChatState = {
+function toEmptyCurrentState(): PersistedAssistantChatState {
+  return {
     messages: [],
     conversationId: null,
     model: null
   };
+}
 
+function toEmptyPersistedStore(): PersistedAssistantStore {
+  return {
+    current: toEmptyCurrentState(),
+    history: []
+  };
+}
+
+function sanitizeMessages(input: unknown): ChatMessage[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const value = item as {
+        id?: unknown;
+        role?: unknown;
+        text?: unknown;
+        intent?: unknown;
+        sourcePrompt?: unknown;
+        model?: unknown;
+      };
+
+      return {
+        id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+        role: value.role === "user" ? "user" : "assistant",
+        text: typeof value.text === "string" ? value.text : "",
+        intent: typeof value.intent === "string" ? (value.intent as AssistantIntent) : undefined,
+        sourcePrompt: typeof value.sourcePrompt === "string" ? value.sourcePrompt : undefined,
+        model: typeof value.model === "string" ? value.model : null
+      } satisfies ChatMessage;
+    })
+    .filter((item) => item.text.trim().length > 0)
+    .slice(-MAX_MESSAGES);
+}
+
+function sanitizeHistoryThreads(input: unknown): AssistantHistoryThread[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const value = item as {
+        id?: unknown;
+        createdAt?: unknown;
+        conversationId?: unknown;
+        model?: unknown;
+        title?: unknown;
+        messages?: unknown;
+      };
+
+      return {
+        id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+        createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
+        conversationId: typeof value.conversationId === "string" ? value.conversationId : null,
+        model: typeof value.model === "string" ? value.model : null,
+        title: typeof value.title === "string" && value.title.trim().length > 0 ? value.title : "Assistant Conversation",
+        messages: sanitizeMessages(value.messages)
+      } satisfies AssistantHistoryThread;
+    })
+    .filter((thread) => thread.messages.length > 0)
+    .slice(0, MAX_HISTORY_THREADS);
+}
+
+function buildHistoryTitle(messages: ChatMessage[]) {
+  const firstUser = messages.find((message) => message.role === "user");
+  if (!firstUser) return "Assistant Conversation";
+  const title = firstUser.text.trim();
+  if (title.length <= 72) return title;
+  return `${title.slice(0, 72).trimEnd()}...`;
+}
+
+function parsePersistedChatState(raw: string | null): PersistedAssistantStore {
+  const emptyState = toEmptyPersistedStore();
   if (!raw) return emptyState;
 
   try {
     const parsed: unknown = JSON.parse(raw);
 
+    // Legacy storage shape: raw message array.
     if (Array.isArray(parsed)) {
       return {
-        messages: parsed
-          .filter((item) => item && typeof item === "object")
-          .map((item) => {
-            const typed = item as { id?: unknown; role?: unknown; text?: unknown };
-            return {
-              id: typeof typed.id === "string" ? typed.id : crypto.randomUUID(),
-              role: typed.role === "user" ? "user" : "assistant",
-              text: typeof typed.text === "string" ? typed.text : ""
-            } satisfies ChatMessage;
-          })
-          .filter((item) => item.text.trim().length > 0)
-          .slice(-MAX_MESSAGES),
-        conversationId: null,
-        model: null
+        current: {
+          messages: sanitizeMessages(parsed),
+          conversationId: null,
+          model: null
+        },
+        history: []
       };
     }
 
     if (!parsed || typeof parsed !== "object") return emptyState;
-    const typed = parsed as {
-      messages?: unknown;
-      conversationId?: unknown;
-      model?: unknown;
-    };
+    const typed = parsed as Record<string, unknown>;
 
-    const messages = Array.isArray(typed.messages)
-      ? typed.messages
-          .filter((item) => item && typeof item === "object")
-          .map((item) => {
-            const value = item as {
-              id?: unknown;
-              role?: unknown;
-              text?: unknown;
-              intent?: unknown;
-              sourcePrompt?: unknown;
-              model?: unknown;
-            };
+    // Current storage shape.
+    if (typed.current && typeof typed.current === "object") {
+      const current = typed.current as Record<string, unknown>;
+      return {
+        current: {
+          messages: sanitizeMessages(current.messages),
+          conversationId: typeof current.conversationId === "string" ? current.conversationId : null,
+          model: typeof current.model === "string" ? current.model : null
+        },
+        history: sanitizeHistoryThreads(typed.history)
+      };
+    }
 
-            return {
-              id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
-              role: value.role === "user" ? "user" : "assistant",
-              text: typeof value.text === "string" ? value.text : "",
-              intent: typeof value.intent === "string" ? (value.intent as AssistantIntent) : undefined,
-              sourcePrompt: typeof value.sourcePrompt === "string" ? value.sourcePrompt : undefined,
-              model: typeof value.model === "string" ? value.model : null
-            } satisfies ChatMessage;
-          })
-          .filter((item) => item.text.trim().length > 0)
-          .slice(-MAX_MESSAGES)
-      : [];
+    // Legacy object shape with direct messages/conversationId/model.
+    const currentMessages = sanitizeMessages(typed.messages);
 
     return {
-      messages,
-      conversationId: typeof typed.conversationId === "string" ? typed.conversationId : null,
-      model: typeof typed.model === "string" ? typed.model : null
+      current: {
+        messages: currentMessages,
+        conversationId: typeof typed.conversationId === "string" ? typed.conversationId : null,
+        model: typeof typed.model === "string" ? typed.model : null
+      },
+      history: sanitizeHistoryThreads(typed.history)
     };
   } catch {
     return emptyState;
   }
+}
+
+function areConversationsEquivalent(a: ChatMessage[], b: ChatMessage[]) {
+  if (a.length !== b.length) return false;
+  return a.every((message, index) => {
+    const other = b[index];
+    if (!other) return false;
+    return message.role === other.role && message.text.trim() === other.text.trim();
+  });
+}
+
+function archiveCurrentConversation(store: PersistedAssistantStore) {
+  const current = store.current;
+  if (current.messages.length === 0) {
+    return { nextStore: store, didArchive: false };
+  }
+
+  const latestHistory = store.history[0];
+  const shouldDedupe = latestHistory ? areConversationsEquivalent(current.messages, latestHistory.messages) : false;
+
+  const archivedThread: AssistantHistoryThread = {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    conversationId: current.conversationId,
+    model: current.model,
+    title: buildHistoryTitle(current.messages),
+    messages: current.messages.slice(-MAX_MESSAGES)
+  };
+
+  return {
+    nextStore: {
+      current: toEmptyCurrentState(),
+      history: (shouldDedupe ? store.history : [archivedThread, ...store.history]).slice(0, MAX_HISTORY_THREADS)
+    },
+    didArchive: true
+  };
 }
 
 function mapMessagesToConversationHistory(messages: ChatMessage[]): AssistantConversationMessage[] {
@@ -168,6 +275,8 @@ async function requestAssistantResponse(payload: AssistantApiRequest) {
 
 export function AssistantChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyThreads, setHistoryThreads] = useState<AssistantHistoryThread[]>([]);
+  const [activeTab, setActiveTab] = useState<"chat" | "history">("chat");
   const [prompt, setPrompt] = useState("");
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -182,15 +291,24 @@ export function AssistantChat() {
   const hydratedRef = useRef(false);
 
   useEffect(() => {
-    const persisted = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
-    if (persisted.messages.length > 0) {
-      setMessages(persisted.messages);
+    const parsedStore = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
+    const { nextStore, didArchive } = archiveCurrentConversation(parsedStore);
+
+    if (didArchive) {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextStore));
     }
-    if (persisted.conversationId) {
-      setConversationId(persisted.conversationId);
+
+    if (nextStore.current.messages.length > 0) {
+      setMessages(nextStore.current.messages);
     }
-    if (persisted.model) {
-      setActiveModel(persisted.model);
+    if (nextStore.history.length > 0) {
+      setHistoryThreads(nextStore.history);
+    }
+    if (nextStore.current.conversationId) {
+      setConversationId(nextStore.current.conversationId);
+    }
+    if (nextStore.current.model) {
+      setActiveModel(nextStore.current.model);
     }
 
     hydratedRef.current = true;
@@ -198,18 +316,22 @@ export function AssistantChat() {
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    const payload: PersistedAssistantChatState = {
-      messages: messages.slice(-MAX_MESSAGES),
-      conversationId,
-      model: activeModel
+    const payload: PersistedAssistantStore = {
+      current: {
+        messages: messages.slice(-MAX_MESSAGES),
+        conversationId,
+        model: activeModel
+      },
+      history: historyThreads.slice(0, MAX_HISTORY_THREADS)
     };
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [messages, conversationId, activeModel]);
+  }, [messages, conversationId, activeModel, historyThreads]);
 
   useEffect(() => {
+    if (activeTab !== "chat") return;
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isSubmitting, errorMessage]);
+  }, [messages, isSubmitting, errorMessage, activeTab]);
 
   const quickPrompts = useMemo(() => QUICK_PROMPTS, []);
 
@@ -240,6 +362,7 @@ export function AssistantChat() {
       };
       setMessages((current) => [...current, nextUserMessage].slice(-MAX_MESSAGES));
       setPrompt("");
+      setActiveTab("chat");
     }
 
     const snapshot: RequestSnapshot = {
@@ -321,21 +444,93 @@ export function AssistantChat() {
 
   return (
     <div className="space-y-4">
-      <PromptChips
-        prompts={quickPrompts}
-        activePrompt={activePrompt}
-        onPickPrompt={(selectedPrompt) => {
-          setPrompt(selectedPrompt);
-          void sendPrompt(selectedPrompt);
-        }}
-      />
+      <div className="inline-flex rounded-full border border-slate-200 bg-white/80 p-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("chat")}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+            activeTab === "chat"
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          New Chat
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("history")}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+            activeTab === "history"
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          History
+          <span className="ml-1 text-[11px] opacity-80">({historyThreads.length})</span>
+        </button>
+      </div>
+
+      {activeTab === "chat" ? (
+        <PromptChips
+          prompts={quickPrompts}
+          activePrompt={activePrompt}
+          onPickPrompt={(selectedPrompt) => {
+            setPrompt(selectedPrompt);
+            setActiveTab("chat");
+            void sendPrompt(selectedPrompt);
+          }}
+        />
+      ) : null}
 
       <div
         ref={scrollRef}
         className="h-[440px] overflow-y-auto rounded-[1.6rem] border border-slate-200 bg-white/75 p-4 md:h-[540px]"
         aria-live="polite"
       >
-        {messages.length === 0 && !isSubmitting ? (
+        {activeTab === "history" ? (
+          historyThreads.length === 0 ? (
+            <EmptyState
+              icon={Sparkles}
+              title="No previous chats yet"
+              description="After you send messages, refreshed sessions will appear here."
+            />
+          ) : (
+            <div className="space-y-3">
+              {historyThreads.map((thread) => (
+                <article key={thread.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h4 className="line-clamp-1 text-sm font-semibold text-slate-800">{thread.title}</h4>
+                    <span className="shrink-0 text-[11px] text-slate-500">
+                      {new Date(thread.createdAt).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit"
+                      })}
+                    </span>
+                  </div>
+                  <p className="mb-2 text-xs text-slate-500">
+                    {thread.messages.length} messages{thread.model ? ` • ${thread.model}` : ""}
+                  </p>
+                  <div className="space-y-2">
+                    {thread.messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={
+                          message.role === "user"
+                            ? "ml-auto max-w-[88%] rounded-2xl border border-slate-200 bg-slate-100 px-3 py-2"
+                            : "max-w-[94%] rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                        }
+                      >
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )
+        ) : messages.length === 0 && !isSubmitting ? (
           <EmptyState
             icon={Sparkles}
             title="What do you need help with today?"
@@ -373,7 +568,7 @@ export function AssistantChat() {
         )}
       </div>
 
-      {errorMessage ? (
+      {errorMessage && activeTab === "chat" ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           <p>{errorMessage}</p>
           <button
@@ -389,14 +584,20 @@ export function AssistantChat() {
         </div>
       ) : null}
 
-      <AssistantComposer
-        value={prompt}
-        onChange={setPrompt}
-        onSubmit={() => {
-          void sendPrompt(prompt);
-        }}
-        disabled={isSubmitting}
-      />
+      {activeTab === "chat" ? (
+        <AssistantComposer
+          value={prompt}
+          onChange={setPrompt}
+          onSubmit={() => {
+            void sendPrompt(prompt);
+          }}
+          disabled={isSubmitting}
+        />
+      ) : (
+        <div className="rounded-[1.65rem] border border-dashed border-slate-300 bg-white/70 px-4 py-3 text-sm text-slate-600">
+          Start a new message from the <span className="font-medium text-slate-800">New Chat</span> tab.
+        </div>
+      )}
 
       <p className="text-xs text-slate-500">
         Engine: <span className="font-medium text-slate-700">Mistral Agent</span>
