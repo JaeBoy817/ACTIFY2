@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { asAppAccessErrorResponse, requireCurrentAppUserWithAccess } from "@/lib/access-control";
-import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
-import type { AssistantIntent } from "@/lib/assistant/presetResponses";
+import { getAssistantResponseFromPrompt, type AssistantResponseIntent } from "@/lib/assistant/getAssistantResponse";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +20,9 @@ const assistantIntentSchema = z.enum([
   "holidayActivityPlanning",
   "residentEngagementSuggestions",
   "lowBudgetActivityIdeas",
-  "fallback"
+  "fallback",
+  "noteRewordProgress",
+  "noteRewordOneToOne"
 ]);
 
 const assistantRequestSchema = z.object({
@@ -33,7 +34,7 @@ const assistantRequestSchema = z.object({
 type AssistantApiSuccess = {
   ok: true;
   message: string;
-  intent: AssistantIntent;
+  intent: AssistantResponseIntent;
   responseId: string;
   engine: "local-preset";
 };
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
       ok: true,
       message: result.formattedMessage,
       intent: result.intent,
-      responseId: result.response.id,
+      responseId: result.responseId,
       engine: "local-preset"
     };
 

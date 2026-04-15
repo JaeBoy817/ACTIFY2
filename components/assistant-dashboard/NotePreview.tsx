@@ -4,13 +4,14 @@ type NotePreviewProps = {
   value: string;
   onCopy: () => void;
   copyState: "idle" | "copied";
+  label?: string;
 };
 
-export function NotePreview({ value, onCopy, copyState }: NotePreviewProps) {
+export function NotePreview({ value, onCopy, copyState, label = "Generated preview" }: NotePreviewProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Generated preview</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
         <button
           type="button"
           onClick={onCopy}

@@ -23,6 +23,12 @@ import { ResidentMiniCard } from "@/components/assistant-dashboard/ResidentMiniC
 import { SearchInput } from "@/components/assistant-dashboard/SearchInput";
 import { SectionHeader } from "@/components/assistant-dashboard/SectionHeader";
 import type { ResidentSnapshot } from "@/components/assistant-dashboard/types";
+import {
+  rewordOneToOneNote,
+  rewordProgressNote,
+  type NoteRewriteStyle,
+  type NoteRewriteType
+} from "@/lib/assistant/noteRewriter";
 
 type AssistantWorkspaceProps = {
   firstName: string;
@@ -30,6 +36,15 @@ type AssistantWorkspaceProps = {
 };
 
 const NOTE_TYPES = ["Progress Note", "1:1 Visit Note", "Care Plan Wording", "UDA Support", "Resident Council Summary"] as const;
+const REWORD_NOTE_TYPES = [
+  { value: "progress" as const, label: "Progress Note" },
+  { value: "one_to_one" as const, label: "1:1 Note" }
+];
+const REWORD_STYLES = [
+  { value: "professional" as const, label: "Professional" },
+  { value: "shorter" as const, label: "Shorter PCC Version" },
+  { value: "detailed" as const, label: "More Detailed PCC Version" }
+];
 
 const CALENDAR_ACTIONS = [
   { title: "Fill Empty Days", hint: "Plug low-effort wins into open calendar slots." },
@@ -193,6 +208,16 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
   const [isGeneratingNote, setIsGeneratingNote] = useState(false);
   const [generatedNote, setGeneratedNote] = useState(SEEDED_NOTE_PREVIEW);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [rewordNoteType, setRewordNoteType] = useState<NoteRewriteType>("progress");
+  const [rewordStyle, setRewordStyle] = useState<NoteRewriteStyle>("professional");
+  const [roughNoteInput, setRoughNoteInput] = useState("");
+  const [rewordedNote, setRewordedNote] = useState(
+    "Paste your rough note and click Reword Note to generate a polished PCC-ready version."
+  );
+  const [isRewordingNote, setIsRewordingNote] = useState(false);
+  const [rewordError, setRewordError] = useState<string | null>(null);
+  const [rewordResponseId, setRewordResponseId] = useState<string | null>(null);
+  const [rewordCopyState, setRewordCopyState] = useState<"idle" | "copied">("idle");
 
   const [selectedCalendarAction, setSelectedCalendarAction] = useState<string | null>(null);
   const [activityQuery, setActivityQuery] = useState("");
@@ -254,6 +279,51 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
       window.setTimeout(() => setCopyState("idle"), 1400);
     } catch {
       setCopyState("idle");
+    }
+  };
+
+  const rewordNote = () => {
+    const source = roughNoteInput.trim();
+    if (!source) {
+      setRewordError("Paste a rough note to reword.");
+      return;
+    }
+    if (source.length < 20) {
+      setRewordError("Add a little more detail so Actify can rewrite it clearly.");
+      return;
+    }
+
+    setIsRewordingNote(true);
+    setRewordError(null);
+
+    window.setTimeout(() => {
+      try {
+        const rewritten =
+          rewordNoteType === "progress"
+            ? rewordProgressNote(source, rewordStyle, { excludeResponseId: rewordResponseId ?? undefined })
+            : rewordOneToOneNote(source, rewordStyle, { excludeResponseId: rewordResponseId ?? undefined });
+
+        setRewordedNote(rewritten.note);
+        setRewordResponseId(rewritten.responseId);
+      } catch (error) {
+        if (error instanceof Error && error.message) {
+          setRewordError(error.message);
+        } else {
+          setRewordError("We couldn’t reword that note right now.");
+        }
+      } finally {
+        setIsRewordingNote(false);
+      }
+    }, 180);
+  };
+
+  const copyRewordedNote = async () => {
+    try {
+      await navigator.clipboard.writeText(rewordedNote);
+      setRewordCopyState("copied");
+      window.setTimeout(() => setRewordCopyState("idle"), 1400);
+    } catch {
+      setRewordCopyState("idle");
     }
   };
 
@@ -401,6 +471,85 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
             ) : (
               <NotePreview value={generatedNote} onCopy={copyGeneratedNote} copyState={copyState} />
             )}
+
+            <section className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/45 p-3">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-slate-900">Reword Existing Note</h3>
+                <p className="text-xs text-slate-600">
+                  Reword rough notes into polished PCC-ready wording. Keep the meaning. Improve the wording.
+                </p>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-600">Note type</span>
+                  <select
+                    value={rewordNoteType}
+                    onChange={(event) => setRewordNoteType(event.target.value as NoteRewriteType)}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                  >
+                    {REWORD_NOTE_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-600">Rewrite style</span>
+                  <select
+                    value={rewordStyle}
+                    onChange={(event) => setRewordStyle(event.target.value as NoteRewriteStyle)}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                  >
+                    {REWORD_STYLES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-600">Paste your rough note</span>
+                <textarea
+                  value={roughNoteInput}
+                  onChange={(event) => setRoughNoteInput(event.target.value)}
+                  rows={4}
+                  placeholder="Example: Resident came to bingo and played some. Needed encouragement at first but got more into it later."
+                  className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={rewordNote}
+                disabled={isRewordingNote}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_30px_-22px_rgba(15,23,42,0.9)] transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              >
+                {isRewordingNote ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ClipboardPenLine className="h-4 w-4" aria-hidden />}
+                {isRewordingNote ? "Rewording..." : "Reword Note"}
+              </button>
+
+              {rewordError ? (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{rewordError}</p>
+              ) : null}
+
+              {isRewordingNote ? (
+                <div className="space-y-2">
+                  <LoadingSkeleton className="h-4 w-1/3" />
+                  <LoadingSkeleton className="h-20 w-full" />
+                </div>
+              ) : (
+                <NotePreview
+                  value={rewordedNote}
+                  onCopy={copyRewordedNote}
+                  copyState={rewordCopyState}
+                  label="Reworded note preview"
+                />
+              )}
+            </section>
           </div>
         </PodCard>
 

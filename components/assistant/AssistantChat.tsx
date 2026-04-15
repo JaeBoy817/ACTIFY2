@@ -8,8 +8,7 @@ import { AssistantMessage } from "@/components/assistant/AssistantMessage";
 import { PromptChips } from "@/components/assistant/PromptChips";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
 import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
-import { matchPromptToIntent } from "@/lib/assistant/matchPromptToIntent";
-import type { AssistantIntent } from "@/lib/assistant/presetResponses";
+import type { AssistantResponseIntent } from "@/lib/assistant/getAssistantResponse";
 
 type ChatRole = "assistant" | "user";
 
@@ -17,7 +16,7 @@ type ChatMessage = {
   id: string;
   role: ChatRole;
   text: string;
-  intent?: AssistantIntent;
+  intent?: AssistantResponseIntent;
   responseId?: string;
   sourcePrompt?: string;
 };
@@ -29,9 +28,10 @@ const RESPONSE_DELAY_MS = 180;
 const QUICK_PROMPTS = [
   "Give me a 15-minute group activity for low-energy residents",
   "Write a progress note for bingo participation",
+  "Reword this progress note: Resident came to bingo and played some. Needed encouragement at first but got more into it later. Was smiling and talking to other residents.",
   "Help me plan next week’s calendar",
   "Give me a 1:1 idea for a bed-bound resident",
-  "Create a holiday activity backup plan"
+  "Reword this 1:1 note: Met with resident in room because she didnt want to come out. We talked about her family and she looked at magazines with me. Seemed calm."
 ];
 
 function safeParseStoredMessages(raw: string | null): ChatMessage[] {
@@ -56,7 +56,7 @@ function safeParseStoredMessages(raw: string | null): ChatMessage[] {
           id: typeof typed.id === "string" ? typed.id : crypto.randomUUID(),
           role,
           text: typeof typed.text === "string" ? typed.text : "",
-          intent: typeof typed.intent === "string" ? (typed.intent as AssistantIntent) : undefined,
+          intent: typeof typed.intent === "string" ? (typed.intent as AssistantResponseIntent) : undefined,
           responseId: typeof typed.responseId === "string" ? typed.responseId : undefined,
           sourcePrompt: typeof typed.sourcePrompt === "string" ? typed.sourcePrompt : undefined
         } satisfies ChatMessage;
@@ -76,10 +76,9 @@ export function AssistantChat() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastAssistantMeta, setLastAssistantMeta] = useState<{
     prompt: string;
-    intent: AssistantIntent;
+    intent: AssistantResponseIntent;
     responseId: string;
   } | null>(null);
-  const [lastResponseByIntent, setLastResponseByIntent] = useState<Partial<Record<AssistantIntent, string>>>({});
   const [copyStateByMessageId, setCopyStateByMessageId] = useState<Record<string, "idle" | "copied">>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -134,11 +133,9 @@ export function AssistantChat() {
     try {
       await waitForPolish();
 
-      const matchedIntent = matchPromptToIntent(content);
       const result = getAssistantResponseFromPrompt({
         prompt: content,
-        forceIntent: matchedIntent,
-        excludeResponseId: lastResponseByIntent[matchedIntent]
+        excludeResponseId: undefined
       });
 
       const assistantReply: ChatMessage = {
@@ -146,19 +143,15 @@ export function AssistantChat() {
         role: "assistant",
         text: result.formattedMessage,
         intent: result.intent,
-        responseId: result.response.id,
+        responseId: result.responseId,
         sourcePrompt: content
       };
 
       setMessages((current) => [...current, assistantReply].slice(-MAX_MESSAGES));
-      setLastResponseByIntent((current) => ({
-        ...current,
-        [result.intent]: result.response.id
-      }));
       setLastAssistantMeta({
         prompt: content,
         intent: result.intent,
-        responseId: result.response.id
+        responseId: result.responseId
       });
     } catch (error) {
       if (error instanceof Error && error.message) {
@@ -193,19 +186,15 @@ export function AssistantChat() {
         role: "assistant",
         text: result.formattedMessage,
         intent: result.intent,
-        responseId: result.response.id,
+        responseId: result.responseId,
         sourcePrompt: lastAssistantMeta.prompt
       };
 
       setMessages((current) => [...current, assistantReply].slice(-MAX_MESSAGES));
-      setLastResponseByIntent((current) => ({
-        ...current,
-        [result.intent]: result.response.id
-      }));
       setLastAssistantMeta({
         prompt: lastAssistantMeta.prompt,
         intent: result.intent,
-        responseId: result.response.id
+        responseId: result.responseId
       });
     } catch (error) {
       if (error instanceof Error && error.message) {
