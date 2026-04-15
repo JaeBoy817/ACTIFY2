@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { asAppAccessErrorResponse, requireCurrentAppUserWithAccess } from "@/lib/access-control";
+import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
 import { runMistralAssistant, MistralAssistantError } from "@/lib/assistant/mistral";
 import type {
   AssistantApiErrorResponse,
   AssistantApiRequest,
   AssistantApiSuccessResponse,
-  AssistantConversationMessage
+  AssistantConversationMessage,
+  AssistantIntent
 } from "@/lib/assistant/types";
 
 export const runtime = "nodejs";
@@ -28,7 +30,56 @@ const assistantRequestSchema = z.object({
   conversationId: z.string().trim().min(1).max(200).optional().nullable()
 });
 
+function shouldUseLocalFallback(error: MistralAssistantError) {
+  return [
+    "TIMEOUT",
+    "MISTRAL_PROVIDER_ERROR",
+    "MISTRAL_EMPTY_OUTPUT",
+    "MISSING_CONVERSATION_ID"
+  ].includes(error.code);
+}
+
+function mapLocalIntentToAssistantIntent(localIntent: string): AssistantIntent {
+  if (localIntent === "noteRewordProgress") return "rewrite_progress_note";
+  if (localIntent === "noteRewordOneToOne") return "rewrite_1to1_note";
+  if (localIntent === "noteRewordNeedsType" || localIntent === "noteRewordNeedsText") return "rewrite_note";
+  if (localIntent === "backupActivityIdeas") return "activity_backup";
+  if (localIntent === "groupActivityIdeas") return "activity_group";
+  if (localIntent === "oneToOneVisitIdeas") return "activity_1to1";
+  if (localIntent === "bedBoundResidentIdeas") return "activity_bed_bound";
+  if (localIntent === "dementiaFriendlyIdeas") return "activity_dementia_friendly";
+  if (localIntent === "calendarPlanningHelp") return "calendar_planning";
+  if (localIntent === "holidayActivityPlanning") return "holiday_planning";
+  if (localIntent === "residentEngagementSuggestions") return "resident_engagement";
+  if (localIntent === "lowBudgetActivityIdeas") return "low_budget_ideas";
+  if (localIntent === "progressNoteHelp") return "progress_note_help";
+  if (localIntent === "oneToOneNoteHelp") return "one_to_one_note_help";
+  if (localIntent === "carePlanWording") return "care_plan_wording";
+  return "general_assistant";
+}
+
+function buildFallbackResponse(message: string): AssistantApiSuccessResponse {
+  const fallback = getAssistantResponseFromPrompt({ prompt: message });
+  const agentId = process.env.MISTRAL_AGENT_ID?.trim() || "ag_019d92c5923371f19d586b2c54926fad";
+  const rawVersion = process.env.MISTRAL_AGENT_VERSION?.trim();
+  const parsedVersion = rawVersion ? Number.parseInt(rawVersion, 10) : 0;
+
+  return {
+    ok: true,
+    message: fallback.formattedMessage,
+    meta: {
+      source: "local-fallback",
+      agentId,
+      agentVersion: Number.isFinite(parsedVersion) ? parsedVersion : 0,
+      intent: mapLocalIntentToAssistantIntent(fallback.intent),
+      model: null
+    }
+  };
+}
+
 export async function POST(request: Request) {
+  let parsedMessageForFallback: string | null = null;
+
   try {
     await requireCurrentAppUserWithAccess();
 
@@ -50,6 +101,7 @@ export async function POST(request: Request) {
       mode: parsed.data.mode,
       conversationId: parsed.data.conversationId ?? null
     };
+    parsedMessageForFallback = requestBody.message;
 
     const result = await runMistralAssistant({
       message: requestBody.message,
@@ -77,6 +129,16 @@ export async function POST(request: Request) {
     if (accessResponse) return accessResponse;
 
     if (error instanceof MistralAssistantError) {
+      if (shouldUseLocalFallback(error)) {
+        console.warn("[api/assistant] using local fallback after mistral failure", {
+          code: error.code
+        });
+        if (parsedMessageForFallback) {
+          const fallbackResponse = buildFallbackResponse(parsedMessageForFallback);
+          return NextResponse.json(fallbackResponse, { status: 200 });
+        }
+      }
+
       const response: AssistantApiErrorResponse = {
         ok: false,
         error: error.message,

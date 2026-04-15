@@ -42,7 +42,7 @@ export type AssistantApiSuccessResponse = {
   ok: true;
   message: string;
   meta: {
-    source: "mistral-agent";
+    source: "mistral-agent" | "local-fallback";
     agentId: string;
     agentVersion: number;
     intent: AssistantIntent;
