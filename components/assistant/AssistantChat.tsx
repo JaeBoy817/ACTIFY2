@@ -20,6 +20,7 @@ type AssistantApiResponse = {
   ok: boolean;
   message?: string;
   error?: string;
+  code?: string;
   model?: string;
   providerModel?: string | null;
 };
@@ -174,7 +175,8 @@ export function AssistantChat() {
       const payload = (await response.json().catch(() => null)) as AssistantApiResponse | null;
 
       if (!response.ok || !payload?.ok || !payload.message) {
-        throw new Error(payload?.error || "We couldn’t generate a response right now. Please try again.");
+        const detail = payload?.error || "We couldn’t generate a response right now. Please try again.";
+        throw new Error(payload?.code ? `${detail} (${payload.code})` : detail);
       }
 
       setMessages((current) => {

@@ -18,6 +18,9 @@ export type OpenRouterChatResult = {
 
 type OpenRouterErrorCode =
   | "MISSING_API_KEY"
+  | "UNAUTHORIZED"
+  | "PAYMENT_REQUIRED"
+  | "MODEL_UNAVAILABLE"
   | "BAD_REQUEST"
   | "RATE_LIMITED"
   | "TIMEOUT"
@@ -44,6 +47,11 @@ export class OpenRouterRequestError extends Error {
 
 type OpenRouterResponseShape = {
   model?: string;
+  error?: {
+    message?: string;
+    code?: string | number;
+    metadata?: unknown;
+  };
   choices?: Array<{
     message?: {
       content?: unknown;
@@ -145,6 +153,32 @@ function readOptionalHeaderEnv(name: string) {
   return value && value.length > 0 ? value : null;
 }
 
+function parseJsonSafely(text: string) {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function extractProviderMessage(parsedBody: unknown, rawText: string) {
+  if (
+    parsedBody &&
+    typeof parsedBody === "object" &&
+    "error" in parsedBody &&
+    parsedBody.error &&
+    typeof parsedBody.error === "object" &&
+    "message" in parsedBody.error &&
+    typeof parsedBody.error.message === "string"
+  ) {
+    return parsedBody.error.message;
+  }
+
+  const trimmed = rawText.trim();
+  if (!trimmed) return null;
+  return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed;
+}
+
 export async function generateActifyAssistantReply(options: {
   mode: ActifyAssistantMode;
   history: Array<{ role: "user" | "assistant"; content: string }>;
@@ -196,30 +230,41 @@ export async function generateActifyAssistantReply(options: {
       })
     });
 
-    let parsedBody: unknown = null;
-    try {
-      parsedBody = await response.json();
-    } catch {
-      parsedBody = null;
-    }
+    const rawBodyText = await response.text();
+    const parsedBody = parseJsonSafely(rawBodyText);
 
     if (!response.ok) {
-      const providerMessage =
-        parsedBody &&
-        typeof parsedBody === "object" &&
-        "error" in parsedBody &&
-        parsedBody.error &&
-        typeof parsedBody.error === "object" &&
-        "message" in parsedBody.error &&
-        typeof parsedBody.error.message === "string"
-          ? parsedBody.error.message
-          : null;
+      const providerMessage = extractProviderMessage(parsedBody, rawBodyText);
 
       if (response.status === 429) {
         throw new OpenRouterRequestError(
           "RATE_LIMITED",
           providerMessage || "The assistant is taking a little longer than expected.",
           { status: 429, retryable: true }
+        );
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new OpenRouterRequestError(
+          "UNAUTHORIZED",
+          providerMessage || "Assistant configuration issue. Please verify OPENROUTER_API_KEY.",
+          { status: response.status, retryable: false }
+        );
+      }
+
+      if (response.status === 402) {
+        throw new OpenRouterRequestError(
+          "PAYMENT_REQUIRED",
+          providerMessage || "OpenRouter billing or credits need attention before requests can run.",
+          { status: 402, retryable: false }
+        );
+      }
+
+      if (response.status === 404) {
+        throw new OpenRouterRequestError(
+          "MODEL_UNAVAILABLE",
+          providerMessage || `The selected model "${model}" is unavailable.`,
+          { status: 404, retryable: false }
         );
       }
 
