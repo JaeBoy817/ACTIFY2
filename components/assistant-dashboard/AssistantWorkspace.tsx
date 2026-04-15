@@ -24,6 +24,7 @@ import { SearchInput } from "@/components/assistant-dashboard/SearchInput";
 import { SectionHeader } from "@/components/assistant-dashboard/SectionHeader";
 import type { ResidentSnapshot } from "@/components/assistant-dashboard/types";
 import {
+  type NoteRewriteDebug,
   type RewriteStrength,
   rewordOneToOneNote,
   rewordProgressNote,
@@ -218,6 +219,7 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
   const [isRewordingNote, setIsRewordingNote] = useState(false);
   const [rewordError, setRewordError] = useState<string | null>(null);
   const [rewordResponseId, setRewordResponseId] = useState<string | null>(null);
+  const [rewordDebug, setRewordDebug] = useState<NoteRewriteDebug | null>(null);
   const [rewordCopyState, setRewordCopyState] = useState<"idle" | "copied">("idle");
 
   const [selectedCalendarAction, setSelectedCalendarAction] = useState<string | null>(null);
@@ -317,12 +319,17 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
 
         setRewordedNote(rewritten.note);
         setRewordResponseId(rewritten.responseId);
+        setRewordDebug(rewritten.debug ?? null);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[Actify Note Rewriter]", rewritten.debug);
+        }
       } catch (error) {
         if (error instanceof Error && error.message) {
           setRewordError(error.message);
         } else {
           setRewordError("We couldn’t reword that note right now.");
         }
+        setRewordDebug(null);
       } finally {
         setIsRewordingNote(false);
       }
@@ -594,6 +601,9 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
                   onCopy={copyRewordedNote}
                   copyState={rewordCopyState}
                   label="Reworded note preview"
+                  preservedDetails={rewordDebug?.preservation.preservedDetails}
+                  preservationScore={rewordDebug?.preservation.preservationScore}
+                  genericPhraseHits={rewordDebug?.preservation.genericPhrasesFound}
                 />
               )}
             </section>
