@@ -1,40 +1,41 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { requireCurrentAppUserWithAccess, asAppAccessErrorResponse } from "@/lib/access-control";
-import {
-  generateActifyAssistantReply,
-  OpenRouterRequestError
-} from "@/lib/ai/openrouter";
-import type { ActifyAssistantMode } from "@/lib/ai/buildActifySystemPrompt";
+import { asAppAccessErrorResponse, requireCurrentAppUserWithAccess } from "@/lib/access-control";
+import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
+import type { AssistantIntent } from "@/lib/assistant/presetResponses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const assistantModeSchema = z.enum([
-  "general",
-  "ideas",
-  "note_support",
-  "calendar_planning",
-  "resident_support"
+const assistantIntentSchema = z.enum([
+  "backupActivityIdeas",
+  "groupActivityIdeas",
+  "oneToOneVisitIdeas",
+  "bedBoundResidentIdeas",
+  "dementiaFriendlyIdeas",
+  "progressNoteHelp",
+  "oneToOneNoteHelp",
+  "carePlanWording",
+  "calendarPlanningHelp",
+  "holidayActivityPlanning",
+  "residentEngagementSuggestions",
+  "lowBudgetActivityIdeas",
+  "fallback"
 ]);
-
-const conversationMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(2000)
-});
 
 const assistantRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
-  conversationHistory: z.array(conversationMessageSchema).max(20).optional().default([]),
-  mode: assistantModeSchema.optional().default("general")
+  intent: assistantIntentSchema.optional(),
+  excludeResponseId: z.string().trim().min(1).max(100).optional()
 });
 
 type AssistantApiSuccess = {
   ok: true;
   message: string;
-  model: string;
-  providerModel: string | null;
+  intent: AssistantIntent;
+  responseId: string;
+  engine: "local-preset";
 };
 
 type AssistantApiError = {
@@ -42,17 +43,6 @@ type AssistantApiError = {
   error: string;
   code?: string;
 };
-
-function truncateHistory(
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  maxItems = 8
-) {
-  const scoped = messages.length <= maxItems ? messages : messages.slice(messages.length - maxItems);
-  return scoped.map((entry) => ({
-    role: entry.role,
-    content: entry.content.slice(0, 1200)
-  }));
-}
 
 export async function POST(request: Request) {
   try {
@@ -70,20 +60,18 @@ export async function POST(request: Request) {
       return NextResponse.json(response, { status: 400 });
     }
 
-    const mode = parsed.data.mode as ActifyAssistantMode;
-    const history = truncateHistory(parsed.data.conversationHistory);
-
-    const result = await generateActifyAssistantReply({
-      mode,
-      history,
-      userMessage: parsed.data.message
+    const result = getAssistantResponseFromPrompt({
+      prompt: parsed.data.message,
+      forceIntent: parsed.data.intent,
+      excludeResponseId: parsed.data.excludeResponseId
     });
 
     const response: AssistantApiSuccess = {
       ok: true,
-      message: result.message,
-      model: result.model,
-      providerModel: result.providerModel
+      message: result.formattedMessage,
+      intent: result.intent,
+      responseId: result.response.id,
+      engine: "local-preset"
     };
 
     return NextResponse.json(response, { status: 200 });
@@ -91,16 +79,7 @@ export async function POST(request: Request) {
     const accessResponse = asAppAccessErrorResponse(error);
     if (accessResponse) return accessResponse;
 
-    if (error instanceof OpenRouterRequestError) {
-      const response: AssistantApiError = {
-        ok: false,
-        error: error.message || "We couldn’t generate a response right now.",
-        code: error.code
-      };
-      return NextResponse.json(response, { status: error.status });
-    }
-
-    console.error("[api/assistant] fatal", error);
+    console.error("[api/assistant] local preset failure", error);
     const response: AssistantApiError = {
       ok: false,
       error: "We couldn’t generate a response right now."

@@ -65,7 +65,7 @@ export function AssistantMessage({
               className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
-              Regenerate
+              Try Another Response
             </button>
           ) : null}
         </div>
