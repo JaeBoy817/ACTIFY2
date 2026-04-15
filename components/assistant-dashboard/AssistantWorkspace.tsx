@@ -24,6 +24,7 @@ import { SearchInput } from "@/components/assistant-dashboard/SearchInput";
 import { SectionHeader } from "@/components/assistant-dashboard/SectionHeader";
 import type { ResidentSnapshot } from "@/components/assistant-dashboard/types";
 import {
+  type RewriteStrength,
   rewordOneToOneNote,
   rewordProgressNote,
   type NoteRewriteStyle,
@@ -282,7 +283,7 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
     }
   };
 
-  const rewordNote = () => {
+  const rewordNote = (options?: { nextStyle?: NoteRewriteStyle; strength?: RewriteStrength }) => {
     const source = roughNoteInput.trim();
     if (!source) {
       setRewordError("Paste a rough note to reword.");
@@ -298,10 +299,21 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
 
     window.setTimeout(() => {
       try {
+        const style = options?.nextStyle ?? rewordStyle;
+        if (style !== rewordStyle) {
+          setRewordStyle(style);
+        }
+
         const rewritten =
           rewordNoteType === "progress"
-            ? rewordProgressNote(source, rewordStyle, { excludeResponseId: rewordResponseId ?? undefined })
-            : rewordOneToOneNote(source, rewordStyle, { excludeResponseId: rewordResponseId ?? undefined });
+            ? rewordProgressNote(source, style, {
+                excludeResponseId: rewordResponseId ?? undefined,
+                strength: options?.strength
+              })
+            : rewordOneToOneNote(source, style, {
+                excludeResponseId: rewordResponseId ?? undefined,
+                strength: options?.strength
+              });
 
         setRewordedNote(rewritten.note);
         setRewordResponseId(rewritten.responseId);
@@ -524,13 +536,48 @@ export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceP
 
               <button
                 type="button"
-                onClick={rewordNote}
+                onClick={() => rewordNote()}
                 disabled={isRewordingNote}
                 className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_30px_-22px_rgba(15,23,42,0.9)] transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
               >
                 {isRewordingNote ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ClipboardPenLine className="h-4 w-4" aria-hidden />}
                 {isRewordingNote ? "Rewording..." : "Reword Note"}
               </button>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => rewordNote({ strength: "strong" })}
+                  disabled={isRewordingNote}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  Try Stronger Rewrite
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rewordNote({ nextStyle: "professional", strength: "strong" })}
+                  disabled={isRewordingNote}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  Make More Professional
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rewordNote({ nextStyle: "shorter" })}
+                  disabled={isRewordingNote}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  Shorten
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rewordNote({ nextStyle: "detailed" })}
+                  disabled={isRewordingNote}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  Expand Slightly
+                </button>
+              </div>
 
               {rewordError ? (
                 <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{rewordError}</p>
