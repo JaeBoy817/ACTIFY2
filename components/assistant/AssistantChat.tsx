@@ -231,7 +231,7 @@ export function AssistantChat() {
 
       <div
         ref={scrollRef}
-        className="h-[420px] overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-3 md:h-[500px]"
+        className="h-[440px] overflow-y-auto rounded-[1.6rem] border border-slate-200 bg-white/75 p-4 md:h-[540px]"
         aria-live="polite"
       >
         {messages.length === 0 && !isSubmitting ? (
@@ -241,7 +241,7 @@ export function AssistantChat() {
             description="Ask for activity ideas, notes, planning support, or resident-focused suggestions."
           />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {messages.map((message, index) => {
               const isLastAssistant =
                 message.role === "assistant" &&
@@ -263,7 +263,7 @@ export function AssistantChat() {
             })}
 
             {isSubmitting ? (
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+              <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 Generating a practical response...
               </div>
