@@ -14,19 +14,7 @@ import { toResidentListRow } from "@/lib/residents/serializers";
 export default async function ResidentsPage() {
   const context = await getFacilityContextWithSubscription();
 
-  const [units, completionByResident, attendanceByResident] = await Promise.all([
-    prisma.unit.findMany({
-      where: {
-        facilityId: context.facilityId
-      },
-      orderBy: {
-        name: "asc"
-      },
-      select: {
-        id: true,
-        name: true
-      }
-    }),
+  const [completionByResident, attendanceByResident] = await Promise.all([
     getAssessmentCompletionMapForFacility(context.facilityId),
     getAttendanceSummaryMapForFacility(context.facilityId)
   ]);
@@ -52,7 +40,7 @@ export default async function ResidentsPage() {
     });
 
   return (
-    <div className="residents-page-gradient min-h-screen space-y-4">
+    <div className="min-h-screen space-y-4 bg-gradient-to-b from-slate-50 via-white to-emerald-50/30 p-1">
       <ResidentsWorkspaceLazy
         initialResidents={residents.map((resident) =>
           toResidentListRow(resident, {
@@ -60,7 +48,6 @@ export default async function ResidentsPage() {
             attendanceByResident
           })
         )}
-        initialUnits={units}
         canEdit={canWrite(context.role)}
       />
     </div>

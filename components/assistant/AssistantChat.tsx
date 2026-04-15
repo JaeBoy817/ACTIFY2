@@ -56,6 +56,7 @@ type PersistedAssistantStore = {
 const STORAGE_KEY = "actify-assistant-chat-v5";
 const MAX_MESSAGES = 24;
 const MAX_HISTORY_THREADS = 14;
+const ASSISTANT_PREFILL_QUERY_PARAM = "assistantPrompt";
 
 const QUICK_PROMPTS = [
   "Give me a backup activity",
@@ -303,12 +304,27 @@ export function AssistantChat() {
     }
     if (nextStore.history.length > 0) {
       setHistoryThreads(nextStore.history);
+      if (nextStore.current.messages.length === 0) {
+        setActiveTab("history");
+      }
     }
     if (nextStore.current.conversationId) {
       setConversationId(nextStore.current.conversationId);
     }
     if (nextStore.current.model) {
       setActiveModel(nextStore.current.model);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const prefillPrompt = params.get(ASSISTANT_PREFILL_QUERY_PARAM);
+
+    if (prefillPrompt && prefillPrompt.trim().length > 0) {
+      setPrompt(prefillPrompt);
+      setActiveTab("chat");
+      params.delete(ASSISTANT_PREFILL_QUERY_PARAM);
+      const query = params.toString();
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", nextUrl);
     }
 
     hydratedRef.current = true;
