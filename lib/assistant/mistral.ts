@@ -1,6 +1,5 @@
 import { Mistral } from "@mistralai/mistralai";
 
-import { buildActifySystemPrompt } from "@/lib/assistant/buildActifySystemPrompt";
 import { extractAssistantTextFromMistralResponse } from "@/lib/assistant/extractAssistantText";
 import { matchPromptToIntent } from "@/lib/assistant/matchPromptToIntent";
 import { parseRewriteRequest } from "@/lib/assistant/parseRewriteRequest";
@@ -236,19 +235,10 @@ type StartConversationInput = {
   client: Mistral;
   config: MistralConfig;
   prompt: string;
-  mode: AssistantMode;
-  intent: AssistantIntent;
-  rewriteRequest: ReturnType<typeof parseRewriteRequest>;
   history: AssistantConversationMessage[];
 };
 
 async function startConversation(input: StartConversationInput) {
-  const instructions = buildActifySystemPrompt({
-    mode: input.mode,
-    intent: input.intent,
-    rewriteRequest: input.rewriteRequest
-  });
-
   const inputs = [
     ...input.history.map((entry) => ({
       role: entry.role,
@@ -261,7 +251,6 @@ async function startConversation(input: StartConversationInput) {
     {
       agentId: input.config.agentId,
       agentVersion: input.config.agentVersion,
-      instructions,
       inputs
     },
     {
@@ -313,9 +302,6 @@ export async function runMistralAssistant(request: MistralAssistantRequest): Pro
           client,
           config,
           prompt,
-          mode: request.mode,
-          intent: intentData.intent,
-          rewriteRequest: intentData.rewriteRequest,
           history
         });
       }
@@ -324,9 +310,6 @@ export async function runMistralAssistant(request: MistralAssistantRequest): Pro
         client,
         config,
         prompt,
-        mode: request.mode,
-        intent: intentData.intent,
-        rewriteRequest: intentData.rewriteRequest,
         history
       });
     }
