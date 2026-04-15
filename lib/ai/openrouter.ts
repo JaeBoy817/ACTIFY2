@@ -14,6 +14,7 @@ export type OpenRouterChatResult = {
   message: string;
   model: string;
   providerModel: string | null;
+  usedFallbackModel: boolean;
 };
 
 type OpenRouterErrorCode =
@@ -60,7 +61,10 @@ type OpenRouterResponseShape = {
 };
 
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
-const REQUEST_TIMEOUT_MS = 25_000;
+const PRIMARY_REQUEST_TIMEOUT_MS = 12_000;
+const FALLBACK_REQUEST_TIMEOUT_MS = 10_000;
+const PRIMARY_MAX_TOKENS = 420;
+const FALLBACK_MAX_TOKENS = 300;
 
 function sanitizeEnvValue(value: string | undefined | null) {
   if (!value) return null;
@@ -129,6 +133,18 @@ export function getOpenRouterModel() {
   return process.env.OPENROUTER_MODEL?.trim() || process.env.ACTIFY_AI_MODEL?.trim() || "openrouter/free";
 }
 
+function getFallbackModels(primaryModel: string) {
+  const configured = process.env.OPENROUTER_FALLBACK_MODELS?.trim();
+  const parsed = configured
+    ? configured
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : ["openrouter/auto"];
+
+  return parsed.filter((modelName) => modelName !== primaryModel);
+}
+
 function extractContent(content: unknown) {
   if (typeof content === "string") return content;
 
@@ -186,6 +202,7 @@ export async function generateActifyAssistantReply(options: {
 }): Promise<OpenRouterChatResult> {
   const apiKey = getOpenRouterApiKey();
   const model = getOpenRouterModel();
+  const fallbackModels = getFallbackModels(model);
 
   const appUrl = readOptionalHeaderEnv("NEXT_PUBLIC_APP_URL");
   const appName = readOptionalHeaderEnv("NEXT_PUBLIC_APP_NAME");
@@ -214,108 +231,143 @@ export async function generateActifyAssistantReply(options: {
     }
   ];
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const tryModel = async (candidateModel: string, timeoutMs: number, maxTokens: number) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(OPENROUTER_CHAT_URL, {
-      method: "POST",
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        messages: allMessages,
-        temperature: 0.7,
-        max_tokens: 700
-      })
-    });
+    try {
+      const response = await fetch(OPENROUTER_CHAT_URL, {
+        method: "POST",
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: candidateModel,
+          messages: allMessages,
+          temperature: 0.55,
+          max_tokens: maxTokens
+        })
+      });
 
-    const rawBodyText = await response.text();
-    const parsedBody = parseJsonSafely(rawBodyText);
+      const rawBodyText = await response.text();
+      const parsedBody = parseJsonSafely(rawBodyText);
 
-    if (!response.ok) {
-      const providerMessage = extractProviderMessage(parsedBody, rawBodyText);
+      if (!response.ok) {
+        const providerMessage = extractProviderMessage(parsedBody, rawBodyText);
 
-      if (response.status === 429) {
+        if (response.status === 429) {
+          throw new OpenRouterRequestError(
+            "RATE_LIMITED",
+            providerMessage || "The assistant is taking a little longer than expected.",
+            { status: 429, retryable: true }
+          );
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          throw new OpenRouterRequestError(
+            "UNAUTHORIZED",
+            providerMessage || "Assistant configuration issue. Please verify OPENROUTER_API_KEY.",
+            { status: response.status, retryable: false }
+          );
+        }
+
+        if (response.status === 402) {
+          throw new OpenRouterRequestError(
+            "PAYMENT_REQUIRED",
+            providerMessage || "OpenRouter billing or credits need attention before requests can run.",
+            { status: 402, retryable: false }
+          );
+        }
+
+        if (response.status === 404) {
+          throw new OpenRouterRequestError(
+            "MODEL_UNAVAILABLE",
+            providerMessage || `The selected model "${candidateModel}" is unavailable.`,
+            { status: 404, retryable: true }
+          );
+        }
+
+        if (response.status >= 400 && response.status < 500) {
+          throw new OpenRouterRequestError(
+            "BAD_REQUEST",
+            providerMessage || "We couldn’t generate a response right now.",
+            { status: response.status, retryable: false }
+          );
+        }
+
         throw new OpenRouterRequestError(
-          "RATE_LIMITED",
-          providerMessage || "The assistant is taking a little longer than expected.",
-          { status: 429, retryable: true }
-        );
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        throw new OpenRouterRequestError(
-          "UNAUTHORIZED",
-          providerMessage || "Assistant configuration issue. Please verify OPENROUTER_API_KEY.",
-          { status: response.status, retryable: false }
-        );
-      }
-
-      if (response.status === 402) {
-        throw new OpenRouterRequestError(
-          "PAYMENT_REQUIRED",
-          providerMessage || "OpenRouter billing or credits need attention before requests can run.",
-          { status: 402, retryable: false }
-        );
-      }
-
-      if (response.status === 404) {
-        throw new OpenRouterRequestError(
-          "MODEL_UNAVAILABLE",
-          providerMessage || `The selected model "${model}" is unavailable.`,
-          { status: 404, retryable: false }
-        );
-      }
-
-      if (response.status >= 400 && response.status < 500) {
-        throw new OpenRouterRequestError(
-          "BAD_REQUEST",
+          "UPSTREAM_FAILURE",
           providerMessage || "We couldn’t generate a response right now.",
-          { status: response.status, retryable: false }
+          { status: 502, retryable: true }
         );
       }
 
-      throw new OpenRouterRequestError(
-        "UPSTREAM_FAILURE",
-        providerMessage || "We couldn’t generate a response right now.",
-        { status: 502, retryable: true }
-      );
-    }
+      const body = parsedBody as OpenRouterResponseShape | null;
+      const rawContent = body?.choices?.[0]?.message?.content;
+      const message = extractContent(rawContent).trim();
 
-    const body = parsedBody as OpenRouterResponseShape | null;
-    const rawContent = body?.choices?.[0]?.message?.content;
-    const message = extractContent(rawContent).trim();
+      if (!message) {
+        throw new OpenRouterRequestError("BAD_RESPONSE", "We couldn’t generate a response right now.", {
+          status: 502,
+          retryable: true
+        });
+      }
 
-    if (!message) {
-      throw new OpenRouterRequestError("BAD_RESPONSE", "We couldn’t generate a response right now.", {
+      return {
+        message,
+        model: candidateModel,
+        providerModel: typeof body?.model === "string" ? body.model : null
+      };
+    } catch (error) {
+      if (error instanceof OpenRouterRequestError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new OpenRouterRequestError("TIMEOUT", "The assistant is taking a little longer than expected.", {
+          status: 504,
+          retryable: true
+        });
+      }
+
+      throw new OpenRouterRequestError("UPSTREAM_FAILURE", "We couldn’t generate a response right now.", {
         status: 502,
         retryable: true
       });
+    } finally {
+      clearTimeout(timeoutId);
     }
+  };
 
+  const primary = await tryModel(model, PRIMARY_REQUEST_TIMEOUT_MS, PRIMARY_MAX_TOKENS).catch((error) => {
+    if (!(error instanceof OpenRouterRequestError)) throw error;
+    if (!error.retryable) throw error;
+    return null;
+  });
+
+  if (primary) {
     return {
-      message,
-      model,
-      providerModel: typeof body?.model === "string" ? body.model : null
+      ...primary,
+      usedFallbackModel: false
     };
-  } catch (error) {
-    if (error instanceof OpenRouterRequestError) {
+  }
+
+  for (const fallbackModel of fallbackModels) {
+    try {
+      const fallback = await tryModel(fallbackModel, FALLBACK_REQUEST_TIMEOUT_MS, FALLBACK_MAX_TOKENS);
+      return {
+        ...fallback,
+        usedFallbackModel: true
+      };
+    } catch (error) {
+      if (error instanceof OpenRouterRequestError && error.retryable) {
+        continue;
+      }
       throw error;
     }
-
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new OpenRouterRequestError("TIMEOUT", "The assistant is taking a little longer than expected.", {
-        status: 504,
-        retryable: true
-      });
-    }
-
-    throw new OpenRouterRequestError("UPSTREAM_FAILURE", "We couldn’t generate a response right now.", {
-      status: 502,
-      retryable: true
-    });
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  throw new OpenRouterRequestError("TIMEOUT", "The assistant is taking a little longer than expected.", {
+    status: 504,
+    retryable: true
+  });
 }

@@ -21,12 +21,12 @@ const assistantModeSchema = z.enum([
 
 const conversationMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(4000)
+  content: z.string().trim().min(1).max(2000)
 });
 
 const assistantRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
-  conversationHistory: z.array(conversationMessageSchema).max(30).optional().default([]),
+  conversationHistory: z.array(conversationMessageSchema).max(20).optional().default([]),
   mode: assistantModeSchema.optional().default("general")
 });
 
@@ -45,10 +45,13 @@ type AssistantApiError = {
 
 function truncateHistory(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
-  maxItems = 12
+  maxItems = 8
 ) {
-  if (messages.length <= maxItems) return messages;
-  return messages.slice(messages.length - maxItems);
+  const scoped = messages.length <= maxItems ? messages : messages.slice(messages.length - maxItems);
+  return scoped.map((entry) => ({
+    role: entry.role,
+    content: entry.content.slice(0, 1200)
+  }));
 }
 
 export async function POST(request: Request) {
