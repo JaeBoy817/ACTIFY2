@@ -5,6 +5,7 @@ export type SnapshotViewKey = (typeof SNAPSHOT_VIEW_OPTIONS)[number];
 
 export const SNAPSHOT_FILTER_OPTIONS = [
   { key: "ACTIVE", label: "Active" },
+  { key: "ARCHIVED", label: "Archived" },
   { key: "NEW_ADMISSIONS", label: "New Admissions" },
   { key: "DISCHARGED_ARCHIVED", label: "Discharged / Archived" },
   { key: "NEEDS_FOLLOW_UP", label: "Needs Follow-Up" },
@@ -32,7 +33,13 @@ export const SNAPSHOT_FILTER_OPTIONS = [
   { key: "NAIL_CARE", label: "Nail Care" },
   { key: "MOVIES_TV", label: "Movies / TV" },
   { key: "WORD_SEARCHES", label: "Word Searches" },
-  { key: "PUZZLES", label: "Puzzles" }
+  { key: "PUZZLES", label: "Puzzles" },
+  { key: "ATTENDANCE_BELOW_GOAL", label: "Attendance Below Goal" },
+  { key: "ATTENDANCE_IMPROVING", label: "Attendance Improving" },
+  { key: "MISSED_RECENT_GROUP", label: "Missed Recent Group Activities" },
+  { key: "ONE_TO_ONE_PRIORITY", label: "1:1 Priority" },
+  { key: "FREQUENT_REFUSAL", label: "Frequent Refusal" },
+  { key: "INCONSISTENT_PARTICIPATION", label: "Inconsistent Participation" }
 ] as const;
 
 export type SnapshotFilterKey = (typeof SNAPSHOT_FILTER_OPTIONS)[number]["key"];
@@ -93,6 +100,18 @@ export type ResidentSnapshot = {
   followUpPriority: "LOW" | "MEDIUM" | "HIGH" | null;
   dischargeDate: string | null;
   dischargeReason: string | null;
+  totalActivitiesOffered?: number;
+  totalActivitiesAttended?: number;
+  participationPercentage?: number | null;
+  attendanceCount?: number;
+  oneToOneCount?: number;
+  refusalCount?: number;
+  missedActivitiesCount?: number;
+  last30DayParticipation?: number | null;
+  last90DayParticipation?: number | null;
+  yearToDateParticipation?: number | null;
+  attendanceByActivityType?: Array<{ label: string; count: number }>;
+  lastParticipationTrend?: "up" | "flat" | "down";
 };
 
 export type ResidentSnapshotFormValue = {
@@ -116,6 +135,9 @@ export type ResidentSnapshotFormValue = {
   commonRefusals: string;
   whatWorks: string;
   whatDoesNotWork: string;
+  engagementNotes: string;
+  conversationStarters: string;
+  thingsToAvoid: string;
   supportNeeds: ResidentSupportNeed[];
   quickTags: string;
 };

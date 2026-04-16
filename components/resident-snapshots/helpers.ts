@@ -87,6 +87,36 @@ const AI_ACTIONS: SnapshotIntentAction[] = [
     label: "Create follow-up idea",
     description: "Propose a practical next-step visit or engagement plan.",
     prompt: "Create a follow-up activity idea for this resident"
+  },
+  {
+    id: "mini-plan",
+    label: "Build mini engagement plan",
+    description: "Generate a quick plan for the next few touchpoints.",
+    prompt: "Build a mini engagement plan for this resident for the next 7 days"
+  },
+  {
+    id: "analytics-attendance-low",
+    label: "Ask why attendance may be low",
+    description: "Review patterns and suggest practical causes.",
+    prompt: "Based on this resident context and attendance summary, explain possible reasons participation is low"
+  },
+  {
+    id: "analytics-participation-boost",
+    label: "Suggest activities to improve participation",
+    description: "Target engagement with practical alternatives.",
+    prompt: "Suggest activities to improve this resident's participation based on attendance trends"
+  },
+  {
+    id: "analytics-1to1-plan",
+    label: "Suggest 1:1 plan based on attendance",
+    description: "Create a targeted 1:1 plan based on engagement patterns.",
+    prompt: "Create a 1:1 plan for this resident using attendance and refusal trends"
+  },
+  {
+    id: "analytics-summary",
+    label: "Summarize attendance trends",
+    description: "Generate a concise trend summary for staff handoff.",
+    prompt: "Summarize this resident's participation and attendance trends with clear next steps"
   }
 ];
 
@@ -104,6 +134,9 @@ const FORM_LINE_KEYS = {
   commonRefusals: "Common Refusals",
   whatWorks: "What Usually Works",
   whatDoesNotWork: "What Usually Does Not Work",
+  engagementNotes: "Engagement Notes",
+  conversationStarters: "Conversation Starters",
+  thingsToAvoid: "Things to Avoid",
   lastActivity: "Last Activity",
   lastOneToOne: "Last 1:1",
   lastAiSuggestion: "Last AI Suggestion",
@@ -204,6 +237,69 @@ function deriveParticipationLevel(value: number | null) {
   if (value >= 65) return "high";
   if (value <= 30) return "low";
   return "neutral";
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function inferAttendanceTrend({
+  participation30d,
+  refusals,
+  noShows,
+  oneToOneCount
+}: {
+  participation30d: number | null;
+  refusals: number;
+  noShows: number;
+  oneToOneCount: number;
+}): "up" | "flat" | "down" {
+  if (participation30d === null) return "flat";
+  if (participation30d >= 70 && refusals <= 1) return "up";
+  if (participation30d <= 40 || refusals + noShows >= Math.max(3, oneToOneCount + 2)) return "down";
+  return "flat";
+}
+
+function toFallbackAttendanceByActivityType(row: ResidentListRow) {
+  const textBlocks = [
+    row.preferences ?? "",
+    row.notes ?? "",
+    row.safetyNotes ?? "",
+    ...row.recentNotes.map((entry) => entry.narrative)
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const buckets = [
+    { label: "Bingo", keywords: ["bingo"] },
+    { label: "Music", keywords: ["music", "sing", "hymn", "karaoke"] },
+    { label: "Exercise", keywords: ["exercise", "stretch", "walk", "chair"] },
+    { label: "Movie", keywords: ["movie", "tv", "film"] },
+    { label: "Bible Study", keywords: ["bible", "devotion", "faith"] },
+    { label: "Crafts", keywords: ["craft", "painting", "nail"] },
+    { label: "Puzzles", keywords: ["puzzle", "crossword", "word search", "trivia"] },
+    { label: "1:1 Visits", keywords: ["1:1", "one-to-one", "room visit", "bedside"] }
+  ] as const;
+
+  const inferred = buckets
+    .map((bucket) => {
+      const hits = bucket.keywords.reduce((count, keyword) => (textBlocks.includes(keyword) ? count + 1 : count), 0);
+      return {
+        label: bucket.label,
+        count: hits
+      };
+    })
+    .filter((entry) => entry.count > 0);
+
+  if (inferred.length > 0) {
+    return inferred.sort((a, b) => b.count - a.count).slice(0, 5);
+  }
+
+  const fallbacks = splitList(row.preferences)
+    .slice(0, 4)
+    .map((label) => ({ label, count: 1 }));
+  return fallbacks.length > 0 ? fallbacks : [{ label: "General Activities", count: 1 }];
 }
 
 function maybeParseDate(value: string | null) {
@@ -325,7 +421,29 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
     followUpPriority:
       (parsedNotes["Follow-Up Priority"]?.toUpperCase() as "LOW" | "MEDIUM" | "HIGH" | undefined) ?? null,
     dischargeDate: archiveMeta.dischargeDate,
-    dischargeReason: archiveMeta.dischargeReason
+    dischargeReason: archiveMeta.dischargeReason,
+    totalActivitiesOffered: row.attendanceSnapshot.total30d,
+    totalActivitiesAttended: row.attendanceSnapshot.engaged30d,
+    participationPercentage: row.attendanceSnapshot.participationPercent30d,
+    attendanceCount: row.attendanceSnapshot.engaged30d,
+    oneToOneCount: row.recentNotes.filter((note) => {
+      const createdAt = maybeParseDate(note.createdAt);
+      if (!createdAt) return false;
+      const days = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      return days <= 30;
+    }).length,
+    refusalCount: row.attendanceSnapshot.refused30d,
+    missedActivitiesCount: row.attendanceSnapshot.noShow30d,
+    last30DayParticipation: row.attendanceSnapshot.participationPercent30d,
+    last90DayParticipation: row.attendanceSnapshot.participationPercent30d,
+    yearToDateParticipation: row.attendanceSnapshot.participationPercent30d,
+    attendanceByActivityType: toFallbackAttendanceByActivityType(row),
+    lastParticipationTrend: inferAttendanceTrend({
+      participation30d: row.attendanceSnapshot.participationPercent30d,
+      refusals: row.attendanceSnapshot.refused30d,
+      noShows: row.attendanceSnapshot.noShow30d,
+      oneToOneCount: row.recentNotes.length
+    })
   };
 
   snapshot.quickSummary = toSummary(snapshot);
@@ -368,6 +486,9 @@ export function toDefaultFormValue(): ResidentSnapshotFormValue {
     commonRefusals: "",
     whatWorks: "",
     whatDoesNotWork: "",
+    engagementNotes: "",
+    conversationStarters: "",
+    thingsToAvoid: "",
     supportNeeds: [],
     quickTags: ""
   };
@@ -395,6 +516,9 @@ export function toFormValue(snapshot: ResidentSnapshot): ResidentSnapshotFormVal
     commonRefusals: snapshot.commonRefusals,
     whatWorks: snapshot.whatWorks,
     whatDoesNotWork: snapshot.whatDoesNotWork,
+    engagementNotes: parseStructuredText(snapshot.sourceNotes)[FORM_LINE_KEYS.engagementNotes] ?? "",
+    conversationStarters: parseStructuredText(snapshot.sourceNotes)[FORM_LINE_KEYS.conversationStarters] ?? "",
+    thingsToAvoid: parseStructuredText(snapshot.sourceNotes)[FORM_LINE_KEYS.thingsToAvoid] ?? "",
     supportNeeds: snapshot.supportNeeds,
     quickTags: snapshot.tags.join(", ")
   };
@@ -424,7 +548,10 @@ export function toDraftPayload(value: ResidentSnapshotFormValue): ResidentDraftP
     plainToLine(FORM_LINE_KEYS.oneToOneStyle, value.oneToOneStyle),
     plainToLine(FORM_LINE_KEYS.commonRefusals, value.commonRefusals),
     plainToLine(FORM_LINE_KEYS.whatWorks, value.whatWorks),
-    plainToLine(FORM_LINE_KEYS.whatDoesNotWork, value.whatDoesNotWork)
+    plainToLine(FORM_LINE_KEYS.whatDoesNotWork, value.whatDoesNotWork),
+    plainToLine(FORM_LINE_KEYS.engagementNotes, value.engagementNotes),
+    plainToLine(FORM_LINE_KEYS.conversationStarters, value.conversationStarters),
+    plainToLine(FORM_LINE_KEYS.thingsToAvoid, value.thingsToAvoid)
   ].filter((line): line is string => Boolean(line));
 
   const supportLines = [
@@ -472,11 +599,16 @@ export function appendArchiveContext(input: {
 }
 
 export function getSnapshotFiltersForView(view: "ACTIVE" | "ARCHIVED") {
-  return SNAPSHOT_FILTER_KEYS.filter((key) => (view === "ARCHIVED" ? key === "DISCHARGED_ARCHIVED" : key !== "DISCHARGED_ARCHIVED"));
+  return SNAPSHOT_FILTER_KEYS.filter((key) =>
+    view === "ARCHIVED"
+      ? key === "DISCHARGED_ARCHIVED" || key === "ARCHIVED"
+      : key !== "DISCHARGED_ARCHIVED" && key !== "ARCHIVED"
+  );
 }
 
 export const SNAPSHOT_FILTER_KEYS = [
   "ACTIVE",
+  "ARCHIVED",
   "NEW_ADMISSIONS",
   "DISCHARGED_ARCHIVED",
   "NEEDS_FOLLOW_UP",
@@ -504,7 +636,13 @@ export const SNAPSHOT_FILTER_KEYS = [
   "NAIL_CARE",
   "MOVIES_TV",
   "WORD_SEARCHES",
-  "PUZZLES"
+  "PUZZLES",
+  "ATTENDANCE_BELOW_GOAL",
+  "ATTENDANCE_IMPROVING",
+  "MISSED_RECENT_GROUP",
+  "ONE_TO_ONE_PRIORITY",
+  "FREQUENT_REFUSAL",
+  "INCONSISTENT_PARTICIPATION"
 ] as const satisfies SnapshotFilterKey[];
 
 export function residentMatchesFilter(resident: ResidentSnapshot, filter: SnapshotFilterKey) {
@@ -517,6 +655,8 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
   switch (filter) {
     case "ACTIVE":
       return !isArchivedStatus(resident.status);
+    case "ARCHIVED":
+      return isArchivedStatus(resident.status);
     case "NEW_ADMISSIONS":
       return isNewAdmission(resident.admissionDate);
     case "DISCHARGED_ARCHIVED":
@@ -573,6 +713,19 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
       return boolIncludes(searchableValues, "word search");
     case "PUZZLES":
       return boolIncludes(searchableValues, "puzzle") || boolIncludes(searchableValues, "crossword");
+    case "ATTENDANCE_BELOW_GOAL":
+      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 45;
+    case "ATTENDANCE_IMPROVING":
+      return resident.lastParticipationTrend === "up";
+    case "MISSED_RECENT_GROUP":
+      return (resident.missedActivitiesCount ?? 0) >= 2;
+    case "ONE_TO_ONE_PRIORITY":
+      return (resident.oneToOneCount ?? 0) >= 2 || boolIncludes(searchableValues, "1:1") || boolIncludes(searchableValues, "bed");
+    case "FREQUENT_REFUSAL":
+      return (resident.refusalCount ?? 0) >= 2 || boolIncludes([resident.commonRefusals], "decline");
+    case "INCONSISTENT_PARTICIPATION":
+      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) >= 35 &&
+        (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) <= 65;
     default:
       return true;
   }
@@ -612,10 +765,20 @@ export function buildAssistantPrompt(action: SnapshotIntentAction, resident: Res
     `Best Time: ${resident.bestTimeOfDay || "Not provided"}`,
     `Support Needs: ${resident.supportNeeds.join(", ") || "Not provided"}`,
     `What Works: ${resident.whatWorks || "Not provided"}`,
-    `Common Refusals: ${resident.commonRefusals || "Not provided"}`
+    `Common Refusals: ${resident.commonRefusals || "Not provided"}`,
+    `Participation (30d): ${resident.last30DayParticipation ?? resident.participationPercentage ?? "Not enough data"}`,
+    `Attendance count (30d): ${resident.attendanceCount ?? resident.totalActivitiesAttended ?? 0}`,
+    `Recent 1:1 visits: ${resident.oneToOneCount ?? 0}`,
+    `Refusals (30d): ${resident.refusalCount ?? 0}`,
+    `Missed activities (30d): ${resident.missedActivitiesCount ?? 0}`
   ];
 
   return `${action.prompt}.\n\nResident context:\n${context.join("\n")}`;
+}
+
+export function calculateParticipationRate(attended: number, offered: number) {
+  if (!Number.isFinite(attended) || !Number.isFinite(offered) || offered <= 0) return null;
+  return clampPercent((attended / offered) * 100);
 }
 
 export function getSnapshotActions() {
