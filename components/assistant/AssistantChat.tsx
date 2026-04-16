@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { CircleDot, Sparkles } from "lucide-react";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { AssistantMessage } from "@/components/assistant/AssistantMessage";
@@ -459,32 +459,48 @@ export function AssistantChat() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="inline-flex rounded-full border border-slate-200 bg-white/80 p-1">
-        <button
-          type="button"
-          onClick={() => setActiveTab("chat")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-            activeTab === "chat"
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-slate-100"
-          }`}
-        >
-          New Chat
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("history")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-            activeTab === "history"
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-slate-100"
-          }`}
-        >
-          History
-          <span className="ml-1 text-[11px] opacity-80">({historyThreads.length})</span>
-        </button>
-      </div>
+    <div className="space-y-4 rounded-[2rem] border border-slate-200/85 bg-[linear-gradient(180deg,#ffffff_0%,#f6faff_100%)] p-4 shadow-[0_28px_50px_-36px_rgba(15,23,42,0.55)] sm:p-5">
+      <header className="rounded-[1.7rem] border border-slate-200/90 bg-white/85 p-4 shadow-sm shadow-slate-200/80">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="inline-flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[radial-gradient(circle_at_30%_20%,#cffafe_0%,#e0e7ff_58%,#f8fafc_100%)] text-slate-700 shadow-inner shadow-sky-100">
+                <Sparkles className="h-4 w-4" aria-hidden />
+              </span>
+              <h3 className="text-lg font-semibold text-slate-900">Actify AI Assistant</h3>
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                <CircleDot className="h-2.5 w-2.5 fill-current" aria-hidden />
+                Ready to help
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Ask for activity ideas, note support, planning help, and resident engagement suggestions.
+            </p>
+          </div>
+
+          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("chat")}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                activeTab === "chat" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              New Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                activeTab === "history" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              History
+              <span className="ml-1 text-[11px] opacity-80">({historyThreads.length})</span>
+            </button>
+          </div>
+        </div>
+      </header>
 
       {activeTab === "chat" ? (
         <PromptChips
@@ -500,7 +516,7 @@ export function AssistantChat() {
 
       <div
         ref={scrollRef}
-        className="h-[440px] overflow-y-auto rounded-[1.6rem] border border-slate-200 bg-white/75 p-4 md:h-[540px]"
+        className="h-[460px] scroll-smooth overflow-y-auto rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-4 shadow-inner shadow-slate-100/70 md:h-[560px] md:p-5"
         aria-live="polite"
       >
         {activeTab === "history" ? (
@@ -509,11 +525,15 @@ export function AssistantChat() {
               icon={Sparkles}
               title="No previous chats yet"
               description="After you send messages, refreshed sessions will appear here."
+              className="rounded-3xl border-slate-200 bg-white/80 p-8"
             />
           ) : (
             <div className="space-y-3">
               {historyThreads.map((thread) => (
-                <article key={thread.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <article
+                  key={thread.id}
+                  className="rounded-3xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70"
+                >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <h4 className="line-clamp-1 text-sm font-semibold text-slate-800">{thread.title}</h4>
                     <span className="shrink-0 text-[11px] text-slate-500">
@@ -525,17 +545,17 @@ export function AssistantChat() {
                       })}
                     </span>
                   </div>
-                  <p className="mb-2 text-xs text-slate-500">
+                  <p className="mb-3 text-xs text-slate-500">
                     {thread.messages.length} messages{thread.model ? ` • ${thread.model}` : ""}
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {thread.messages.map((message) => (
                       <div
                         key={message.id}
                         className={
                           message.role === "user"
-                            ? "ml-auto max-w-[88%] rounded-2xl border border-slate-200 bg-slate-100 px-3 py-2"
-                            : "max-w-[94%] rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                            ? "ml-auto max-w-[88%] rounded-2xl border border-slate-200 bg-indigo-50/70 px-3 py-2"
+                            : "max-w-[96%] rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
                         }
                       >
                         <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.text}</p>
@@ -550,10 +570,11 @@ export function AssistantChat() {
           <EmptyState
             icon={Sparkles}
             title="What do you need help with today?"
-            description="Ask for activity ideas, note rewording, planning support, or resident-focused suggestions."
+            description="Get activity ideas, rewrite notes, build plans, and find resident-friendly suggestions fast."
+            className="rounded-3xl border-slate-200 bg-[radial-gradient(circle_at_25%_0%,#e0f2fe_0%,#ffffff_38%,#f8fafc_100%)] px-6 py-10"
           />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 pb-2">
             {messages.map((message, index) => {
               const isLastAssistant =
                 message.role === "assistant" &&
@@ -575,9 +596,14 @@ export function AssistantChat() {
             })}
 
             {isSubmitting ? (
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Actify is drafting a response...
+              <div className="max-w-[96%] rounded-[1.5rem] border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70">
+                <div className="mb-3 h-3 w-28 animate-pulse rounded-full bg-slate-200/70" />
+                <div className="space-y-2">
+                  <div className="h-3 w-full animate-pulse rounded-full bg-slate-200/70" />
+                  <div className="h-3 w-11/12 animate-pulse rounded-full bg-slate-200/70" />
+                  <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-200/70" />
+                </div>
+                <p className="mt-3 text-xs font-medium text-slate-500">Actify is thinking…</p>
               </div>
             ) : null}
           </div>
