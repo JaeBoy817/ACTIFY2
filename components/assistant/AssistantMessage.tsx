@@ -77,18 +77,6 @@ export function AssistantMessage({
             <Clipboard className="h-3.5 w-3.5" aria-hidden />
             {copyState === "copied" ? "Copied" : "Copy"}
           </button>
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-          >
-            Use in Note Studio
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-          >
-            Send to Calendar Builder
-          </button>
           {isLastAssistant ? (
             <button
               type="button"

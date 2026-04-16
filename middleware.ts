@@ -47,6 +47,14 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
     console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
   }
 
+  // Actify app is intentionally simplified to an assistant-only experience.
+  // Redirect any legacy /app/* module route to /app.
+  if (pathname.startsWith("/app/")) {
+    const assistantUrl = new URL("/app", req.url);
+    assistantUrl.search = req.nextUrl.search;
+    return NextResponse.redirect(assistantUrl);
+  }
+
   // Subscription gating remains server-side in app layouts/pages (DB-backed source of truth).
   return NextResponse.next();
 });
