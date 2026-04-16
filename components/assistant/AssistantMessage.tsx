@@ -44,12 +44,14 @@ const markdownComponents: Components = {
     </blockquote>
   ),
   hr: () => <hr className="my-4 border-slate-200" />,
-  code: ({ inline, children }) =>
-    inline ? (
-      <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800">{children}</code>
-    ) : (
+  code: ({ className, children }) => {
+    const isCodeBlock = typeof className === "string" && className.includes("language-");
+    return isCodeBlock ? (
       <code className="font-mono text-[13px] leading-6 text-slate-100">{children}</code>
-    ),
+    ) : (
+      <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800">{children}</code>
+    );
+  },
   pre: ({ children }) => (
     <pre className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-950/95 p-3 text-[13px] leading-6 text-slate-100">
       {children}
