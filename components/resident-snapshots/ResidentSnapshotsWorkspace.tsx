@@ -91,6 +91,10 @@ function toLocalSnapshot(form: ResidentSnapshotFormValue): ResidentSnapshot {
     lastOneToOne: null,
     lastNoteDate: null,
     lastAiSuggestion: null,
+    lastSuccessfulActivityType: null,
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: null,
     dischargeReason: null
   };

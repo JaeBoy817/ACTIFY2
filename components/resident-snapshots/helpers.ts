@@ -319,6 +319,11 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
     lastOneToOne,
     lastNoteDate,
     lastAiSuggestion: parsedNotes[FORM_LINE_KEYS.lastAiSuggestion] || null,
+    lastSuccessfulActivityType: parsedNotes["Last Successful Activity Type"] || null,
+    followUpRequired: row.followUpFlag,
+    followUpDate: parsedNotes["Follow-Up Date"] || null,
+    followUpPriority:
+      (parsedNotes["Follow-Up Priority"]?.toUpperCase() as "LOW" | "MEDIUM" | "HIGH" | undefined) ?? null,
     dischargeDate: archiveMeta.dischargeDate,
     dischargeReason: archiveMeta.dischargeReason
   };
@@ -474,6 +479,7 @@ export const SNAPSHOT_FILTER_KEYS = [
   "ACTIVE",
   "NEW_ADMISSIONS",
   "DISCHARGED_ARCHIVED",
+  "NEEDS_FOLLOW_UP",
   "BED_BOUND",
   "PREFERS_1TO1",
   "GROUP_FRIENDLY",
@@ -481,14 +487,24 @@ export const SNAPSHOT_FILTER_KEYS = [
   "QUIET_LOW_STIM",
   "HIGH_PARTICIPATION",
   "LOW_PARTICIPATION",
+  "SMALL_GROUP",
   "MORNING",
   "AFTERNOON",
+  "LOW_ENERGY",
+  "SENSORY_FRIENDLY",
   "SOCIAL",
+  "QUIET_RESERVED",
   "FAMILY_ORIENTED",
   "MUSIC",
+  "BINGO",
   "GAMES",
   "CRAFTS",
-  "SPORTS"
+  "SPORTS",
+  "BIBLE_STUDY",
+  "NAIL_CARE",
+  "MOVIES_TV",
+  "WORD_SEARCHES",
+  "PUZZLES"
 ] as const satisfies SnapshotFilterKey[];
 
 export function residentMatchesFilter(resident: ResidentSnapshot, filter: SnapshotFilterKey) {
@@ -505,6 +521,8 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
       return isNewAdmission(resident.admissionDate);
     case "DISCHARGED_ARCHIVED":
       return isArchivedStatus(resident.status);
+    case "NEEDS_FOLLOW_UP":
+      return resident.followUpRequired;
     case "BED_BOUND":
       return boolIncludes(searchableValues, "bed") || resident.status === "BED_BOUND";
     case "PREFERS_1TO1":
@@ -519,22 +537,42 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
       return boolIncludes([resident.participationStyle], "joins") || boolIncludes(searchableValues, "high participation");
     case "LOW_PARTICIPATION":
       return boolIncludes([resident.participationStyle], "encouragement") || boolIncludes(searchableValues, "low participation");
+    case "SMALL_GROUP":
+      return boolIncludes(searchableValues.concat([resident.groupParticipationNotes, resident.participationStyle]), "small group");
     case "MORNING":
       return normalize(resident.bestTimeOfDay).includes("morning") || boolIncludes(searchableValues, "morning");
     case "AFTERNOON":
       return normalize(resident.bestTimeOfDay).includes("afternoon") || boolIncludes(searchableValues, "afternoon");
+    case "LOW_ENERGY":
+      return boolIncludes(searchableValues.concat([resident.participationStyle]), "low energy");
+    case "SENSORY_FRIENDLY":
+      return boolIncludes(searchableValues.concat([resident.whatWorks]), "sensory");
     case "SOCIAL":
       return boolIncludes(searchableValues.concat([resident.participationStyle]), "social");
+    case "QUIET_RESERVED":
+      return boolIncludes(searchableValues.concat([resident.participationStyle]), "quiet") || boolIncludes([resident.participationStyle], "observer");
     case "FAMILY_ORIENTED":
       return boolIncludes(searchableValues, "family");
     case "MUSIC":
       return boolIncludes(searchableValues, "music") || boolIncludes(searchableValues, "choir");
+    case "BINGO":
+      return boolIncludes(searchableValues, "bingo");
     case "GAMES":
       return boolIncludes(searchableValues, "game") || boolIncludes(searchableValues, "puzzle") || boolIncludes(searchableValues, "bingo");
     case "CRAFTS":
       return boolIncludes(searchableValues, "craft");
     case "SPORTS":
       return boolIncludes(searchableValues, "sport") || boolIncludes(searchableValues, "baseball");
+    case "BIBLE_STUDY":
+      return boolIncludes(searchableValues, "bible") || boolIncludes(searchableValues, "devotion");
+    case "NAIL_CARE":
+      return boolIncludes(searchableValues, "nail");
+    case "MOVIES_TV":
+      return boolIncludes(searchableValues, "movie") || boolIncludes(searchableValues, "tv");
+    case "WORD_SEARCHES":
+      return boolIncludes(searchableValues, "word search");
+    case "PUZZLES":
+      return boolIncludes(searchableValues, "puzzle") || boolIncludes(searchableValues, "crossword");
     default:
       return true;
   }

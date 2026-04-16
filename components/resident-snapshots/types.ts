@@ -7,6 +7,7 @@ export const SNAPSHOT_FILTER_OPTIONS = [
   { key: "ACTIVE", label: "Active" },
   { key: "NEW_ADMISSIONS", label: "New Admissions" },
   { key: "DISCHARGED_ARCHIVED", label: "Discharged / Archived" },
+  { key: "NEEDS_FOLLOW_UP", label: "Needs Follow-Up" },
   { key: "BED_BOUND", label: "Bed-Bound" },
   { key: "PREFERS_1TO1", label: "Prefers 1:1" },
   { key: "GROUP_FRIENDLY", label: "Group-Friendly" },
@@ -14,14 +15,24 @@ export const SNAPSHOT_FILTER_OPTIONS = [
   { key: "QUIET_LOW_STIM", label: "Quiet / Low-Stimulation" },
   { key: "HIGH_PARTICIPATION", label: "High Participation" },
   { key: "LOW_PARTICIPATION", label: "Low Participation" },
+  { key: "SMALL_GROUP", label: "Small Group Preference" },
   { key: "MORNING", label: "Morning Preference" },
   { key: "AFTERNOON", label: "Afternoon Preference" },
+  { key: "LOW_ENERGY", label: "Low Energy" },
+  { key: "SENSORY_FRIENDLY", label: "Sensory-Friendly" },
   { key: "SOCIAL", label: "Social" },
+  { key: "QUIET_RESERVED", label: "Quiet / Reserved" },
   { key: "FAMILY_ORIENTED", label: "Family-Oriented" },
   { key: "MUSIC", label: "Music Lover" },
+  { key: "BINGO", label: "Bingo" },
   { key: "GAMES", label: "Games / Puzzles" },
   { key: "CRAFTS", label: "Crafts" },
-  { key: "SPORTS", label: "Sports" }
+  { key: "SPORTS", label: "Sports" },
+  { key: "BIBLE_STUDY", label: "Bible Study" },
+  { key: "NAIL_CARE", label: "Nail Care" },
+  { key: "MOVIES_TV", label: "Movies / TV" },
+  { key: "WORD_SEARCHES", label: "Word Searches" },
+  { key: "PUZZLES", label: "Puzzles" }
 ] as const;
 
 export type SnapshotFilterKey = (typeof SNAPSHOT_FILTER_OPTIONS)[number]["key"];
@@ -76,6 +87,10 @@ export type ResidentSnapshot = {
   lastOneToOne: string | null;
   lastNoteDate: string | null;
   lastAiSuggestion: string | null;
+  lastSuccessfulActivityType: string | null;
+  followUpRequired: boolean;
+  followUpDate: string | null;
+  followUpPriority: "LOW" | "MEDIUM" | "HIGH" | null;
   dischargeDate: string | null;
   dischargeReason: string | null;
 };

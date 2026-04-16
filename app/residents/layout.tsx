@@ -2,8 +2,6 @@ import { WorkspaceLayoutShell } from "@/components/workspace/WorkspaceLayoutShel
 import { redirectIfNoAppAccessForUser } from "@/lib/access-control";
 import { ensureUserAndFacility } from "@/lib/auth";
 
-export const dynamic = "force-dynamic";
-
 function firstNameFromName(name: string | null | undefined) {
   if (!name) return "there";
   const first = name.trim().split(/\s+/)[0];
@@ -29,12 +27,13 @@ function formatToday(timeZone?: string | null) {
   }
 }
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function ResidentsLayout({ children }: { children: React.ReactNode }) {
   const user = await ensureUserAndFacility();
   await redirectIfNoAppAccessForUser(user, { blockedRedirectPath: "/subscribe" });
 
-  const firstName = firstNameFromName(user.name);
-  const todayLabel = formatToday(user.facility.timezone);
-
-  return <WorkspaceLayoutShell firstName={firstName} todayLabel={todayLabel}>{children}</WorkspaceLayoutShell>;
+  return (
+    <WorkspaceLayoutShell firstName={firstNameFromName(user.name)} todayLabel={formatToday(user.facility.timezone)}>
+      {children}
+    </WorkspaceLayoutShell>
+  );
 }

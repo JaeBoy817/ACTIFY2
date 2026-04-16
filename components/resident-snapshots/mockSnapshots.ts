@@ -42,6 +42,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Room visit with nail painting and family conversation.",
     lastNoteDate: daysAgo(1),
     lastAiSuggestion: "Use a 12-minute hymn-themed social starter.",
+    lastSuccessfulActivityType: "Music social",
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: null,
     dischargeReason: null
   },
@@ -80,6 +84,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Brief room check-in around baseball standings.",
     lastNoteDate: daysAgo(1),
     lastAiSuggestion: "Run a 15-minute sports headline challenge.",
+    lastSuccessfulActivityType: "Card games",
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: null,
     dischargeReason: null
   },
@@ -118,6 +126,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Reviewed devotional reading and discussed family updates.",
     lastNoteDate: daysAgo(3),
     lastAiSuggestion: "Use a 20-minute guided craft with visual step cards.",
+    lastSuccessfulActivityType: "Guided crafts",
+    followUpRequired: true,
+    followUpDate: "2026-04-20",
+    followUpPriority: "MEDIUM",
     dischargeDate: null,
     dischargeReason: null
   },
@@ -156,6 +168,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Discussed travel memories while doing word search.",
     lastNoteDate: daysAgo(2),
     lastAiSuggestion: "Prepare a 12-question local-history puzzle set.",
+    lastSuccessfulActivityType: "Crosswords",
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: null,
     dischargeReason: null
   },
@@ -194,6 +210,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Photo reminiscence with calm conversation.",
     lastNoteDate: daysAgo(1),
     lastAiSuggestion: "Use a 7-minute bedside sensory-and-poetry combo.",
+    lastSuccessfulActivityType: "Bedside sensory visit",
+    followUpRequired: true,
+    followUpDate: "2026-04-18",
+    followUpPriority: "HIGH",
     dischargeDate: null,
     dischargeReason: null
   },
@@ -232,6 +252,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Quick hallway check-in about favorite songs.",
     lastNoteDate: daysAgo(2),
     lastAiSuggestion: "Use a call-and-response rhythm warm-up.",
+    lastSuccessfulActivityType: "Music social",
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: null,
     dischargeReason: null
   },
@@ -270,6 +294,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Discussed classic cars using magazine prompts.",
     lastNoteDate: daysAgo(4),
     lastAiSuggestion: "Prepare a 1:1 classic-cars memory card set.",
+    lastSuccessfulActivityType: "1:1 car conversation",
+    followUpRequired: true,
+    followUpDate: "2026-04-19",
+    followUpPriority: "MEDIUM",
     dischargeDate: null,
     dischargeReason: null
   },
@@ -308,6 +336,10 @@ export const MOCK_RESIDENT_SNAPSHOTS: ResidentSnapshot[] = [
     lastOneToOne: "Discussed return-home transition with family updates.",
     lastNoteDate: daysAgo(17),
     lastAiSuggestion: "N/A",
+    lastSuccessfulActivityType: "Seasonal card-making",
+    followUpRequired: false,
+    followUpDate: null,
+    followUpPriority: null,
     dischargeDate: "2026-03-28",
     dischargeReason: "Returned Home"
   }
