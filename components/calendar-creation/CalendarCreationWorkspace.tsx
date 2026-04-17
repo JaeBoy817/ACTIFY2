@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Copy,
   Edit3,
+  Gift,
   MapPin,
   Plus,
   Printer,
@@ -34,7 +35,7 @@ import {
   WandSparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { DrawerShell, ModalShell } from "@/components/workspace/shared";
 import { SAMPLE_CALENDARS } from "@/lib/calendar-creation/mockData";
@@ -42,6 +43,11 @@ import type { CalendarActivity, CalendarActivityType, CalendarDay, CalendarMonth
 import { buildHolidayLookup, getHolidayBadgeForDate } from "@/lib/calendar/getHolidayBadgeForDate";
 import { getHolidaysForYear } from "@/lib/calendar/getHolidaysForYear";
 import type { CalendarHoliday } from "@/lib/calendar/holidays";
+import {
+  buildResidentBirthdayLookup,
+  getBirthdayBadgeForDate,
+  type ResidentBirthdaySource
+} from "@/lib/calendar/resident-birthdays";
 import { cn } from "@/lib/utils";
 
 type CalendarViewMode = "month" | "week" | "day";
@@ -72,6 +78,28 @@ type ActivityEditorState =
       activityId: string;
       originalDate: string;
     };
+
+type BirthdayBadgeItem = {
+  residentId: string;
+  residentName: string;
+  birthMonth: number;
+  birthDay: number;
+  dateForDisplay: string;
+  type: "birthday";
+  label: string;
+  shortLabel: string;
+  key: string;
+  dateLabel: string;
+};
+
+type ResidentBirthdayApiRow = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  preferredName: string | null;
+  birthDate: string | null;
+  status?: string | null;
+};
 
 const VIEW_OPTIONS: Array<{ key: CalendarViewMode; label: string }> = [
   { key: "month", label: "Month" },
@@ -259,6 +287,28 @@ function toDisplayTime(value: string) {
   return `${hour}:${String(minute).padStart(2, "0")} ${meridiem}`;
 }
 
+function toResidentDisplayName(row: ResidentBirthdayApiRow) {
+  const preferred = row.preferredName?.trim();
+  if (preferred) return preferred;
+
+  const first = row.firstName.trim();
+  const last = row.lastName.trim();
+  if (!first && !last) return "Resident";
+  if (!last) return first;
+  return `${first} ${last.charAt(0)}.`;
+}
+
+function toResidentBirthdaySources(rows: ResidentBirthdayApiRow[]): ResidentBirthdaySource[] {
+  return rows
+    .filter((row) => row.status !== "DISCHARGED")
+    .filter((row) => typeof row.birthDate === "string" && row.birthDate.trim().length > 0)
+    .map((row) => ({
+      residentId: row.id,
+      residentName: toResidentDisplayName(row),
+      birthDate: row.birthDate as string
+    }));
+}
+
 function toInputTime(value: string) {
   const trimmed = value.trim();
   const twentyFourMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
@@ -347,6 +397,37 @@ export function CalendarCreationWorkspace() {
     mode: "create",
     draft: defaultDraft(toISODate(today))
   });
+  const [residentBirthdays, setResidentBirthdays] = useState<ResidentBirthdaySource[]>([]);
+  const [showHolidays, setShowHolidays] = useState(true);
+  const [showBirthdays, setShowBirthdays] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadResidents() {
+      try {
+        const response = await fetch("/api/residents", {
+          method: "GET",
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { residents?: ResidentBirthdayApiRow[] };
+        if (ignore) return;
+
+        const residentRows = Array.isArray(payload.residents) ? payload.residents : [];
+        setResidentBirthdays(toResidentBirthdaySources(residentRows));
+      } catch {
+        if (!ignore) {
+          setResidentBirthdays([]);
+        }
+      }
+    }
+
+    void loadResidents();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const dayLookup = useMemo(() => {
     const map = new Map<string, CalendarDay>();
@@ -402,11 +483,47 @@ export function CalendarCreationWorkspace() {
     return buildHolidayLookup(holidayEntries);
   }, [dayDrawerDate, selectedDate, visibleDates]);
 
+  const birthdayLookup = useMemo(() => {
+    const years = new Set<number>();
+    visibleDates.forEach((date) => years.add(date.getFullYear()));
+    years.add(selectedDate.getFullYear());
+    if (dayDrawerDate) {
+      years.add(dayDrawerDate.getFullYear());
+    }
+
+    return buildResidentBirthdayLookup({
+      residents: residentBirthdays,
+      years: Array.from(years)
+    });
+  }, [dayDrawerDate, residentBirthdays, selectedDate, visibleDates]);
+
+  const upcomingBirthdays = useMemo(() => {
+    if (!showBirthdays) return [] as BirthdayBadgeItem[];
+    const records: BirthdayBadgeItem[] = [];
+    for (let index = 0; index < 14; index += 1) {
+      const date = addDays(today, index);
+      const dateKey = toISODate(date);
+      const entries = getBirthdayBadgeForDate(dateKey, birthdayLookup) as BirthdayBadgeItem[];
+      records.push(...entries);
+    }
+    return records.slice(0, 6);
+  }, [birthdayLookup, showBirthdays, today]);
+
   const selectedDay = useMemo(() => {
     const date = dayDrawerDate ?? selectedDate;
     const iso = toISODate(date);
     return dayLookup.get(iso) ?? createEmptyDay(iso);
   }, [dayDrawerDate, dayLookup, selectedDate]);
+
+  const getHolidayBadgesForDate = (date: Date) => {
+    if (!showHolidays) return [] as CalendarHoliday[];
+    return getHolidayBadgeForDate(toISODate(date), holidayLookup);
+  };
+
+  const getBirthdayBadgesForDate = (date: Date) => {
+    if (!showBirthdays) return [] as BirthdayBadgeItem[];
+    return getBirthdayBadgeForDate(toISODate(date), birthdayLookup) as BirthdayBadgeItem[];
+  };
 
   const categoryOptions = useMemo(() => {
     const dynamic = new Set<string>(CATEGORY_OPTIONS);
@@ -637,6 +754,8 @@ export function CalendarCreationWorkspace() {
         viewMode={viewMode}
         categoryFilter={categoryFilter}
         categoryOptions={categoryOptions}
+        showHolidays={showHolidays}
+        showBirthdays={showBirthdays}
         jumpDate={jumpDate}
         onShiftPrev={() => shiftRange("prev")}
         onShiftNext={() => shiftRange("next")}
@@ -649,12 +768,24 @@ export function CalendarCreationWorkspace() {
           setSelected(parsed);
         }}
         onCategoryFilterChange={setCategoryFilter}
+        onShowHolidaysChange={setShowHolidays}
+        onShowBirthdaysChange={setShowBirthdays}
         onPrint={() => {
           if (typeof window !== "undefined") {
             window.print();
           }
         }}
       />
+
+      {upcomingBirthdays.length > 0 ? (
+        <UpcomingBirthdaysStrip
+          birthdays={upcomingBirthdays}
+          onAskActify={(residentName) =>
+            openAiPrompt(`Give me simple birthday recognition ideas for ${residentName} in a skilled nursing setting.`)
+          }
+          onJumpToDate={(dateISO) => setSelected(parseDate(dateISO), true)}
+        />
+      ) : null}
 
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white/85 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur-sm transition-all duration-200">
         {viewMode === "month" ? (
@@ -664,7 +795,8 @@ export function CalendarCreationWorkspace() {
             anchorDate={anchorDate}
             getDay={getDay}
             getVisibleActivities={getVisibleActivities}
-            getHolidayBadges={(date) => getHolidayBadgeForDate(toISODate(date), holidayLookup)}
+            getHolidayBadges={getHolidayBadgesForDate}
+            getBirthdayBadges={getBirthdayBadgesForDate}
             onOpenDay={(date) => setSelected(date, true)}
             onQuickAdd={openCreateActivity}
           />
@@ -676,7 +808,8 @@ export function CalendarCreationWorkspace() {
             selectedDate={selectedDate}
             getDay={getDay}
             getVisibleActivities={getVisibleActivities}
-            getHolidayBadges={(date) => getHolidayBadgeForDate(toISODate(date), holidayLookup)}
+            getHolidayBadges={getHolidayBadgesForDate}
+            getBirthdayBadges={getBirthdayBadgesForDate}
             onSelectDate={setSelected}
             onQuickAdd={openCreateActivity}
             onOpenEdit={openEditActivity}
@@ -688,7 +821,8 @@ export function CalendarCreationWorkspace() {
             date={selectedDate}
             day={getDay(selectedDate)}
             categoryFilter={categoryFilter}
-            holidays={getHolidayBadgeForDate(toISODate(selectedDate), holidayLookup)}
+            holidays={getHolidayBadgesForDate(selectedDate)}
+            birthdays={getBirthdayBadgesForDate(selectedDate)}
             onAddActivity={openCreateActivity}
             onOpenEdit={openEditActivity}
             onDelete={deleteActivity}
@@ -707,7 +841,8 @@ export function CalendarCreationWorkspace() {
         date={dayDrawerDate ?? selectedDate}
         day={selectedDay}
         categoryFilter={categoryFilter}
-        holidays={getHolidayBadgeForDate(toISODate(dayDrawerDate ?? selectedDate), holidayLookup)}
+        holidays={getHolidayBadgesForDate(dayDrawerDate ?? selectedDate)}
+        birthdays={getBirthdayBadgesForDate(dayDrawerDate ?? selectedDate)}
         onClose={() => setDayDrawerDate(null)}
         onAddActivity={(date) => openCreateActivity(date)}
         onOpenEdit={openEditActivity}
@@ -789,6 +924,8 @@ function CalendarToolbar({
   viewMode,
   categoryFilter,
   categoryOptions,
+  showHolidays,
+  showBirthdays,
   jumpDate,
   onShiftPrev,
   onShiftNext,
@@ -796,12 +933,16 @@ function CalendarToolbar({
   onViewChange,
   onJumpDateChange,
   onCategoryFilterChange,
+  onShowHolidaysChange,
+  onShowBirthdaysChange,
   onPrint
 }: {
   rangeLabel: string;
   viewMode: CalendarViewMode;
   categoryFilter: string;
   categoryOptions: string[];
+  showHolidays: boolean;
+  showBirthdays: boolean;
   jumpDate: string;
   onShiftPrev: () => void;
   onShiftNext: () => void;
@@ -809,6 +950,8 @@ function CalendarToolbar({
   onViewChange: (viewMode: CalendarViewMode) => void;
   onJumpDateChange: (value: string) => void;
   onCategoryFilterChange: (value: string) => void;
+  onShowHolidaysChange: (next: boolean) => void;
+  onShowBirthdaysChange: (next: boolean) => void;
   onPrint: () => void;
 }) {
   return (
@@ -852,6 +995,36 @@ function CalendarToolbar({
             ))}
           </select>
         </label>
+
+        <button
+          type="button"
+          onClick={() => onShowHolidaysChange(!showHolidays)}
+          aria-pressed={showHolidays}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200",
+            showHolidays
+              ? "border-amber-200 bg-amber-50 text-amber-700"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          )}
+        >
+          <CalendarRange className="h-3.5 w-3.5" aria-hidden />
+          Show Holidays
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onShowBirthdaysChange(!showBirthdays)}
+          aria-pressed={showBirthdays}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200",
+            showBirthdays
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          )}
+        >
+          <Gift className="h-3.5 w-3.5" aria-hidden />
+          Show Birthdays
+        </button>
 
         <button
           type="button"
@@ -931,6 +1104,7 @@ function MonthCalendarGrid({
   getDay,
   getVisibleActivities,
   getHolidayBadges,
+  getBirthdayBadges,
   onOpenDay,
   onQuickAdd
 }: {
@@ -940,6 +1114,7 @@ function MonthCalendarGrid({
   getDay: (date: Date) => CalendarDay;
   getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
   getHolidayBadges: (date: Date) => CalendarHoliday[];
+  getBirthdayBadges: (date: Date) => BirthdayBadgeItem[];
   onOpenDay: (date: Date) => void;
   onQuickAdd: (date: Date) => void;
 }) {
@@ -959,6 +1134,7 @@ function MonthCalendarGrid({
           const day = getDay(date);
           const activities = getVisibleActivities(day);
           const holidayBadges = getHolidayBadges(date);
+          const birthdayBadges = getBirthdayBadges(date);
 
           return (
             <MonthCalendarDayCell
@@ -966,6 +1142,7 @@ function MonthCalendarGrid({
               date={date}
               activities={activities}
               holidayBadges={holidayBadges}
+              birthdayBadges={birthdayBadges}
               outsideMonth={!isSameMonth(date, anchorDate)}
               isSelected={isSameDay(date, selectedDate)}
               onOpenDay={() => onOpenDay(date)}
@@ -984,6 +1161,7 @@ function MonthCalendarDayCell({
   date,
   activities,
   holidayBadges,
+  birthdayBadges,
   outsideMonth,
   isSelected,
   isTodayDate,
@@ -994,6 +1172,7 @@ function MonthCalendarDayCell({
   date: Date;
   activities: CalendarActivity[];
   holidayBadges: CalendarHoliday[];
+  birthdayBadges: BirthdayBadgeItem[];
   outsideMonth: boolean;
   isSelected: boolean;
   isTodayDate: boolean;
@@ -1005,6 +1184,8 @@ function MonthCalendarDayCell({
   const overflowCount = activities.length - preview.length;
   const holidayPreview = holidayBadges.slice(0, 1);
   const holidayOverflow = holidayBadges.length - holidayPreview.length;
+  const birthdayPreview = birthdayBadges.slice(0, 1);
+  const birthdayOverflow = birthdayBadges.length - birthdayPreview.length;
 
   return (
     <div
@@ -1040,6 +1221,10 @@ function MonthCalendarDayCell({
             <HolidayBadge key={holiday.id} holiday={holiday} compact />
           ))}
           {holidayOverflow > 0 ? <span className="text-[10px] font-semibold text-slate-500">+{holidayOverflow}</span> : null}
+          {birthdayPreview.map((birthday) => (
+            <BirthdayBadge key={birthday.key} birthday={birthday} compact />
+          ))}
+          {birthdayOverflow > 0 ? <span className="text-[10px] font-semibold text-rose-600">+{birthdayOverflow} birthdays</span> : null}
           {holidayBadges.length === 0 && isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Event</span> : null}
         </div>
 
@@ -1076,6 +1261,7 @@ function WeekCalendarView({
   getDay,
   getVisibleActivities,
   getHolidayBadges,
+  getBirthdayBadges,
   onSelectDate,
   onQuickAdd,
   onOpenEdit
@@ -1085,6 +1271,7 @@ function WeekCalendarView({
   getDay: (date: Date) => CalendarDay;
   getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
   getHolidayBadges: (date: Date) => CalendarHoliday[];
+  getBirthdayBadges: (date: Date) => BirthdayBadgeItem[];
   onSelectDate: (date: Date, openDrawer?: boolean) => void;
   onQuickAdd: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
@@ -1095,6 +1282,7 @@ function WeekCalendarView({
         const day = getDay(date);
         const activities = getVisibleActivities(day);
         const holidayBadges = getHolidayBadges(date);
+        const birthdayBadges = getBirthdayBadges(date);
 
         return (
           <section
@@ -1117,6 +1305,14 @@ function WeekCalendarView({
                     {holidayBadges.slice(0, 2).map((holiday) => (
                       <HolidayBadge key={holiday.id} holiday={holiday} compact />
                     ))}
+                  </div>
+                ) : null}
+                {birthdayBadges.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {birthdayBadges.slice(0, 1).map((birthday) => (
+                      <BirthdayBadge key={birthday.key} birthday={birthday} compact />
+                    ))}
+                    {birthdayBadges.length > 1 ? <span className="text-[10px] font-semibold text-rose-600">+{birthdayBadges.length - 1}</span> : null}
                   </div>
                 ) : null}
               </div>
@@ -1164,6 +1360,7 @@ function DayCalendarView({
   day,
   categoryFilter,
   holidays,
+  birthdays,
   onAddActivity,
   onOpenEdit,
   onDelete,
@@ -1174,6 +1371,7 @@ function DayCalendarView({
   day: CalendarDay;
   categoryFilter: string;
   holidays: CalendarHoliday[];
+  birthdays: BirthdayBadgeItem[];
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
   onDelete: (dateISO: string, activityId: string) => void;
@@ -1194,6 +1392,13 @@ function DayCalendarView({
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {holidays.map((holiday) => (
                 <HolidayBadge key={holiday.id} holiday={holiday} />
+              ))}
+            </div>
+          ) : null}
+          {birthdays.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {birthdays.map((birthday) => (
+                <BirthdayBadge key={birthday.key} birthday={birthday} />
               ))}
             </div>
           ) : null}
@@ -1248,6 +1453,7 @@ function DayDetailDrawer({
   day,
   categoryFilter,
   holidays,
+  birthdays,
   onClose,
   onAddActivity,
   onOpenEdit,
@@ -1263,6 +1469,7 @@ function DayDetailDrawer({
   day: CalendarDay;
   categoryFilter: string;
   holidays: CalendarHoliday[];
+  birthdays: BirthdayBadgeItem[];
   onClose: () => void;
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
@@ -1278,6 +1485,10 @@ function DayDetailDrawer({
     .sort(activitySort);
 
   const dayPrompt = `Suggest practical activity ideas for ${format(date, "EEEE, MMMM d")} with one backup option for each idea.`;
+  const birthdayPrompt =
+    birthdays.length === 1
+      ? `Give me simple birthday recognition ideas for ${birthdays[0].residentName} in a skilled nursing facility.`
+      : `Give me birthday recognition ideas for ${birthdays.length} residents with birthdays on ${format(date, "MMMM d")}. Keep it practical and low-prep.`;
 
   return (
     <DrawerShell open={open} title={format(date, "EEEE, MMMM d, yyyy")} onClose={onClose}>
@@ -1287,6 +1498,9 @@ function DayDetailDrawer({
             {isToday(date) ? <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white">Today</span> : null}
             {holidays.map((holiday) => (
               <HolidayBadge key={holiday.id} holiday={holiday} />
+            ))}
+            {birthdays.map((birthday) => (
+              <BirthdayBadge key={birthday.key} birthday={birthday} />
             ))}
             {day.isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">Special Event</span> : null}
           </div>
@@ -1310,6 +1524,51 @@ function DayDetailDrawer({
             </button>
           </div>
         </section>
+
+        {birthdays.length > 0 ? (
+          <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3 shadow-sm">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-rose-700">Birthdays</h3>
+            <ul className="mt-2 space-y-1.5 text-sm text-slate-800">
+              {birthdays.map((birthday) => (
+                <li key={`drawer-birthday-${birthday.key}`} className="rounded-xl border border-rose-200 bg-white px-2.5 py-2">
+                  {birthday.label}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onAddActivity(date)}
+                className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Add Birthday Activity
+              </button>
+              <button
+                type="button"
+                onClick={() => onAskActify(birthdayPrompt)}
+                className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                Ask Actify for Birthday Ideas
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onAskActify(
+                    birthdays.length === 1
+                      ? `Create a quick birthday reminder plan for ${birthdays[0].residentName} on ${format(date, "MMMM d")} including one 1:1 idea and one group option.`
+                      : `Create birthday reminder ideas for ${birthdays.length} residents on ${format(date, "MMMM d")} with low-prep options.`
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+              >
+                <CalendarPlus2 className="h-3.5 w-3.5" aria-hidden />
+                Create Birthday Reminder
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Scheduled Activities</h3>
@@ -1622,6 +1881,69 @@ function HolidayBadge({ holiday, compact = false }: { holiday: CalendarHoliday; 
     >
       {holiday.name}
     </span>
+  );
+}
+
+function BirthdayBadge({ birthday, compact = false }: { birthday: BirthdayBadgeItem; compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700",
+        compact ? "max-w-[9rem] truncate text-[10px]" : "text-[11px]"
+      )}
+      title={birthday.label}
+    >
+      <Gift className="h-3 w-3 shrink-0" aria-hidden />
+      <span className="truncate">{compact ? birthday.shortLabel : birthday.label}</span>
+    </span>
+  );
+}
+
+function UpcomingBirthdaysStrip({
+  birthdays,
+  onAskActify,
+  onJumpToDate
+}: {
+  birthdays: BirthdayBadgeItem[];
+  onAskActify: (residentName: string) => void;
+  onJumpToDate: (dateISO: string) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-rose-700">Upcoming Birthdays</p>
+          <p className="mt-0.5 text-xs text-rose-700/90">Use this week’s birthdays for quick recognition planning.</p>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {birthdays.map((birthday) => (
+          <button
+            key={`upcoming-${birthday.key}`}
+            type="button"
+            onClick={() => onJumpToDate(birthday.dateForDisplay)}
+            className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+            title={`Open ${birthday.dateLabel}`}
+          >
+            <Gift className="h-3 w-3" aria-hidden />
+            <span>{birthday.shortLabel}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {birthdays.slice(0, 2).map((birthday) => (
+          <button
+            key={`upcoming-ai-${birthday.key}`}
+            type="button"
+            onClick={() => onAskActify(birthday.residentName)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+          >
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            Plan for {birthday.residentName}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
