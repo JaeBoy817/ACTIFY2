@@ -847,7 +847,7 @@ export function CalendarUnifiedWorkspace({
       const startIso = range.start.toISOString();
       const endIso = range.end.toISOString();
       const apiView = view === "agenda" ? "day" : view;
-      const url = `/api/calendar/range?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&view=${apiView}`;
+      const url = `/api/calendar/range?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&view=${apiView}&includeStats=0`;
       const cacheKey = `calendar-unified:${startIso}:${endIso}`;
 
       setLoading(true);
@@ -887,7 +887,7 @@ export function CalendarUnifiedWorkspace({
     const nextStartIso = nextRange.start.toISOString();
     const nextEndIso = nextRange.end.toISOString();
     const nextView = view === "agenda" ? "day" : view;
-    const nextUrl = `/api/calendar/range?start=${encodeURIComponent(nextStartIso)}&end=${encodeURIComponent(nextEndIso)}&view=${nextView}`;
+    const nextUrl = `/api/calendar/range?start=${encodeURIComponent(nextStartIso)}&end=${encodeURIComponent(nextEndIso)}&view=${nextView}&includeStats=0`;
     const nextKey = `calendar-unified:${nextStartIso}:${nextEndIso}`;
 
     const run = () =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleDot, Sparkles } from "lucide-react";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
@@ -350,8 +350,15 @@ export function AssistantChat() {
   }, [messages, isSubmitting, errorMessage, activeTab]);
 
   const quickPrompts = useMemo(() => QUICK_PROMPTS, []);
+  const lastAssistantMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === "assistant") return message.id;
+    }
+    return null;
+  }, [messages]);
 
-  const sendPrompt = async (
+  const sendPrompt = useCallback(async (
     value: string,
     options?: {
       appendUserMessage?: boolean;
@@ -426,27 +433,27 @@ export function AssistantChat() {
       setIsSubmitting(false);
       setActivePrompt(null);
     }
-  };
+  }, [conversationId, isSubmitting, messages]);
 
-  const retryLastAttempt = async () => {
+  const retryLastAttempt = useCallback(async () => {
     if (!lastAttempt || isSubmitting) return;
     await sendPrompt(lastAttempt.prompt, {
       appendUserMessage: false,
       historySnapshot: lastAttempt.historySnapshot,
       forceNewConversation: lastAttempt.forceNewConversation
     });
-  };
+  }, [isSubmitting, lastAttempt, sendPrompt]);
 
-  const regenerateLastAssistant = async () => {
+  const regenerateLastAssistant = useCallback(async () => {
     if (!lastAssistantSnapshot || isSubmitting) return;
     await sendPrompt(lastAssistantSnapshot.prompt, {
       appendUserMessage: false,
       historySnapshot: lastAssistantSnapshot.historySnapshot,
       forceNewConversation: true
     });
-  };
+  }, [isSubmitting, lastAssistantSnapshot, sendPrompt]);
 
-  const copyMessage = async (messageId: string, text: string) => {
+  const copyMessage = useCallback(async (messageId: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopyStateByMessageId((current) => ({ ...current, [messageId]: "copied" }));
@@ -456,7 +463,11 @@ export function AssistantChat() {
     } catch {
       setCopyStateByMessageId((current) => ({ ...current, [messageId]: "idle" }));
     }
-  };
+  }, []);
+
+  const handleRegenerate = useCallback(() => {
+    void regenerateLastAssistant();
+  }, [regenerateLastAssistant]);
 
   return (
     <div className="space-y-4 rounded-[2rem] border border-slate-200/85 bg-[linear-gradient(180deg,#ffffff_0%,#f6faff_100%)] p-4 shadow-[0_28px_50px_-36px_rgba(15,23,42,0.55)] sm:p-5">
@@ -575,10 +586,8 @@ export function AssistantChat() {
           />
         ) : (
           <div className="space-y-4 pb-2">
-            {messages.map((message, index) => {
-              const isLastAssistant =
-                message.role === "assistant" &&
-                messages.slice(index + 1).every((later) => later.role !== "assistant");
+            {messages.map((message) => {
+              const isLastAssistant = message.role === "assistant" && message.id === lastAssistantMessageId;
 
               return (
                 <AssistantMessage
@@ -588,9 +597,7 @@ export function AssistantChat() {
                   isLoading={isSubmitting}
                   copyState={copyStateByMessageId[message.id] || "idle"}
                   onCopy={copyMessage}
-                  onRegenerate={() => {
-                    void regenerateLastAssistant();
-                  }}
+                  onRegenerate={handleRegenerate}
                 />
               );
             })}

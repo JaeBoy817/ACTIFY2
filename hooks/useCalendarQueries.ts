@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, addMonths } from "date-fns";
 
 import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
@@ -39,41 +39,49 @@ export function useCalendarQueries(params: {
   range: CalendarRangeInput;
   anchorDateKey: string;
   timeZone: string;
+  includeStats?: boolean;
 }) {
-  const { view, range, anchorDateKey, timeZone } = params;
+  const { view, range, anchorDateKey, timeZone, includeStats = false } = params;
   const [events, setEvents] = useState<CalendarEventLite[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const queryKey = useMemo(() => {
     const startIso = range.start.toISOString();
     const endIso = range.end.toISOString();
+    const includeStatsKey = includeStats ? "with-stats" : "no-stats";
     return {
       startIso,
       endIso,
       apiView: resolveApiView(view),
-      cacheKey: `calendar-unified:${startIso}:${endIso}`
+      cacheKey: `calendar-unified:${resolveApiView(view)}:${includeStatsKey}:${startIso}:${endIso}`
     };
-  }, [range.end, range.start, view]);
+  }, [includeStats, range.end, range.start, view]);
 
   const fetchRangeEvents = useCallback(
     async (force = false) => {
       setIsLoading(true);
       setError(null);
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       try {
-        const url = `/api/calendar/range?start=${encodeURIComponent(queryKey.startIso)}&end=${encodeURIComponent(queryKey.endIso)}&view=${queryKey.apiView}`;
+        const url = `/api/calendar/range?start=${encodeURIComponent(queryKey.startIso)}&end=${encodeURIComponent(queryKey.endIso)}&view=${queryKey.apiView}&includeStats=${includeStats ? "1" : "0"}`;
         const payload = await cachedFetchJson<{ activities?: CalendarEventLite[] }>(queryKey.cacheKey, url, {
           ttlMs: 30_000,
           force
         });
+        if (requestIdRef.current !== requestId) return;
         setEvents(Array.isArray(payload.activities) ? payload.activities : []);
       } catch (nextError) {
+        if (requestIdRef.current !== requestId) return;
         setError(nextError instanceof Error ? nextError.message : "Unable to load calendar range.");
       } finally {
+        if (requestIdRef.current !== requestId) return;
         setIsLoading(false);
       }
     },
-    [queryKey.apiView, queryKey.cacheKey, queryKey.endIso, queryKey.startIso]
+    [includeStats, queryKey.apiView, queryKey.cacheKey, queryKey.endIso, queryKey.startIso]
   );
 
   useEffect(() => {
@@ -111,8 +119,9 @@ export function useCalendarQueries(params: {
       const startIso = start.toISOString();
       const endIso = end.toISOString();
       const apiView = resolveApiView(view);
-      const url = `/api/calendar/range?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&view=${apiView}`;
-      const cacheKey = `calendar-unified:${startIso}:${endIso}`;
+      const url = `/api/calendar/range?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&view=${apiView}&includeStats=${includeStats ? "1" : "0"}`;
+      const includeStatsKey = includeStats ? "with-stats" : "no-stats";
+      const cacheKey = `calendar-unified:${apiView}:${includeStatsKey}:${startIso}:${endIso}`;
       return cachedFetchJson(cacheKey, url, { ttlMs: 30_000 }).catch(() => undefined);
     };
 
@@ -131,7 +140,7 @@ export function useCalendarQueries(params: {
     }, 450);
 
     return () => window.clearTimeout(timeout);
-  }, [anchorDateKey, timeZone, view]);
+  }, [anchorDateKey, includeStats, timeZone, view]);
 
   const refresh = useCallback(async () => {
     await fetchRangeEvents(true);

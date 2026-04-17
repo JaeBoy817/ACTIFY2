@@ -349,7 +349,7 @@ export function CalendarWeekWorkspace({
       const rangeStart = startOfDay(targetWeekStart);
       const rangeEnd = endOfDay(addDays(rangeStart, 6));
       const silent = Boolean(options?.silent);
-      const rangeUrl = `/api/calendar/range?start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}&view=week`;
+      const rangeUrl = `/api/calendar/range?start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}&view=week&includeStats=0`;
       const cacheKey = `calendar-range:${rangeStart.toISOString()}:${rangeEnd.toISOString()}`;
 
       if (!silent) {

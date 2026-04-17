@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Clipboard, RefreshCcw, Sparkles } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -59,7 +60,7 @@ const markdownComponents: Components = {
   )
 };
 
-export function AssistantMessage({
+function AssistantMessageComponent({
   message,
   isLastAssistant,
   isLoading,
@@ -136,3 +137,6 @@ export function AssistantMessage({
     </article>
   );
 }
+
+export const AssistantMessage = memo(AssistantMessageComponent);
+AssistantMessage.displayName = "AssistantMessage";

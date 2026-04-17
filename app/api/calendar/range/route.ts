@@ -8,7 +8,15 @@ import { prisma } from "@/lib/prisma";
 const querySchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
-  view: z.enum(["week", "month", "day"]).optional()
+  view: z.enum(["week", "month", "day"]).optional(),
+  includeStats: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return true;
+      const normalized = value.trim().toLowerCase();
+      return !(normalized === "0" || normalized === "false" || normalized === "no");
+    })
 });
 
 function parseDateOrThrow(value: string, label: string) {
@@ -26,7 +34,8 @@ export async function GET(request: Request) {
     const parsedQuery = querySchema.safeParse({
       start: url.searchParams.get("start"),
       end: url.searchParams.get("end"),
-      view: url.searchParams.get("view") ?? undefined
+      view: url.searchParams.get("view") ?? undefined,
+      includeStats: url.searchParams.get("includeStats") ?? undefined
     });
     if (!parsedQuery.success) {
       throw new CalendarApiError("Invalid calendar range query.", 400, {
@@ -45,7 +54,9 @@ export async function GET(request: Request) {
 
     const activityIds = activities.map((activity) => activity.id);
 
-    const [attendanceCounts, documentationCounts] = activityIds.length
+    const includeStats = parsedQuery.data.includeStats;
+
+    const [attendanceCounts, documentationCounts] = includeStats && activityIds.length
       ? await Promise.all([
           prisma.attendance.groupBy({
             by: ["activityInstanceId"],
@@ -73,14 +84,16 @@ export async function GET(request: Request) {
         ])
       : [[], []];
 
-    const attendanceByActivityId = new Map(
-      attendanceCounts.map((entry) => [entry.activityInstanceId, entry._count._all ?? 0])
-    );
-    const documentationByActivityId = new Map(
-      documentationCounts
-        .filter((entry): entry is typeof entry & { activityInstanceId: string } => Boolean(entry.activityInstanceId))
-        .map((entry) => [entry.activityInstanceId, entry._count._all ?? 0])
-    );
+    const attendanceByActivityId = includeStats
+      ? new Map(attendanceCounts.map((entry) => [entry.activityInstanceId, entry._count._all ?? 0]))
+      : null;
+    const documentationByActivityId = includeStats
+      ? new Map(
+          documentationCounts
+            .filter((entry): entry is typeof entry & { activityInstanceId: string } => Boolean(entry.activityInstanceId))
+            .map((entry) => [entry.activityInstanceId, entry._count._all ?? 0])
+        )
+      : null;
 
     return Response.json({
       range: {
@@ -102,9 +115,13 @@ export async function GET(request: Request) {
         conflictOverride: activity.conflictOverride,
         checklist: activity.checklist,
         adaptationsEnabled: activity.adaptationsEnabled,
-        attendanceCount: attendanceByActivityId.get(activity.id) ?? 0,
-        attendanceTaken: (attendanceByActivityId.get(activity.id) ?? 0) > 0,
-        documentationCount: documentationByActivityId.get(activity.id) ?? 0
+        ...(includeStats
+          ? {
+              attendanceCount: attendanceByActivityId?.get(activity.id) ?? 0,
+              attendanceTaken: (attendanceByActivityId?.get(activity.id) ?? 0) > 0,
+              documentationCount: documentationByActivityId?.get(activity.id) ?? 0
+            }
+          : {})
       }))
     });
   } catch (error) {

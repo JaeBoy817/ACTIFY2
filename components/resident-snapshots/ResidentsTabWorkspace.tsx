@@ -1,16 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { AddResidentDrawerSimple } from "@/components/resident-snapshots/AddResidentDrawerSimple";
 import type { BulkResidentParticipationPayload, ResidentAttendanceWorkflowPayload } from "@/components/resident-snapshots/attendanceTypes";
-import { ArchiveResidentModal } from "@/components/resident-snapshots/ArchiveResidentModal";
-import { FollowUpModal, type FollowUpDraft } from "@/components/resident-snapshots/FollowUpModal";
+import type { FollowUpDraft } from "@/components/resident-snapshots/FollowUpModal";
 import { ResidentCardListRow } from "@/components/resident-snapshots/ResidentCardListRow";
 import { ResidentCardSimple } from "@/components/resident-snapshots/ResidentCardSimple";
-import { ResidentDetailDrawer } from "@/components/resident-snapshots/ResidentDetailDrawer";
 import { ResidentsBulkActionBar } from "@/components/resident-snapshots/ResidentsBulkActionBar";
 import { ResidentsControlBar } from "@/components/resident-snapshots/ResidentsControlBar";
 import { ResidentsPageHeader } from "@/components/resident-snapshots/ResidentsPageHeader";
@@ -35,7 +33,34 @@ import type {
 import type { ResidentListRow } from "@/lib/residents/types";
 import { ActionButton, EmptyStateCard, QuickActionMenu } from "@/components/workspace/shared";
 import { cn } from "@/lib/utils";
-import { TrackAttendanceModal } from "@/components/resident-snapshots/TrackAttendanceModal";
+
+const AddResidentDrawerSimple = dynamic(
+  () =>
+    import("@/components/resident-snapshots/AddResidentDrawerSimple").then(
+      (module) => module.AddResidentDrawerSimple
+    ),
+  { loading: () => null }
+);
+
+const ArchiveResidentModal = dynamic(
+  () => import("@/components/resident-snapshots/ArchiveResidentModal").then((module) => module.ArchiveResidentModal),
+  { loading: () => null }
+);
+
+const ResidentDetailDrawer = dynamic(
+  () => import("@/components/resident-snapshots/ResidentDetailDrawer").then((module) => module.ResidentDetailDrawer),
+  { loading: () => null }
+);
+
+const TrackAttendanceModal = dynamic(
+  () => import("@/components/resident-snapshots/TrackAttendanceModal").then((module) => module.TrackAttendanceModal),
+  { loading: () => null }
+);
+
+const FollowUpModal = dynamic(
+  () => import("@/components/resident-snapshots/FollowUpModal").then((module) => module.FollowUpModal),
+  { loading: () => null }
+);
 
 type SortKey =
   | "NAME"
@@ -175,6 +200,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingParticipation, setIsLoadingParticipation] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const deferredSearch = useDeferredValue(search.trim());
 
   const visibleResidents = useMemo(() => {
     const viewScoped = residents.filter((resident) =>
@@ -182,7 +208,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     );
 
     const filtered = viewScoped.filter((resident) => {
-      if (!residentMatchesSearch(resident, search)) return false;
+      if (!residentMatchesSearch(resident, deferredSearch)) return false;
       if (filters.length === 0) return true;
       return filters.every((filter) => residentMatchesFilter(resident, filter));
     });
@@ -220,7 +246,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
           return a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" });
       }
     });
-  }, [filters, residents, search, sort, view]);
+  }, [deferredSearch, filters, residents, sort, view]);
 
   const selectedResident = useMemo(() => {
     if (selectedResidentId) {
@@ -624,7 +650,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     }
   }
 
-  const selectedResidentsForBulk = residents.filter((resident) => selectedIds.includes(resident.id));
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedResidentsForBulk = useMemo(
+    () => residents.filter((resident) => selectedIdSet.has(resident.id)),
+    [residents, selectedIdSet]
+  );
 
   return (
     <section className="space-y-4" aria-label="Residents workspace">
@@ -784,7 +814,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   }
                 ]}
                 showCheckbox={bulkMode}
-                checked={selectedIds.includes(resident.id)}
+                checked={selectedIdSet.has(resident.id)}
                 onToggleChecked={() => toggleSelect(resident.id)}
               />
             ))}
@@ -841,7 +871,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   }
                 ]}
                 showCheckbox={bulkMode}
-                checked={selectedIds.includes(resident.id)}
+                checked={selectedIdSet.has(resident.id)}
                 onToggleChecked={() => toggleSelect(resident.id)}
               />
             ))}
@@ -850,80 +880,90 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
       </section>
 
-      <ResidentDetailDrawer
-        open={detailOpen}
-        resident={selectedResident}
-        actions={actions}
-        onClose={() => setDetailOpen(false)}
-        onAskActify={(action) => {
-          if (!selectedResident) return;
-          launchAssistant(action, selectedResident);
-        }}
-        onEdit={openEditDrawer}
-        onArchive={() => {
-          if (!selectedResident) return;
-          if (isArchivedStatus(selectedResident.status)) {
-            void handleRestoreResident();
-            return;
-          }
-          setArchiveOpen(true);
-        }}
-        onAddFollowUp={() => setFollowUpOpen(true)}
-        onTrackAttendance={() => {
-          if (!selectedResident) return;
-          openTrackAttendance(selectedResident.id);
-        }}
-        attendanceRefreshToken={attendanceRefreshToken}
-      />
+      {detailOpen ? (
+        <ResidentDetailDrawer
+          open
+          resident={selectedResident}
+          actions={actions}
+          onClose={() => setDetailOpen(false)}
+          onAskActify={(action) => {
+            if (!selectedResident) return;
+            launchAssistant(action, selectedResident);
+          }}
+          onEdit={openEditDrawer}
+          onArchive={() => {
+            if (!selectedResident) return;
+            if (isArchivedStatus(selectedResident.status)) {
+              void handleRestoreResident();
+              return;
+            }
+            setArchiveOpen(true);
+          }}
+          onAddFollowUp={() => setFollowUpOpen(true)}
+          onTrackAttendance={() => {
+            if (!selectedResident) return;
+            openTrackAttendance(selectedResident.id);
+          }}
+          attendanceRefreshToken={attendanceRefreshToken}
+        />
+      ) : null}
 
-      <AddResidentDrawerSimple
-        open={drawerOpen}
-        mode={drawerMode}
-        resident={drawerMode === "edit" ? selectedResident : null}
-        onClose={() => setDrawerOpen(false)}
-        onSave={handleSaveResident}
-        onSaveAndAskActify={handleSaveAndAskActify}
-        isSaving={isSavingResident}
-      />
+      {drawerOpen ? (
+        <AddResidentDrawerSimple
+          open
+          mode={drawerMode}
+          resident={drawerMode === "edit" ? selectedResident : null}
+          onClose={() => setDrawerOpen(false)}
+          onSave={handleSaveResident}
+          onSaveAndAskActify={handleSaveAndAskActify}
+          isSaving={isSavingResident}
+        />
+      ) : null}
 
-      <ArchiveResidentModal
-        open={archiveOpen}
-        resident={selectedResident}
-        onClose={() => setArchiveOpen(false)}
-        onConfirm={handleArchiveConfirm}
-        isSubmitting={isArchiveSubmitting}
-      />
+      {archiveOpen ? (
+        <ArchiveResidentModal
+          open
+          resident={selectedResident}
+          onClose={() => setArchiveOpen(false)}
+          onConfirm={handleArchiveConfirm}
+          isSubmitting={isArchiveSubmitting}
+        />
+      ) : null}
 
-      <FollowUpModal
-        open={followUpOpen}
-        onClose={() => setFollowUpOpen(false)}
-        onSave={(draft) => {
-          void saveFollowUp(draft, false);
-        }}
-        onSaveAndAskActify={(draft) => {
-          void saveFollowUp(draft, true);
-        }}
-        initialValue={{
-          date: selectedResident?.followUpDate ?? "",
-          priority: selectedResident?.followUpPriority ?? "MEDIUM",
-          reason: "",
-          note: ""
-        }}
-      />
+      {followUpOpen ? (
+        <FollowUpModal
+          open
+          onClose={() => setFollowUpOpen(false)}
+          onSave={(draft) => {
+            void saveFollowUp(draft, false);
+          }}
+          onSaveAndAskActify={(draft) => {
+            void saveFollowUp(draft, true);
+          }}
+          initialValue={{
+            date: selectedResident?.followUpDate ?? "",
+            priority: selectedResident?.followUpPriority ?? "MEDIUM",
+            reason: "",
+            note: ""
+          }}
+        />
+      ) : null}
 
-      <TrackAttendanceModal
-        open={trackAttendanceOpen}
-        resident={trackedResident}
-        onClose={() => {
-          setTrackAttendanceOpen(false);
-          setTrackResidentId(null);
-        }}
-        onSaved={handleAttendanceSaved}
-        onSaveAndAskActify={() => {
-          if (!trackedResident) return;
-          launchAssistant(getAction("analytics-participation-boost"), trackedResident);
-        }}
-      />
+      {trackAttendanceOpen ? (
+        <TrackAttendanceModal
+          open
+          resident={trackedResident}
+          onClose={() => {
+            setTrackAttendanceOpen(false);
+            setTrackResidentId(null);
+          }}
+          onSaved={handleAttendanceSaved}
+          onSaveAndAskActify={() => {
+            if (!trackedResident) return;
+            launchAssistant(getAction("analytics-participation-boost"), trackedResident);
+          }}
+        />
+      ) : null}
 
       <button
         type="button"

@@ -202,7 +202,8 @@ export function CalendarCommandCenter({
     view,
     range,
     anchorDateKey,
-    timeZone
+    timeZone,
+    includeStats: true
   });
 
   const templateById = useMemo(() => {

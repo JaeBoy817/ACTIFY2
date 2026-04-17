@@ -218,16 +218,21 @@ export async function ensureSeriesOccurrencesMaterialized(params: {
 
   let createdCount = 0;
   let deletedCount = 0;
-  for (const series of seriesRows) {
-    const result = await materializeSingleSeriesWindow({
-      tx,
-      series,
-      rangeStart: params.rangeStart,
-      rangeEnd: params.rangeEnd
-    });
+  const materializationResults = await Promise.all(
+    seriesRows.map((series) =>
+      materializeSingleSeriesWindow({
+        tx,
+        series,
+        rangeStart: params.rangeStart,
+        rangeEnd: params.rangeEnd
+      })
+    )
+  );
+
+  materializationResults.forEach((result) => {
     createdCount += result.createdCount;
     deletedCount += result.deletedCount;
-  }
+  });
 
   return {
     seriesCount: seriesRows.length,

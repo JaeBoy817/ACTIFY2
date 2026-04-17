@@ -56,6 +56,7 @@ import {
   getBirthdayBadgeForDate,
   type ResidentBirthdaySource
 } from "@/lib/calendar/resident-birthdays";
+import { cachedFetchJson, invalidateClientCache } from "@/lib/perf/client-cache";
 import { useToast } from "@/lib/use-toast";
 import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
@@ -808,6 +809,12 @@ export function CalendarCreationWorkspace() {
     };
   }, [selectedDate, visibleDates]);
 
+  const persistedRangeCacheKey = useMemo(
+    () =>
+      `calendar-creation:${viewMode}:${visibleRange.start.toISOString()}:${visibleRange.endExclusive.toISOString()}`,
+    [viewMode, visibleRange.endExclusive, visibleRange.start]
+  );
+
   const syncCalendarsFromPersistedEvents = useCallback(
     (records: PersistedActivityRecord[]) => {
       setCalendars((current) => {
@@ -852,7 +859,7 @@ export function CalendarCreationWorkspace() {
     [anchorDate, timeZone]
   );
 
-  const fetchPersistedActivities = useCallback(async () => {
+  const fetchPersistedActivities = useCallback(async (force = false) => {
     const requestId = fetchRequestRef.current + 1;
     fetchRequestRef.current = requestId;
     setActivitiesLoading(true);
@@ -861,20 +868,16 @@ export function CalendarCreationWorkspace() {
       const query = new URLSearchParams({
         start: visibleRange.start.toISOString(),
         end: visibleRange.endExclusive.toISOString(),
-        view: viewMode === "day" ? "day" : viewMode === "week" ? "week" : "month"
+        view: viewMode === "day" ? "day" : viewMode === "week" ? "week" : "month",
+        includeStats: "0"
       });
-      const response = await fetch(`/api/calendar/range?${query.toString()}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as {
+      const url = `/api/calendar/range?${query.toString()}`;
+      const payload = (await cachedFetchJson(persistedRangeCacheKey, url, {
+        ttlMs: 20_000,
+        force
+      })) as {
         activities?: PersistedActivityRecord[];
-        error?: string;
       };
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to load calendar activities.");
-      }
       const records = Array.isArray(payload.activities) ? payload.activities : [];
       if (fetchRequestRef.current !== requestId) return;
       syncCalendarsFromPersistedEvents(records);
@@ -886,7 +889,7 @@ export function CalendarCreationWorkspace() {
       if (fetchRequestRef.current !== requestId) return;
       setActivitiesLoading(false);
     }
-  }, [syncCalendarsFromPersistedEvents, viewMode, visibleRange.endExclusive, visibleRange.start]);
+  }, [persistedRangeCacheKey, syncCalendarsFromPersistedEvents, viewMode, visibleRange.endExclusive, visibleRange.start]);
 
   useEffect(() => {
     void fetchPersistedActivities();
@@ -1165,7 +1168,8 @@ export function CalendarCreationWorkspace() {
         throw new Error(result.error || "We couldn't save this activity. Please try again.");
       }
 
-      await fetchPersistedActivities();
+      invalidateClientCache("calendar-creation:");
+      await fetchPersistedActivities(true);
       setSelected(parseDate(draft.date));
       setActivitySavingState("success");
 
@@ -1222,7 +1226,8 @@ export function CalendarCreationWorkspace() {
         }
       }
 
-      await fetchPersistedActivities();
+      invalidateClientCache("calendar-creation:");
+      await fetchPersistedActivities(true);
       toast({
         title: "Activity deleted",
         description: "Calendar updates were saved."
@@ -1285,7 +1290,8 @@ export function CalendarCreationWorkspace() {
         const result = (await response.json()) as { error?: string };
         throw new Error(result.error || "Unable to duplicate activity.");
       }
-      await fetchPersistedActivities();
+      invalidateClientCache("calendar-creation:");
+      await fetchPersistedActivities(true);
       toast({
         title: "Activity duplicated",
         description: "The copied activity was saved."
@@ -1330,7 +1336,8 @@ export function CalendarCreationWorkspace() {
         }
       }
 
-      await fetchPersistedActivities();
+      invalidateClientCache("calendar-creation:");
+      await fetchPersistedActivities(true);
       setSelected(parseDate(targetDateISO));
       toast({
         title: "Day copied",
@@ -1412,7 +1419,7 @@ export function CalendarCreationWorkspace() {
           {activitiesLoadError}
           <button
             type="button"
-            onClick={() => void fetchPersistedActivities()}
+            onClick={() => void fetchPersistedActivities(true)}
             className="ml-2 inline-flex rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
           >
             Retry
@@ -1481,65 +1488,71 @@ export function CalendarCreationWorkspace() {
         ) : null}
       </div>
 
-      <DayDetailDrawer
-        open={dayDrawerDate !== null}
-        date={dayDrawerDate ?? selectedDate}
-        day={selectedDay}
-        categoryFilter={categoryFilter}
-        holidays={getHolidayBadgesForDate(dayDrawerDate ?? selectedDate)}
-        birthdays={getBirthdayBadgesForDate(dayDrawerDate ?? selectedDate)}
-        onClose={() => setDayDrawerDate(null)}
-        onAddActivity={(date) => openCreateActivity(date)}
-        onOpenEdit={requestEditActivity}
-        onDelete={requestDeleteActivity}
-        onDuplicate={duplicateActivity}
-        onCopyDay={copyDayPlan}
-        copyTargetDate={copyTargetDate}
-        onCopyTargetDateChange={setCopyTargetDate}
-        onAskActify={(prompt) => openAiPrompt(prompt)}
-      />
+      {dayDrawerDate ? (
+        <DayDetailDrawer
+          open
+          date={dayDrawerDate}
+          day={selectedDay}
+          categoryFilter={categoryFilter}
+          holidays={getHolidayBadgesForDate(dayDrawerDate)}
+          birthdays={getBirthdayBadgesForDate(dayDrawerDate)}
+          onClose={() => setDayDrawerDate(null)}
+          onAddActivity={(date) => openCreateActivity(date)}
+          onOpenEdit={requestEditActivity}
+          onDelete={requestDeleteActivity}
+          onDuplicate={duplicateActivity}
+          onCopyDay={copyDayPlan}
+          copyTargetDate={copyTargetDate}
+          onCopyTargetDateChange={setCopyTargetDate}
+          onAskActify={(prompt) => openAiPrompt(prompt)}
+        />
+      ) : null}
 
-      <ActivityModal
-        open={activityModalOpen}
-        editor={activityEditor}
-        error={activityFormError}
-        saving={savingActivity}
-        saveState={activitySavingState}
-        onClose={() => setActivityModalOpen(false)}
-        onSave={() => saveActivity()}
-        onSaveAndAddAnother={() => saveActivity({ keepOpen: true })}
-        onChange={(patch) => {
-          if (activityFormError) setActivityFormError(null);
-          setActivityEditor((current) => ({
-            ...current,
-            draft: {
-              ...current.draft,
-              ...patch
-            }
-          }));
-        }}
-      />
+      {activityModalOpen ? (
+        <ActivityModal
+          open
+          editor={activityEditor}
+          error={activityFormError}
+          saving={savingActivity}
+          saveState={activitySavingState}
+          onClose={() => setActivityModalOpen(false)}
+          onSave={() => saveActivity()}
+          onSaveAndAddAnother={() => saveActivity({ keepOpen: true })}
+          onChange={(patch) => {
+            if (activityFormError) setActivityFormError(null);
+            setActivityEditor((current) => ({
+              ...current,
+              draft: {
+                ...current.draft,
+                ...patch
+              }
+            }));
+          }}
+        />
+      ) : null}
 
-      <RecurringSeriesActionModal
-        state={seriesAction}
-        onClose={() => setSeriesAction(null)}
-        onEditSingle={(activity, dateISO) => {
-          setSeriesAction(null);
-          openEditActivity(activity, dateISO, "single");
-        }}
-        onEditSeries={(activity, dateISO) => {
-          setSeriesAction(null);
-          openEditActivity(activity, dateISO, "series");
-        }}
-        onDeleteSingle={(activity, dateISO) => {
-          setSeriesAction(null);
-          deleteActivity(dateISO, activity, "single");
-        }}
-        onDeleteSeries={(activity, dateISO) => {
-          setSeriesAction(null);
-          deleteActivity(dateISO, activity, "series");
-        }}
-      />
+      {seriesAction ? (
+        <RecurringSeriesActionModal
+          state={seriesAction}
+          onClose={() => setSeriesAction(null)}
+          onEditSingle={(activity, dateISO) => {
+            setSeriesAction(null);
+            openEditActivity(activity, dateISO, "single");
+          }}
+          onEditSeries={(activity, dateISO) => {
+            setSeriesAction(null);
+            openEditActivity(activity, dateISO, "series");
+          }}
+          onDeleteSingle={(activity, dateISO) => {
+            setSeriesAction(null);
+            deleteActivity(dateISO, activity, "single");
+          }}
+          onDeleteSeries={(activity, dateISO) => {
+            setSeriesAction(null);
+            deleteActivity(dateISO, activity, "series");
+          }}
+        />
+      ) : null}
 
       <CalendarMiniActions
         onAction={(prompt) => openAiPrompt(prompt)}

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
 import {
@@ -13,13 +14,28 @@ import {
   MONTHLY_YEAR_TOTAL,
   type BillingCycle
 } from "@/components/marketing/pricing/pricing-data";
-import { FAQAccordion } from "@/components/marketing/pricing/FAQAccordion";
 import { FeaturedPricingCard } from "@/components/marketing/pricing/FeaturedPricingCard";
 import { PricingCTASection } from "@/components/marketing/pricing/PricingCTASection";
 import { PricingHero } from "@/components/marketing/pricing/PricingHero";
 import { PricingPlanCard } from "@/components/marketing/pricing/PricingPlanCard";
 import { PricingToggle } from "@/components/marketing/pricing/PricingToggle";
 import { ValueSection } from "@/components/marketing/pricing/ValueSection";
+
+const FAQAccordion = dynamic(
+  () => import("@/components/marketing/pricing/FAQAccordion").then((module) => module.FAQAccordion),
+  {
+    loading: () => (
+      <section className="rounded-[34px] border border-slate-200 bg-white/95 p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.34)] md:p-8">
+        <div className="h-5 w-28 animate-pulse rounded-md bg-slate-200/70" />
+        <div className="mt-4 space-y-3">
+          <div className="h-12 animate-pulse rounded-2xl bg-slate-100/90" />
+          <div className="h-12 animate-pulse rounded-2xl bg-slate-100/90" />
+          <div className="h-12 animate-pulse rounded-2xl bg-slate-100/90" />
+        </div>
+      </section>
+    )
+  }
+);
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);

@@ -189,7 +189,8 @@ export function CalendarShell({ templates, initialDateKey, initialView, initialS
     view: effectiveView,
     range,
     anchorDateKey: effectiveAnchorDateKey,
-    timeZone
+    timeZone,
+    includeStats: false
   });
 
   useEffect(() => {
