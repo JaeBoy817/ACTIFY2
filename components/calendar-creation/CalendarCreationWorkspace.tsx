@@ -4,6 +4,9 @@ import {
   addDays,
   addMonths,
   addWeeks,
+  differenceInCalendarDays,
+  differenceInCalendarMonths,
+  differenceInCalendarWeeks,
   endOfMonth,
   endOfWeek,
   format,
@@ -30,6 +33,7 @@ import {
   MapPin,
   Plus,
   Printer,
+  Repeat,
   Sparkles,
   Trash2,
   WandSparkles
@@ -39,7 +43,14 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { DrawerShell, ModalShell } from "@/components/workspace/shared";
 import { SAMPLE_CALENDARS } from "@/lib/calendar-creation/mockData";
-import type { CalendarActivity, CalendarActivityType, CalendarDay, CalendarMonth } from "@/lib/calendar-creation/types";
+import type {
+  CalendarActivity,
+  CalendarActivityType,
+  CalendarDay,
+  CalendarMonth,
+  CalendarRecurrenceEndType,
+  CalendarRecurrenceType
+} from "@/lib/calendar-creation/types";
 import { buildHolidayLookup, getHolidayBadgeForDate } from "@/lib/calendar/getHolidayBadgeForDate";
 import { getHolidaysForYear } from "@/lib/calendar/getHolidaysForYear";
 import type { CalendarHoliday } from "@/lib/calendar/holidays";
@@ -65,6 +76,14 @@ type ActivityDraft = {
   backupPlan: string;
   internalNotes: string;
   colorTone: string;
+  isRecurring: boolean;
+  recurrenceType: CalendarRecurrenceType;
+  recurrenceRepeatOn: number[];
+  recurrenceEndType: CalendarRecurrenceEndType;
+  recurrenceEndDate: string;
+  recurrenceCount: number;
+  recurrenceCustomInterval: number;
+  recurrenceExclusions: string[];
 };
 
 type ActivityEditorState =
@@ -77,6 +96,8 @@ type ActivityEditorState =
       draft: ActivityDraft;
       activityId: string;
       originalDate: string;
+      editScope: "single" | "series";
+      sourceSeriesId: string | null;
     };
 
 type BirthdayBadgeItem = {
@@ -128,6 +149,15 @@ const CATEGORY_OPTIONS = [
 const TYPE_OPTIONS: CalendarActivityType[] = ["Group", "1:1", "Independent"];
 
 const COLOR_TONES = ["Teal", "Blue", "Violet", "Rose", "Amber", "Slate"] as const;
+const REPEAT_DAY_OPTIONS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" }
+] as const;
 
 function toISODate(date: Date) {
   return format(startOfDay(date), "yyyy-MM-dd");
@@ -329,6 +359,150 @@ function toInputTime(value: string) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function weekdayCode(value: number) {
+  if (value === 0) return "SU";
+  if (value === 1) return "MO";
+  if (value === 2) return "TU";
+  if (value === 3) return "WE";
+  if (value === 4) return "TH";
+  if (value === 5) return "FR";
+  return "SA";
+}
+
+function buildRepeatRuleFromDraft(draft: ActivityDraft) {
+  if (!draft.isRecurring) return null;
+
+  const endSegments: string[] = [];
+  if (draft.recurrenceEndType === "ON_DATE" && draft.recurrenceEndDate) {
+    endSegments.push(`UNTIL=${draft.recurrenceEndDate.replaceAll("-", "")}`);
+  }
+  if (draft.recurrenceEndType === "AFTER_OCCURRENCES" && draft.recurrenceCount > 0) {
+    endSegments.push(`COUNT=${draft.recurrenceCount}`);
+  }
+
+  if (draft.recurrenceType === "DAILY") {
+    return ["FREQ=DAILY", "INTERVAL=1", ...endSegments].join(";");
+  }
+  if (draft.recurrenceType === "WEEKDAYS") {
+    return ["FREQ=WEEKLY", "INTERVAL=1", "BYDAY=MO,TU,WE,TH,FR", ...endSegments].join(";");
+  }
+  if (draft.recurrenceType === "WEEKLY") {
+    const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
+      .sort((a, b) => a - b)
+      .map((day) => weekdayCode(day))
+      .join(",");
+    return ["FREQ=WEEKLY", "INTERVAL=1", `BYDAY=${byDay}`, ...endSegments].join(";");
+  }
+  if (draft.recurrenceType === "BIWEEKLY") {
+    const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
+      .sort((a, b) => a - b)
+      .map((day) => weekdayCode(day))
+      .join(",");
+    return ["FREQ=WEEKLY", "INTERVAL=2", `BYDAY=${byDay}`, ...endSegments].join(";");
+  }
+  if (draft.recurrenceType === "MONTHLY") {
+    const byMonthDay = parseDate(draft.date).getDate();
+    return ["FREQ=MONTHLY", "INTERVAL=1", `BYMONTHDAY=${byMonthDay}`, ...endSegments].join(";");
+  }
+
+  const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
+    .sort((a, b) => a - b)
+    .map((day) => weekdayCode(day))
+    .join(",");
+  return [
+    "FREQ=WEEKLY",
+    `INTERVAL=${Math.max(1, draft.recurrenceCustomInterval || 1)}`,
+    `BYDAY=${byDay}`,
+    ...endSegments
+  ].join(";");
+}
+
+function validateRecurringDraft(draft: ActivityDraft) {
+  if (!draft.isRecurring) return null;
+
+  if (!draft.recurrenceType) return "Select a repeat pattern.";
+
+  if (
+    (draft.recurrenceType === "WEEKLY" ||
+      draft.recurrenceType === "BIWEEKLY" ||
+      draft.recurrenceType === "CUSTOM") &&
+    draft.recurrenceRepeatOn.length === 0
+  ) {
+    return "Select at least one day for this recurring pattern.";
+  }
+
+  if (draft.recurrenceType === "CUSTOM" && (!Number.isFinite(draft.recurrenceCustomInterval) || draft.recurrenceCustomInterval < 1)) {
+    return "Custom repeat interval must be at least 1 week.";
+  }
+
+  if (draft.recurrenceEndType === "ON_DATE") {
+    if (!draft.recurrenceEndDate) return "Select an end date for this recurring series.";
+    if (draft.recurrenceEndDate < draft.date) return "Recurring end date must be on or after the activity date.";
+  }
+
+  if (draft.recurrenceEndType === "AFTER_OCCURRENCES") {
+    if (!Number.isFinite(draft.recurrenceCount) || draft.recurrenceCount < 1) {
+      return "Occurrences count must be at least 1.";
+    }
+  }
+
+  return null;
+}
+
+function generateRecurringDates(draft: ActivityDraft) {
+  const anchor = parseDate(draft.date);
+  if (!draft.isRecurring) return [draft.date];
+
+  const maxDaysWindow = 365;
+  const maxByCount = draft.recurrenceEndType === "AFTER_OCCURRENCES" ? Math.max(1, draft.recurrenceCount) : Number.MAX_SAFE_INTEGER;
+  const untilDate = draft.recurrenceEndType === "ON_DATE" && draft.recurrenceEndDate ? parseDate(draft.recurrenceEndDate) : null;
+  const exclusions = new Set(draft.recurrenceExclusions);
+  const generated: string[] = [];
+
+  for (let offset = 0; offset <= maxDaysWindow; offset += 1) {
+    const date = addDays(anchor, offset);
+    if (untilDate && date > untilDate) break;
+
+    const dateKey = toISODate(date);
+    if (exclusions.has(dateKey)) continue;
+
+    const daysFromAnchor = differenceInCalendarDays(date, anchor);
+    const weeksFromAnchor = differenceInCalendarWeeks(date, anchor, { weekStartsOn: 0 });
+    const monthsFromAnchor = differenceInCalendarMonths(date, anchor);
+
+    let include = false;
+    if (draft.recurrenceType === "DAILY") {
+      include = daysFromAnchor >= 0;
+    } else if (draft.recurrenceType === "WEEKDAYS") {
+      const day = date.getDay();
+      include = day >= 1 && day <= 5;
+    } else if (draft.recurrenceType === "WEEKLY") {
+      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
+      include = weeksFromAnchor >= 0 && weeksFromAnchor % 1 === 0 && days.includes(date.getDay());
+    } else if (draft.recurrenceType === "BIWEEKLY") {
+      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
+      include = weeksFromAnchor >= 0 && weeksFromAnchor % 2 === 0 && days.includes(date.getDay());
+    } else if (draft.recurrenceType === "MONTHLY") {
+      include = monthsFromAnchor >= 0 && date.getDate() === anchor.getDate();
+    } else {
+      const interval = Math.max(1, draft.recurrenceCustomInterval || 1);
+      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
+      include = weeksFromAnchor >= 0 && weeksFromAnchor % interval === 0 && days.includes(date.getDay());
+    }
+
+    if (!include) continue;
+
+    generated.push(dateKey);
+    if (generated.length >= maxByCount) break;
+  }
+
+  if (generated.length === 0) {
+    return [draft.date];
+  }
+
+  return generated;
+}
+
 function activitySort(a: CalendarActivity, b: CalendarActivity) {
   return parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime);
 }
@@ -362,6 +536,7 @@ function daySummary(day: CalendarDay, categoryFilter: string) {
 }
 
 function defaultDraft(dateISO: string): ActivityDraft {
+  const anchorDate = parseDate(dateISO);
   return {
     title: "",
     date: dateISO,
@@ -374,7 +549,15 @@ function defaultDraft(dateISO: string): ActivityDraft {
     suppliesNeeded: "",
     backupPlan: "",
     internalNotes: "",
-    colorTone: "Teal"
+    colorTone: "Teal",
+    isRecurring: false,
+    recurrenceType: "WEEKLY",
+    recurrenceRepeatOn: [anchorDate.getDay()],
+    recurrenceEndType: "NEVER",
+    recurrenceEndDate: "",
+    recurrenceCount: 10,
+    recurrenceCustomInterval: 1,
+    recurrenceExclusions: []
   };
 }
 
@@ -397,6 +580,12 @@ export function CalendarCreationWorkspace() {
     mode: "create",
     draft: defaultDraft(toISODate(today))
   });
+  const [activityFormError, setActivityFormError] = useState<string | null>(null);
+  const [seriesAction, setSeriesAction] = useState<{
+    mode: "edit" | "delete";
+    activity: CalendarActivity;
+    dateISO: string;
+  } | null>(null);
   const [residentBirthdays, setResidentBirthdays] = useState<ResidentBirthdaySource[]>([]);
   const [showHolidays, setShowHolidays] = useState(true);
   const [showBirthdays, setShowBirthdays] = useState(true);
@@ -597,6 +786,7 @@ export function CalendarCreationWorkspace() {
   }
 
   function openCreateActivity(date: Date) {
+    setActivityFormError(null);
     setActivityEditor({
       mode: "create",
       draft: defaultDraft(toISODate(date))
@@ -604,12 +794,18 @@ export function CalendarCreationWorkspace() {
     setActivityModalOpen(true);
   }
 
-  function openEditActivity(activity: CalendarActivity, dateISO: string) {
+  function openEditActivity(activity: CalendarActivity, dateISO: string, editScope: "single" | "series") {
+    setActivityFormError(null);
+    const isSeriesEdit = editScope === "series";
+    const nextDraft = defaultDraft(dateISO);
     setActivityEditor({
       mode: "edit",
       activityId: activity.id,
       originalDate: dateISO,
+      editScope,
+      sourceSeriesId: activity.recurringSeriesId,
       draft: {
+        ...nextDraft,
         title: activity.title,
         date: dateISO,
         startTime: toInputTime(activity.startTime),
@@ -621,21 +817,54 @@ export function CalendarCreationWorkspace() {
         suppliesNeeded: activity.suppliesNeeded.join(", "),
         backupPlan: activity.backupAlternative,
         internalNotes: activity.internalNotes,
-        colorTone: COLOR_TONES.find((tone) => activity.tags.includes(`tone:${tone.toLowerCase()}`)) ?? "Teal"
+        colorTone: COLOR_TONES.find((tone) => activity.tags.includes(`tone:${tone.toLowerCase()}`)) ?? "Teal",
+        isRecurring: isSeriesEdit ? Boolean(activity.isRecurring || activity.recurringSeriesId) : false,
+        recurrenceType: activity.recurrenceType ?? nextDraft.recurrenceType,
+        recurrenceRepeatOn:
+          isSeriesEdit && Array.isArray(activity.recurrenceDaysOfWeek) && activity.recurrenceDaysOfWeek.length > 0
+            ? [...activity.recurrenceDaysOfWeek]
+            : nextDraft.recurrenceRepeatOn,
+        recurrenceEndType: activity.recurrenceEndType ?? nextDraft.recurrenceEndType,
+        recurrenceEndDate: activity.recurrenceEndDate ?? "",
+        recurrenceCount: activity.recurrenceCount ?? nextDraft.recurrenceCount,
+        recurrenceCustomInterval: activity.recurrenceInterval ?? nextDraft.recurrenceCustomInterval,
+        recurrenceExclusions:
+          isSeriesEdit && Array.isArray(activity.recurrenceExclusions) ? [...activity.recurrenceExclusions] : []
       }
     });
     setActivityModalOpen(true);
   }
 
-  function saveActivity() {
-    if (!activityEditor.draft.title.trim()) {
-      return;
-    }
+  function removeSeriesFromCalendars(calendarsToMutate: CalendarMonth[], seriesId: string) {
+    const nowIso = new Date().toISOString();
+    return sortCalendars(
+      calendarsToMutate.map((calendar) => ({
+        ...calendar,
+        updatedAt: nowIso,
+        days: calendar.days.map((day) =>
+          refreshDayFlags({
+            ...day,
+            activities: day.activities.filter((activity) => activity.recurringSeriesId !== seriesId)
+          })
+        )
+      }))
+    );
+  }
 
-    const draft = activityEditor.draft;
-    const activityId = activityEditor.mode === "edit" ? activityEditor.activityId : uniqueId("activity");
+  function buildActivityFromDraft(args: {
+    draft: ActivityDraft;
+    dateISO: string;
+    activityId: string;
+    recurringSeriesId: string | null;
+  }): CalendarActivity {
+    const { draft, dateISO, activityId, recurringSeriesId } = args;
+    const repeatOnDays = draft.recurrenceRepeatOn.length
+      ? [...new Set(draft.recurrenceRepeatOn)].sort((a, b) => a - b)
+      : [parseDate(dateISO).getDay()];
 
-    const nextActivity: CalendarActivity = {
+    const recurringRule = buildRepeatRuleFromDraft(draft);
+
+    return {
       id: activityId,
       title: draft.title.trim(),
       startTime: toDisplayTime(draft.startTime),
@@ -654,20 +883,77 @@ export function CalendarCreationWorkspace() {
       indoorOutdoor: "Indoor",
       backupAlternative: draft.backupPlan.trim(),
       reusableTemplate: false,
-      repeatRule: null,
+      isRecurring: draft.isRecurring,
+      repeatRule: recurringRule,
+      recurrenceRule: recurringRule,
+      recurrenceType: draft.isRecurring ? draft.recurrenceType : null,
+      recurrenceInterval:
+        draft.isRecurring && draft.recurrenceType === "CUSTOM"
+          ? Math.max(1, draft.recurrenceCustomInterval || 1)
+          : draft.isRecurring && draft.recurrenceType === "BIWEEKLY"
+            ? 2
+            : draft.isRecurring && draft.recurrenceType === "WEEKLY"
+              ? 1
+              : draft.isRecurring && draft.recurrenceType === "MONTHLY"
+                ? 1
+                : draft.isRecurring && draft.recurrenceType === "DAILY"
+                  ? 1
+                  : null,
+      recurrenceDaysOfWeek:
+        draft.isRecurring &&
+        (draft.recurrenceType === "WEEKLY" ||
+          draft.recurrenceType === "BIWEEKLY" ||
+          draft.recurrenceType === "WEEKDAYS" ||
+          draft.recurrenceType === "CUSTOM")
+          ? draft.recurrenceType === "WEEKDAYS"
+            ? [1, 2, 3, 4, 5]
+            : repeatOnDays
+          : null,
+      recurrenceEndType: draft.isRecurring ? draft.recurrenceEndType : null,
+      recurrenceEndDate: draft.isRecurring && draft.recurrenceEndType === "ON_DATE" ? draft.recurrenceEndDate : null,
+      recurrenceCount: draft.isRecurring && draft.recurrenceEndType === "AFTER_OCCURRENCES" ? draft.recurrenceCount : null,
+      recurrenceExclusions: draft.isRecurring ? [...draft.recurrenceExclusions] : null,
+      recurringSeriesId: draft.isRecurring ? recurringSeriesId : null,
       tags: [
         draft.type,
         `tone:${draft.colorTone.toLowerCase()}`,
-        ...(draft.category ? [draft.category] : [])
+        ...(draft.category ? [draft.category] : []),
+        ...(draft.isRecurring ? ["Recurring"] : [])
       ],
       aiGenerated: false,
       createdFromTemplate: false
     };
+  }
+
+  function saveActivity(options?: { keepOpen?: boolean }) {
+    const draft = activityEditor.draft;
+
+    if (!draft.title.trim()) {
+      setActivityFormError("Activity title is required.");
+      return;
+    }
+
+    const recurrenceError = validateRecurringDraft(draft);
+    if (recurrenceError) {
+      setActivityFormError(recurrenceError);
+      return;
+    }
+
+    setActivityFormError(null);
 
     setCalendars((current) => {
       let next = [...current];
+      const isEdit = activityEditor.mode === "edit";
+      const isSeriesEdit = isEdit && activityEditor.editScope === "series" && Boolean(activityEditor.sourceSeriesId);
+      const seriesId = draft.isRecurring
+        ? isSeriesEdit && activityEditor.sourceSeriesId
+          ? activityEditor.sourceSeriesId
+          : uniqueId("series")
+        : null;
 
-      if (activityEditor.mode === "edit") {
+      if (isSeriesEdit && activityEditor.sourceSeriesId) {
+        next = removeSeriesFromCalendars(next, activityEditor.sourceSeriesId);
+      } else if (isEdit) {
         next = upsertDay(next, activityEditor.originalDate, (day) =>
           refreshDayFlags({
             ...day,
@@ -676,38 +962,74 @@ export function CalendarCreationWorkspace() {
         );
       }
 
-      next = upsertDay(next, draft.date, (day) => {
-        const withoutPreviousVersion = day.activities.filter((activity) => activity.id !== activityId);
-        return refreshDayFlags({
-          ...day,
-          activities: [...withoutPreviousVersion, nextActivity].sort(activitySort)
+      const recurringDates = draft.isRecurring ? generateRecurringDates(draft) : [draft.date];
+      const firstId = !isEdit || isSeriesEdit ? uniqueId("activity") : activityEditor.activityId;
+
+      recurringDates.forEach((dateISO, index) => {
+        const nextActivity = buildActivityFromDraft({
+          draft,
+          dateISO,
+          activityId: index === 0 ? firstId : uniqueId("activity"),
+          recurringSeriesId: seriesId
         });
+
+        next = upsertDay(next, dateISO, (day) =>
+          refreshDayFlags({
+            ...day,
+            activities: [...day.activities, nextActivity].sort(activitySort)
+          })
+        );
       });
 
       return next;
     });
 
-    const date = parseDate(draft.date);
-    setSelected(date);
+    const selected = parseDate(draft.date);
+    setSelected(selected);
+
+    if (options?.keepOpen) {
+      setActivityEditor({
+        mode: "create",
+        draft: defaultDraft(draft.date)
+      });
+      return;
+    }
+
     setActivityModalOpen(false);
   }
 
-  function deleteActivity(dateISO: string, activityId: string) {
-    setCalendars((current) =>
-      upsertDay(current, dateISO, (day) =>
+  function deleteActivity(dateISO: string, activity: CalendarActivity, scope: "single" | "series") {
+    setCalendars((current) => {
+      if (scope === "series" && activity.recurringSeriesId) {
+        return removeSeriesFromCalendars(current, activity.recurringSeriesId);
+      }
+
+      return upsertDay(current, dateISO, (day) =>
         refreshDayFlags({
           ...day,
-          activities: day.activities.filter((activity) => activity.id !== activityId)
+          activities: day.activities.filter((entry) => entry.id !== activity.id)
         })
-      )
-    );
+      );
+    });
   }
 
   function duplicateActivity(dateISO: string, activity: CalendarActivity) {
     const duplicate: CalendarActivity = {
       ...activity,
       id: uniqueId("activity"),
-      title: `${activity.title} (Copy)`
+      title: `${activity.title} (Copy)`,
+      isRecurring: false,
+      repeatRule: null,
+      recurrenceRule: null,
+      recurrenceType: null,
+      recurrenceInterval: null,
+      recurrenceDaysOfWeek: null,
+      recurrenceEndType: null,
+      recurrenceEndDate: null,
+      recurrenceCount: null,
+      recurrenceExclusions: null,
+      recurringSeriesId: null,
+      tags: activity.tags.filter((tag) => tag.toLowerCase() !== "recurring")
     };
 
     setCalendars((current) =>
@@ -728,7 +1050,19 @@ export function CalendarCreationWorkspace() {
 
     const copies = sourceDay.activities.map((activity) => ({
       ...activity,
-      id: uniqueId("activity")
+      id: uniqueId("activity"),
+      isRecurring: false,
+      repeatRule: null,
+      recurrenceRule: null,
+      recurrenceType: null,
+      recurrenceInterval: null,
+      recurrenceDaysOfWeek: null,
+      recurrenceEndType: null,
+      recurrenceEndDate: null,
+      recurrenceCount: null,
+      recurrenceExclusions: null,
+      recurringSeriesId: null,
+      tags: activity.tags.filter((tag) => tag.toLowerCase() !== "recurring")
     }));
 
     setCalendars((current) =>
@@ -741,6 +1075,32 @@ export function CalendarCreationWorkspace() {
     );
 
     setSelected(parseDate(targetDateISO));
+  }
+
+  function requestEditActivity(activity: CalendarActivity, dateISO: string) {
+    if (activity.recurringSeriesId) {
+      setSeriesAction({
+        mode: "edit",
+        activity,
+        dateISO
+      });
+      return;
+    }
+
+    openEditActivity(activity, dateISO, "single");
+  }
+
+  function requestDeleteActivity(activity: CalendarActivity, dateISO: string) {
+    if (activity.recurringSeriesId) {
+      setSeriesAction({
+        mode: "delete",
+        activity,
+        dateISO
+      });
+      return;
+    }
+
+    deleteActivity(dateISO, activity, "single");
   }
 
   const rangeLabel = formatRangeLabel(viewMode, anchorDate);
@@ -812,7 +1172,7 @@ export function CalendarCreationWorkspace() {
             getBirthdayBadges={getBirthdayBadgesForDate}
             onSelectDate={setSelected}
             onQuickAdd={openCreateActivity}
-            onOpenEdit={openEditActivity}
+            onOpenEdit={requestEditActivity}
           />
         ) : null}
 
@@ -824,8 +1184,8 @@ export function CalendarCreationWorkspace() {
             holidays={getHolidayBadgesForDate(selectedDate)}
             birthdays={getBirthdayBadgesForDate(selectedDate)}
             onAddActivity={openCreateActivity}
-            onOpenEdit={openEditActivity}
-            onDelete={deleteActivity}
+            onOpenEdit={requestEditActivity}
+            onDelete={requestDeleteActivity}
             onDuplicate={duplicateActivity}
             onAskActify={() =>
               openAiPrompt(
@@ -845,8 +1205,8 @@ export function CalendarCreationWorkspace() {
         birthdays={getBirthdayBadgesForDate(dayDrawerDate ?? selectedDate)}
         onClose={() => setDayDrawerDate(null)}
         onAddActivity={(date) => openCreateActivity(date)}
-        onOpenEdit={openEditActivity}
-        onDelete={deleteActivity}
+        onOpenEdit={requestEditActivity}
+        onDelete={requestDeleteActivity}
         onDuplicate={duplicateActivity}
         onCopyDay={copyDayPlan}
         copyTargetDate={copyTargetDate}
@@ -857,9 +1217,12 @@ export function CalendarCreationWorkspace() {
       <ActivityModal
         open={activityModalOpen}
         editor={activityEditor}
+        error={activityFormError}
         onClose={() => setActivityModalOpen(false)}
-        onSave={saveActivity}
+        onSave={() => saveActivity()}
+        onSaveAndAddAnother={() => saveActivity({ keepOpen: true })}
         onChange={(patch) => {
+          if (activityFormError) setActivityFormError(null);
           setActivityEditor((current) => ({
             ...current,
             draft: {
@@ -867,6 +1230,27 @@ export function CalendarCreationWorkspace() {
               ...patch
             }
           }));
+        }}
+      />
+
+      <RecurringSeriesActionModal
+        state={seriesAction}
+        onClose={() => setSeriesAction(null)}
+        onEditSingle={(activity, dateISO) => {
+          setSeriesAction(null);
+          openEditActivity(activity, dateISO, "single");
+        }}
+        onEditSeries={(activity, dateISO) => {
+          setSeriesAction(null);
+          openEditActivity(activity, dateISO, "series");
+        }}
+        onDeleteSingle={(activity, dateISO) => {
+          setSeriesAction(null);
+          deleteActivity(dateISO, activity, "single");
+        }}
+        onDeleteSeries={(activity, dateISO) => {
+          setSeriesAction(null);
+          deleteActivity(dateISO, activity, "series");
         }}
       />
 
@@ -1244,7 +1628,10 @@ function MonthCalendarDayCell({
       <div className="mt-2 space-y-1.5">
         {preview.map((activity) => (
           <div key={activity.id} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
-            <p className="truncate text-[11px] font-medium text-slate-800">{activity.title}</p>
+            <p className="truncate text-[11px] font-medium text-slate-800">
+              {activity.recurringSeriesId ? <Repeat className="mr-1 inline h-3 w-3 text-teal-600" aria-hidden /> : null}
+              {activity.title}
+            </p>
             <p className="text-[10px] text-slate-500">{activity.startTime}</p>
           </div>
         ))}
@@ -1339,7 +1726,10 @@ function WeekCalendarView({
                     onClick={() => onOpenEdit(activity, toISODate(date))}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-slate-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
                   >
-                    <p className="truncate text-sm font-semibold text-slate-900">{activity.title}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {activity.recurringSeriesId ? <Repeat className="mr-1 inline h-3.5 w-3.5 text-teal-600" aria-hidden /> : null}
+                      {activity.title}
+                    </p>
                     <p className="mt-0.5 text-[11px] text-slate-500">{activity.startTime} - {activity.endTime}</p>
                     <div className="mt-1 flex items-center gap-1.5">
                       <CalendarCategoryBadge category={activity.category} />
@@ -1374,7 +1764,7 @@ function DayCalendarView({
   birthdays: BirthdayBadgeItem[];
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
-  onDelete: (dateISO: string, activityId: string) => void;
+  onDelete: (activity: CalendarActivity, dateISO: string) => void;
   onDuplicate: (dateISO: string, activity: CalendarActivity) => void;
   onAskActify: () => void;
 }) {
@@ -1437,7 +1827,7 @@ function DayCalendarView({
               key={activity.id}
               activity={activity}
               onEdit={() => onOpenEdit(activity, day.date)}
-              onDelete={() => onDelete(day.date, activity.id)}
+              onDelete={() => onDelete(activity, day.date)}
               onDuplicate={() => onDuplicate(day.date, activity)}
             />
           ))}
@@ -1473,7 +1863,7 @@ function DayDetailDrawer({
   onClose: () => void;
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
-  onDelete: (dateISO: string, activityId: string) => void;
+  onDelete: (activity: CalendarActivity, dateISO: string) => void;
   onDuplicate: (dateISO: string, activity: CalendarActivity) => void;
   onCopyDay: (sourceDateISO: string, targetDateISO: string) => void;
   copyTargetDate: string;
@@ -1582,7 +1972,7 @@ function DayDetailDrawer({
                   key={activity.id}
                   activity={activity}
                   onEdit={() => onOpenEdit(activity, day.date)}
-                  onDelete={() => onDelete(day.date, activity.id)}
+                  onDelete={() => onDelete(activity, day.date)}
                   onDuplicate={() => onDuplicate(day.date, activity)}
                 />
               ))
@@ -1619,17 +2009,22 @@ function DayDetailDrawer({
 function ActivityModal({
   open,
   editor,
+  error,
   onClose,
   onSave,
+  onSaveAndAddAnother,
   onChange
 }: {
   open: boolean;
   editor: ActivityEditorState;
+  error: string | null;
   onClose: () => void;
   onSave: () => void;
+  onSaveAndAddAnother: () => void;
   onChange: (patch: Partial<ActivityDraft>) => void;
 }) {
   const draft = editor.draft;
+  const [newExclusionDate, setNewExclusionDate] = useState("");
 
   return (
     <ModalShell open={open} title={editor.mode === "edit" ? "Edit Activity" : "Add Activity"} onClose={onClose}>
@@ -1735,6 +2130,221 @@ function ActivityModal({
           </Field>
         </div>
 
+        <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Recurring</p>
+              <p className="text-xs text-slate-600">Make this activity repeat automatically on future dates.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ isRecurring: !draft.isRecurring })}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200",
+                draft.isRecurring
+                  ? "border-teal-200 bg-teal-50 text-teal-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              )}
+              aria-pressed={draft.isRecurring}
+            >
+              <Repeat className="h-3.5 w-3.5" aria-hidden />
+              {draft.isRecurring ? "Recurring Enabled" : "Repeat this activity"}
+            </button>
+          </div>
+
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-200 ease-out",
+              draft.isRecurring ? "mt-3 max-h-[900px] opacity-100" : "max-h-0 opacity-0"
+            )}
+          >
+            <div className="space-y-3 rounded-xl border border-teal-100 bg-white p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Repeat Pattern" htmlFor="recurrence-type">
+                  <select
+                    id="recurrence-type"
+                    value={draft.recurrenceType}
+                    onChange={(event) => {
+                      const nextType = event.target.value as CalendarRecurrenceType;
+                      const defaults =
+                        nextType === "WEEKDAYS"
+                          ? [1, 2, 3, 4, 5]
+                          : nextType === "WEEKLY" || nextType === "BIWEEKLY" || nextType === "CUSTOM"
+                            ? draft.recurrenceRepeatOn.length
+                              ? draft.recurrenceRepeatOn
+                              : [parseDate(draft.date).getDay()]
+                            : [];
+                      onChange({
+                        recurrenceType: nextType,
+                        recurrenceRepeatOn: defaults
+                      });
+                    }}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                  >
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKDAYS">Every Weekday</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="BIWEEKLY">Biweekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="CUSTOM">Custom</option>
+                  </select>
+                </Field>
+
+                {draft.recurrenceType === "CUSTOM" ? (
+                  <Field label="Custom Interval (weeks)" htmlFor="recurrence-custom-interval">
+                    <input
+                      id="recurrence-custom-interval"
+                      type="number"
+                      min={1}
+                      value={draft.recurrenceCustomInterval}
+                      onChange={(event) =>
+                        onChange({
+                          recurrenceCustomInterval: Math.max(1, Number(event.target.value || 1))
+                        })
+                      }
+                      className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                  </Field>
+                ) : <div />}
+              </div>
+
+              {(draft.recurrenceType === "WEEKLY" ||
+                draft.recurrenceType === "BIWEEKLY" ||
+                draft.recurrenceType === "CUSTOM") && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Repeat On</p>
+                  <div className="flex flex-wrap gap-2">
+                    {REPEAT_DAY_OPTIONS.map((day) => {
+                      const selected = draft.recurrenceRepeatOn.includes(day.value);
+                      return (
+                        <button
+                          key={`repeat-on-${day.value}`}
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              recurrenceRepeatOn: selected
+                                ? draft.recurrenceRepeatOn.filter((entry) => entry !== day.value)
+                                : [...draft.recurrenceRepeatOn, day.value].sort((a, b) => a - b)
+                            })
+                          }
+                          className={cn(
+                            "inline-flex min-w-10 items-center justify-center rounded-full border px-2.5 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200",
+                            selected
+                              ? "border-teal-200 bg-teal-50 text-teal-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          )}
+                          aria-pressed={selected}
+                        >
+                          {day.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {draft.recurrenceType === "WEEKDAYS" ? (
+                <p className="text-xs text-slate-600">Repeats Monday through Friday.</p>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Repeat Ends" htmlFor="recurrence-end-type-alt">
+                  <select
+                    id="recurrence-end-type-alt"
+                    value={draft.recurrenceEndType}
+                    onChange={(event) => onChange({ recurrenceEndType: event.target.value as CalendarRecurrenceEndType })}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                  >
+                    <option value="NEVER">Never</option>
+                    <option value="ON_DATE">On Date</option>
+                    <option value="AFTER_OCCURRENCES">After Number of Occurrences</option>
+                  </select>
+                </Field>
+
+                {draft.recurrenceEndType === "ON_DATE" ? (
+                  <Field label="End Date" htmlFor="recurrence-end-date">
+                    <input
+                      id="recurrence-end-date"
+                      type="date"
+                      value={draft.recurrenceEndDate}
+                      onChange={(event) => onChange({ recurrenceEndDate: event.target.value })}
+                      className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                  </Field>
+                ) : null}
+
+                {draft.recurrenceEndType === "AFTER_OCCURRENCES" ? (
+                  <Field label="Occurrences" htmlFor="recurrence-count">
+                    <input
+                      id="recurrence-count"
+                      type="number"
+                      min={1}
+                      value={draft.recurrenceCount}
+                      onChange={(event) => onChange({ recurrenceCount: Math.max(1, Number(event.target.value || 1)) })}
+                      className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                  </Field>
+                ) : null}
+              </div>
+
+              <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  Advanced Exclusions
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={newExclusionDate}
+                      onChange={(event) => setNewExclusionDate(event.target.value)}
+                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newExclusionDate) return;
+                        if (draft.recurrenceExclusions.includes(newExclusionDate)) return;
+                        onChange({
+                          recurrenceExclusions: [...draft.recurrenceExclusions, newExclusionDate].sort((a, b) =>
+                            a.localeCompare(b)
+                          )
+                        });
+                        setNewExclusionDate("");
+                      }}
+                      className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    >
+                      Exclude Date
+                    </button>
+                  </div>
+
+                  {draft.recurrenceExclusions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {draft.recurrenceExclusions.map((date) => (
+                        <button
+                          key={`excluded-${date}`}
+                          type="button"
+                          onClick={() =>
+                            onChange({
+                              recurrenceExclusions: draft.recurrenceExclusions.filter((item) => item !== date)
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                          title="Remove exclusion"
+                        >
+                          {date}
+                          <span aria-hidden>×</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">No exclusion dates added.</p>
+                  )}
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+
         <Field label="Short Description" htmlFor="activity-description">
           <textarea
             id="activity-description"
@@ -1776,6 +2386,12 @@ function ActivityModal({
             className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
           />
         </Field>
+
+        {error ? (
+          <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
@@ -1786,12 +2402,21 @@ function ActivityModal({
         >
           Cancel
         </button>
+        {editor.mode === "create" ? (
+          <button
+            type="button"
+            onClick={onSaveAndAddAnother}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          >
+            {draft.isRecurring ? "Save Series & Add Another" : "Save and Add Another"}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onSave}
           className="rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
         >
-          {editor.mode === "edit" ? "Save Changes" : "Save Activity"}
+          {editor.mode === "edit" ? "Save Changes" : draft.isRecurring ? "Save Activity Series" : "Save Activity"}
         </button>
       </div>
     </ModalShell>
@@ -1818,6 +2443,12 @@ function ActivityCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <CalendarCategoryBadge category={activity.category} />
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{activity.type}</span>
+            {activity.recurringSeriesId ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                <Repeat className="h-3 w-3" aria-hidden />
+                Recurring
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1838,6 +2469,99 @@ function ActivityCard({
         {activity.backupAlternative ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">Backup: {activity.backupAlternative}</span> : null}
       </div>
     </article>
+  );
+}
+
+function RecurringSeriesActionModal({
+  state,
+  onClose,
+  onEditSingle,
+  onEditSeries,
+  onDeleteSingle,
+  onDeleteSeries
+}: {
+  state: {
+    mode: "edit" | "delete";
+    activity: CalendarActivity;
+    dateISO: string;
+  } | null;
+  onClose: () => void;
+  onEditSingle: (activity: CalendarActivity, dateISO: string) => void;
+  onEditSeries: (activity: CalendarActivity, dateISO: string) => void;
+  onDeleteSingle: (activity: CalendarActivity, dateISO: string) => void;
+  onDeleteSeries: (activity: CalendarActivity, dateISO: string) => void;
+}) {
+  const open = Boolean(state);
+  if (!state) {
+    return (
+      <ModalShell open={open} title="Recurring Activity" onClose={onClose}>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">No recurring action selected.</p>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  const isEdit = state.mode === "edit";
+  const title = isEdit ? "Edit Recurring Activity" : "Delete Recurring Activity";
+
+  return (
+    <ModalShell open={open} title={title} onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-700">
+          This activity is part of a recurring series. Choose whether to apply changes only to this activity or the
+          full series.
+        </p>
+
+        <div className="grid gap-2">
+          {isEdit ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onEditSingle(state.activity, state.dateISO)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              >
+                Edit only this activity
+              </button>
+              <button
+                type="button"
+                onClick={() => onEditSeries(state.activity, state.dateISO)}
+                className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-left text-sm font-semibold text-teal-700 transition hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+              >
+                Edit entire series
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onDeleteSingle(state.activity, state.dateISO)}
+                className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+              >
+                Delete only this activity
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteSeries(state.activity, state.dateISO)}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+              >
+                Delete entire series
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 

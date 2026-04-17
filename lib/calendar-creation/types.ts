@@ -4,6 +4,10 @@ export type CalendarPrepLevel = "Low" | "Medium" | "High";
 
 export type CalendarIndoorOutdoor = "Indoor" | "Outdoor" | "Either";
 
+export type CalendarRecurrenceType = "DAILY" | "WEEKDAYS" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "CUSTOM";
+
+export type CalendarRecurrenceEndType = "NEVER" | "ON_DATE" | "AFTER_OCCURRENCES";
+
 export type CalendarActivity = {
   id: string;
   title: string;
@@ -20,7 +24,17 @@ export type CalendarActivity = {
   indoorOutdoor: CalendarIndoorOutdoor;
   backupAlternative: string;
   reusableTemplate: boolean;
+  isRecurring: boolean;
   repeatRule: string | null;
+  recurrenceRule: string | null;
+  recurrenceType: CalendarRecurrenceType | null;
+  recurrenceInterval: number | null;
+  recurrenceDaysOfWeek: number[] | null;
+  recurrenceEndType: CalendarRecurrenceEndType | null;
+  recurrenceEndDate: string | null;
+  recurrenceCount: number | null;
+  recurrenceExclusions: string[] | null;
+  recurringSeriesId: string | null;
   tags: string[];
   aiGenerated: boolean;
   createdFromTemplate: boolean;
