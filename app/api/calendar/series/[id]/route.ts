@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext } from "@/lib/calendar/api-context";
 import { updateSeriesAndRefresh } from "@/lib/calendar/service";
+import { prisma } from "@/lib/prisma";
 
 const seriesPatchSchema = z.object({
   scope: z.enum(["series", "future"]).optional(),
@@ -67,3 +68,42 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  try {
+    const context = await requireCalendarApiContext({ writable: true });
+    const series = await prisma.activitySeries.findFirst({
+      where: {
+        id: params.id,
+        facilityId: context.facilityId
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!series) {
+      throw new CalendarApiError("Recurring series not found.", 404);
+    }
+
+    await prisma.$transaction([
+      prisma.activityInstance.deleteMany({
+        where: {
+          facilityId: context.facilityId,
+          seriesId: series.id
+        }
+      }),
+      prisma.activitySeries.delete({
+        where: {
+          id: series.id
+        }
+      })
+    ]);
+
+    return Response.json({
+      deleted: true,
+      seriesId: series.id
+    });
+  } catch (error) {
+    return asCalendarApiErrorResponse(error);
+  }
+}

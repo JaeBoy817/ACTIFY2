@@ -4,9 +4,6 @@ import {
   addDays,
   addMonths,
   addWeeks,
-  differenceInCalendarDays,
-  differenceInCalendarMonths,
-  differenceInCalendarWeeks,
   endOfMonth,
   endOfWeek,
   format,
@@ -39,10 +36,10 @@ import {
   WandSparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DrawerShell, ModalShell } from "@/components/workspace/shared";
-import { SAMPLE_CALENDARS } from "@/lib/calendar-creation/mockData";
+import { toUtcIso } from "@/components/calendar/utils";
 import type {
   CalendarActivity,
   CalendarActivityType,
@@ -59,6 +56,8 @@ import {
   getBirthdayBadgeForDate,
   type ResidentBirthdaySource
 } from "@/lib/calendar/resident-birthdays";
+import { useToast } from "@/lib/use-toast";
+import { formatInTimeZone, zonedDateKey } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
 type CalendarViewMode = "month" | "week" | "day";
@@ -120,6 +119,44 @@ type ResidentBirthdayApiRow = {
   preferredName: string | null;
   birthDate: string | null;
   status?: string | null;
+};
+
+type PersistedActivityMeta = {
+  category?: string;
+  type?: CalendarActivityType;
+  description?: string;
+  suppliesNeeded?: string[];
+  backupPlan?: string;
+  internalNotes?: string;
+  colorTone?: string;
+  tags?: string[];
+  recurrenceType?: CalendarRecurrenceType;
+  recurrenceDaysOfWeek?: number[];
+  recurrenceEndType?: CalendarRecurrenceEndType;
+  recurrenceEndDate?: string;
+  recurrenceCount?: number;
+  recurrenceCustomInterval?: number;
+  recurrenceExclusions?: string[];
+};
+
+type PersistedAdaptationsPayload = {
+  bedBound?: boolean;
+  dementiaFriendly?: boolean;
+  lowVisionHearing?: boolean;
+  oneToOneMini?: boolean;
+  overrides?: Record<string, unknown>;
+  calendarMeta?: PersistedActivityMeta;
+};
+
+type PersistedActivityRecord = {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  location: string;
+  seriesId: string | null;
+  checklist?: unknown;
+  adaptationsEnabled?: unknown;
 };
 
 const VIEW_OPTIONS: Array<{ key: CalendarViewMode; label: string }> = [
@@ -275,14 +312,6 @@ function upsertDay(calendars: CalendarMonth[], dateISO: string, updater: (day: C
   return sortCalendars(nextCalendars);
 }
 
-function uniqueId(prefix: string) {
-  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
-    return `${prefix}-${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 function parseTimeToMinutes(value: string) {
   const plain = value.trim();
 
@@ -302,19 +331,6 @@ function parseTimeToMinutes(value: string) {
   const normalizedHour = hour % 12 + (meridiem === "PM" ? 12 : 0);
 
   return normalizedHour * 60 + minute;
-}
-
-function toDisplayTime(value: string) {
-  const match = value.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return value;
-
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const meridiem = hour >= 12 ? "PM" : "AM";
-  hour = hour % 12;
-  if (hour === 0) hour = 12;
-
-  return `${hour}:${String(minute).padStart(2, "0")} ${meridiem}`;
 }
 
 function toResidentDisplayName(row: ResidentBirthdayApiRow) {
@@ -359,6 +375,179 @@ function toInputTime(value: string) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function parseCommaSeparated(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeType(value: string | undefined): CalendarActivityType {
+  if (value === "1:1") return "1:1";
+  if (value === "Independent") return "Independent";
+  return "Group";
+}
+
+function parsePersistedMeta(value: unknown): PersistedActivityMeta {
+  if (!value || typeof value !== "object") return {};
+  const safe = value as PersistedAdaptationsPayload;
+  if (!safe.calendarMeta || typeof safe.calendarMeta !== "object") return {};
+  return safe.calendarMeta;
+}
+
+function parseChecklistSupplies(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object" && "text" in item) {
+        const text = (item as { text?: unknown }).text;
+        return typeof text === "string" ? text.trim() : "";
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function createPersistedActivityFromRecord(record: PersistedActivityRecord, timeZone: string): { dateISO: string; activity: CalendarActivity } {
+  const startDate = new Date(record.startAt);
+  const endDate = new Date(record.endAt);
+  const dateISO = zonedDateKey(startDate, timeZone);
+  const meta = parsePersistedMeta(record.adaptationsEnabled);
+
+  const supplies = Array.isArray(meta.suppliesNeeded) && meta.suppliesNeeded.length > 0
+    ? meta.suppliesNeeded
+    : parseChecklistSupplies(record.checklist);
+
+  const category = typeof meta.category === "string" && meta.category.trim().length > 0 ? meta.category : "Group Activity";
+  const type = normalizeType(meta.type);
+  const colorTone = typeof meta.colorTone === "string" && COLOR_TONES.includes(meta.colorTone as (typeof COLOR_TONES)[number])
+    ? meta.colorTone
+    : "Teal";
+  const description =
+    typeof meta.description === "string" && meta.description.trim().length > 0
+      ? meta.description
+      : "Resident-friendly activity block.";
+  const backupPlan = typeof meta.backupPlan === "string" ? meta.backupPlan : "";
+  const internalNotes = typeof meta.internalNotes === "string" ? meta.internalNotes : "";
+
+  const activity: CalendarActivity = {
+    id: record.id,
+    title: record.title,
+    startTime: formatInTimeZone(startDate, timeZone, { hour: "numeric", minute: "2-digit" }),
+    endTime: formatInTimeZone(endDate, timeZone, { hour: "numeric", minute: "2-digit" }),
+    location: record.location || "Activity Room",
+    category,
+    type,
+    description,
+    residentFacingDescription: description,
+    suppliesNeeded: supplies,
+    internalNotes,
+    prepLevel: "Low",
+    indoorOutdoor: "Indoor",
+    backupAlternative: backupPlan,
+    reusableTemplate: false,
+    isRecurring: Boolean(record.seriesId),
+    repeatRule: null,
+    recurrenceRule: null,
+    recurrenceType: meta.recurrenceType ?? null,
+    recurrenceInterval: meta.recurrenceCustomInterval ?? null,
+    recurrenceDaysOfWeek: meta.recurrenceDaysOfWeek ?? null,
+    recurrenceEndType: meta.recurrenceEndType ?? null,
+    recurrenceEndDate: meta.recurrenceEndDate ?? null,
+    recurrenceCount: meta.recurrenceCount ?? null,
+    recurrenceExclusions: meta.recurrenceExclusions ?? null,
+    recurringSeriesId: record.seriesId,
+    tags:
+      Array.isArray(meta.tags) && meta.tags.length > 0
+        ? meta.tags
+        : [type, category, `tone:${String(colorTone).toLowerCase()}`, ...(record.seriesId ? ["Recurring"] : [])],
+    aiGenerated: false,
+    createdFromTemplate: false
+  };
+
+  return { dateISO, activity };
+}
+
+function mapRecurrenceToApi(
+  draft: ActivityDraft,
+  timeZone: string
+): {
+  freq: "DAILY" | "WEEKLY" | "MONTHLY";
+  interval: number;
+  byDay?: Array<"SU" | "MO" | "TU" | "WE" | "TH" | "FR" | "SA">;
+  count?: number;
+  until?: string;
+  timezone: string;
+} | undefined {
+  if (!draft.isRecurring) return undefined;
+
+  const byDayCodes = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
+    .sort((a, b) => a - b)
+    .map((day) => weekdayCode(day) as "SU" | "MO" | "TU" | "WE" | "TH" | "FR" | "SA");
+
+  const recurrence: {
+    freq: "DAILY" | "WEEKLY" | "MONTHLY";
+    interval: number;
+    byDay?: Array<"SU" | "MO" | "TU" | "WE" | "TH" | "FR" | "SA">;
+    count?: number;
+    until?: string;
+    timezone: string;
+  } = {
+    freq: "WEEKLY",
+    interval: 1,
+    timezone: timeZone
+  };
+
+  if (draft.recurrenceType === "DAILY") {
+    recurrence.freq = "DAILY";
+    recurrence.interval = 1;
+  } else if (draft.recurrenceType === "WEEKDAYS") {
+    recurrence.freq = "WEEKLY";
+    recurrence.interval = 1;
+    recurrence.byDay = ["MO", "TU", "WE", "TH", "FR"];
+  } else if (draft.recurrenceType === "WEEKLY") {
+    recurrence.freq = "WEEKLY";
+    recurrence.interval = 1;
+    recurrence.byDay = byDayCodes;
+  } else if (draft.recurrenceType === "BIWEEKLY") {
+    recurrence.freq = "WEEKLY";
+    recurrence.interval = 2;
+    recurrence.byDay = byDayCodes;
+  } else if (draft.recurrenceType === "MONTHLY") {
+    recurrence.freq = "MONTHLY";
+    recurrence.interval = 1;
+  } else {
+    recurrence.freq = "WEEKLY";
+    recurrence.interval = Math.max(1, draft.recurrenceCustomInterval || 1);
+    recurrence.byDay = byDayCodes;
+  }
+
+  if (draft.recurrenceEndType === "AFTER_OCCURRENCES") {
+    recurrence.count = Math.max(1, draft.recurrenceCount);
+  }
+  if (draft.recurrenceEndType === "ON_DATE" && draft.recurrenceEndDate) {
+    const untilIso = toUtcIso(draft.recurrenceEndDate, "23:59", timeZone);
+    if (untilIso) recurrence.until = untilIso;
+  }
+
+  return recurrence;
+}
+
+function recurrencePayloadToRRule(payload: NonNullable<ReturnType<typeof mapRecurrenceToApi>>) {
+  const parts = [`FREQ=${payload.freq}`, `INTERVAL=${payload.interval}`];
+  if (payload.byDay && payload.byDay.length > 0) {
+    parts.push(`BYDAY=${payload.byDay.join(",")}`);
+  }
+  if (payload.count) {
+    parts.push(`COUNT=${payload.count}`);
+  }
+  if (payload.until) {
+    parts.push(`UNTIL=${payload.until.replace(/[-:]/g, "").replace(".000", "").replace(".000Z", "Z")}`);
+  }
+  return parts.join(";");
+}
+
 function weekdayCode(value: number) {
   if (value === 0) return "SU";
   if (value === 1) return "MO";
@@ -369,52 +558,46 @@ function weekdayCode(value: number) {
   return "SA";
 }
 
-function buildRepeatRuleFromDraft(draft: ActivityDraft) {
-  if (!draft.isRecurring) return null;
+function buildPersistencePayloadFromDraft(draft: ActivityDraft, timeZone: string) {
+  const startAt = toUtcIso(draft.date, draft.startTime, timeZone);
+  const endAt = toUtcIso(draft.date, draft.endTime, timeZone);
+  if (!startAt || !endAt) return null;
 
-  const endSegments: string[] = [];
-  if (draft.recurrenceEndType === "ON_DATE" && draft.recurrenceEndDate) {
-    endSegments.push(`UNTIL=${draft.recurrenceEndDate.replaceAll("-", "")}`);
-  }
-  if (draft.recurrenceEndType === "AFTER_OCCURRENCES" && draft.recurrenceCount > 0) {
-    endSegments.push(`COUNT=${draft.recurrenceCount}`);
-  }
+  const supplies = parseCommaSeparated(draft.suppliesNeeded);
+  const meta: PersistedActivityMeta = {
+    category: draft.category,
+    type: draft.type,
+    description: draft.description.trim(),
+    suppliesNeeded: supplies,
+    backupPlan: draft.backupPlan.trim(),
+    internalNotes: draft.internalNotes.trim(),
+    colorTone: draft.colorTone,
+    tags: [draft.type, draft.category, `tone:${draft.colorTone.toLowerCase()}`, ...(draft.isRecurring ? ["Recurring"] : [])],
+    recurrenceType: draft.isRecurring ? draft.recurrenceType : undefined,
+    recurrenceDaysOfWeek: draft.isRecurring ? draft.recurrenceRepeatOn : undefined,
+    recurrenceEndType: draft.isRecurring ? draft.recurrenceEndType : undefined,
+    recurrenceEndDate: draft.isRecurring && draft.recurrenceEndType === "ON_DATE" ? draft.recurrenceEndDate : undefined,
+    recurrenceCount: draft.isRecurring && draft.recurrenceEndType === "AFTER_OCCURRENCES" ? draft.recurrenceCount : undefined,
+    recurrenceCustomInterval: draft.isRecurring ? draft.recurrenceCustomInterval : undefined,
+    recurrenceExclusions: draft.isRecurring ? draft.recurrenceExclusions : undefined
+  };
 
-  if (draft.recurrenceType === "DAILY") {
-    return ["FREQ=DAILY", "INTERVAL=1", ...endSegments].join(";");
-  }
-  if (draft.recurrenceType === "WEEKDAYS") {
-    return ["FREQ=WEEKLY", "INTERVAL=1", "BYDAY=MO,TU,WE,TH,FR", ...endSegments].join(";");
-  }
-  if (draft.recurrenceType === "WEEKLY") {
-    const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
-      .sort((a, b) => a - b)
-      .map((day) => weekdayCode(day))
-      .join(",");
-    return ["FREQ=WEEKLY", "INTERVAL=1", `BYDAY=${byDay}`, ...endSegments].join(";");
-  }
-  if (draft.recurrenceType === "BIWEEKLY") {
-    const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
-      .sort((a, b) => a - b)
-      .map((day) => weekdayCode(day))
-      .join(",");
-    return ["FREQ=WEEKLY", "INTERVAL=2", `BYDAY=${byDay}`, ...endSegments].join(";");
-  }
-  if (draft.recurrenceType === "MONTHLY") {
-    const byMonthDay = parseDate(draft.date).getDate();
-    return ["FREQ=MONTHLY", "INTERVAL=1", `BYMONTHDAY=${byMonthDay}`, ...endSegments].join(";");
-  }
-
-  const byDay = (draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [parseDate(draft.date).getDay()])
-    .sort((a, b) => a - b)
-    .map((day) => weekdayCode(day))
-    .join(",");
-  return [
-    "FREQ=WEEKLY",
-    `INTERVAL=${Math.max(1, draft.recurrenceCustomInterval || 1)}`,
-    `BYDAY=${byDay}`,
-    ...endSegments
-  ].join(";");
+  return {
+    title: draft.title.trim(),
+    startAt,
+    endAt,
+    location: draft.location.trim() || "Activity Room",
+    checklist: supplies.map((text) => ({ text, done: false })),
+    adaptationsEnabled: {
+      bedBound: false,
+      dementiaFriendly: false,
+      lowVisionHearing: false,
+      oneToOneMini: false,
+      overrides: {},
+      calendarMeta: meta
+    } satisfies PersistedAdaptationsPayload,
+    recurrence: mapRecurrenceToApi(draft, timeZone)
+  };
 }
 
 function validateRecurringDraft(draft: ActivityDraft) {
@@ -447,60 +630,6 @@ function validateRecurringDraft(draft: ActivityDraft) {
   }
 
   return null;
-}
-
-function generateRecurringDates(draft: ActivityDraft) {
-  const anchor = parseDate(draft.date);
-  if (!draft.isRecurring) return [draft.date];
-
-  const maxDaysWindow = 365;
-  const maxByCount = draft.recurrenceEndType === "AFTER_OCCURRENCES" ? Math.max(1, draft.recurrenceCount) : Number.MAX_SAFE_INTEGER;
-  const untilDate = draft.recurrenceEndType === "ON_DATE" && draft.recurrenceEndDate ? parseDate(draft.recurrenceEndDate) : null;
-  const exclusions = new Set(draft.recurrenceExclusions);
-  const generated: string[] = [];
-
-  for (let offset = 0; offset <= maxDaysWindow; offset += 1) {
-    const date = addDays(anchor, offset);
-    if (untilDate && date > untilDate) break;
-
-    const dateKey = toISODate(date);
-    if (exclusions.has(dateKey)) continue;
-
-    const daysFromAnchor = differenceInCalendarDays(date, anchor);
-    const weeksFromAnchor = differenceInCalendarWeeks(date, anchor, { weekStartsOn: 0 });
-    const monthsFromAnchor = differenceInCalendarMonths(date, anchor);
-
-    let include = false;
-    if (draft.recurrenceType === "DAILY") {
-      include = daysFromAnchor >= 0;
-    } else if (draft.recurrenceType === "WEEKDAYS") {
-      const day = date.getDay();
-      include = day >= 1 && day <= 5;
-    } else if (draft.recurrenceType === "WEEKLY") {
-      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
-      include = weeksFromAnchor >= 0 && weeksFromAnchor % 1 === 0 && days.includes(date.getDay());
-    } else if (draft.recurrenceType === "BIWEEKLY") {
-      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
-      include = weeksFromAnchor >= 0 && weeksFromAnchor % 2 === 0 && days.includes(date.getDay());
-    } else if (draft.recurrenceType === "MONTHLY") {
-      include = monthsFromAnchor >= 0 && date.getDate() === anchor.getDate();
-    } else {
-      const interval = Math.max(1, draft.recurrenceCustomInterval || 1);
-      const days = draft.recurrenceRepeatOn.length ? draft.recurrenceRepeatOn : [anchor.getDay()];
-      include = weeksFromAnchor >= 0 && weeksFromAnchor % interval === 0 && days.includes(date.getDay());
-    }
-
-    if (!include) continue;
-
-    generated.push(dateKey);
-    if (generated.length >= maxByCount) break;
-  }
-
-  if (generated.length === 0) {
-    return [draft.date];
-  }
-
-  return generated;
 }
 
 function activitySort(a: CalendarActivity, b: CalendarActivity) {
@@ -563,9 +692,14 @@ function defaultDraft(dateISO: string): ActivityDraft {
 
 export function CalendarCreationWorkspace() {
   const router = useRouter();
+  const { toast } = useToast();
   const today = useMemo(() => startOfDay(new Date()), []);
+  const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago", []);
+  const fetchRequestRef = useRef(0);
 
-  const [calendars, setCalendars] = useState<CalendarMonth[]>(SAMPLE_CALENDARS);
+  const [calendars, setCalendars] = useState<CalendarMonth[]>([
+    createBlankCalendarMonth(today.getFullYear(), today.getMonth() + 1)
+  ]);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [anchorDate, setAnchorDate] = useState<Date>(today);
   const [selectedDate, setSelectedDate] = useState<Date>(today);
@@ -581,6 +715,10 @@ export function CalendarCreationWorkspace() {
     draft: defaultDraft(toISODate(today))
   });
   const [activityFormError, setActivityFormError] = useState<string | null>(null);
+  const [activitySavingState, setActivitySavingState] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesLoadError, setActivitiesLoadError] = useState<string | null>(null);
   const [seriesAction, setSeriesAction] = useState<{
     mode: "edit" | "delete";
     activity: CalendarActivity;
@@ -654,6 +792,105 @@ export function CalendarCreationWorkspace() {
     if (viewMode === "week") return weekDays;
     return [selectedDate];
   }, [monthDays, selectedDate, viewMode, weekDays]);
+
+  const visibleRange = useMemo(() => {
+    if (visibleDates.length === 0) {
+      const fallback = startOfDay(selectedDate);
+      return {
+        start: fallback,
+        endExclusive: addDays(fallback, 1)
+      };
+    }
+    const sorted = [...visibleDates].sort((a, b) => a.getTime() - b.getTime());
+    return {
+      start: startOfDay(sorted[0]),
+      endExclusive: addDays(startOfDay(sorted[sorted.length - 1]), 1)
+    };
+  }, [selectedDate, visibleDates]);
+
+  const syncCalendarsFromPersistedEvents = useCallback(
+    (records: PersistedActivityRecord[]) => {
+      setCalendars((current) => {
+        const nowIso = new Date().toISOString();
+        let next = current.map((calendar) => ({
+          ...calendar,
+          updatedAt: nowIso,
+          days: calendar.days.map((day) =>
+            refreshDayFlags({
+              ...day,
+              activities: []
+            })
+          )
+        }));
+
+        const requiredMonthKeys = new Set<string>([
+          `${anchorDate.getFullYear()}-${String(anchorDate.getMonth() + 1).padStart(2, "0")}`
+        ]);
+
+        for (const record of records) {
+          const { dateISO, activity } = createPersistedActivityFromRecord(record, timeZone);
+          const eventDate = parseDate(dateISO);
+          requiredMonthKeys.add(`${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, "0")}`);
+
+          next = upsertDay(next, dateISO, (day) =>
+            refreshDayFlags({
+              ...day,
+              activities: [...day.activities, activity].sort(activitySort)
+            })
+          );
+        }
+
+        requiredMonthKeys.forEach((monthKey) => {
+          const [yearValue, monthValue] = monthKey.split("-").map(Number);
+          const result = ensureCalendarMonth(next, yearValue, monthValue);
+          next = result.calendars;
+        });
+
+        return sortCalendars(next);
+      });
+    },
+    [anchorDate, timeZone]
+  );
+
+  const fetchPersistedActivities = useCallback(async () => {
+    const requestId = fetchRequestRef.current + 1;
+    fetchRequestRef.current = requestId;
+    setActivitiesLoading(true);
+    setActivitiesLoadError(null);
+    try {
+      const query = new URLSearchParams({
+        start: visibleRange.start.toISOString(),
+        end: visibleRange.endExclusive.toISOString(),
+        view: viewMode === "day" ? "day" : viewMode === "week" ? "week" : "month"
+      });
+      const response = await fetch(`/api/calendar/range?${query.toString()}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
+      const payload = (await response.json()) as {
+        activities?: PersistedActivityRecord[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to load calendar activities.");
+      }
+      const records = Array.isArray(payload.activities) ? payload.activities : [];
+      if (fetchRequestRef.current !== requestId) return;
+      syncCalendarsFromPersistedEvents(records);
+    } catch (error) {
+      if (fetchRequestRef.current !== requestId) return;
+      const message = error instanceof Error ? error.message : "Unable to load calendar activities.";
+      setActivitiesLoadError(message);
+    } finally {
+      if (fetchRequestRef.current !== requestId) return;
+      setActivitiesLoading(false);
+    }
+  }, [syncCalendarsFromPersistedEvents, viewMode, visibleRange.endExclusive, visibleRange.start]);
+
+  useEffect(() => {
+    void fetchPersistedActivities();
+  }, [fetchPersistedActivities]);
 
   const holidayLookup = useMemo(() => {
     const years = new Set<number>();
@@ -787,6 +1024,7 @@ export function CalendarCreationWorkspace() {
 
   function openCreateActivity(date: Date) {
     setActivityFormError(null);
+    setActivitySavingState("idle");
     setActivityEditor({
       mode: "create",
       draft: defaultDraft(toISODate(date))
@@ -796,6 +1034,7 @@ export function CalendarCreationWorkspace() {
 
   function openEditActivity(activity: CalendarActivity, dateISO: string, editScope: "single" | "series") {
     setActivityFormError(null);
+    setActivitySavingState("idle");
     const isSeriesEdit = editScope === "series";
     const nextDraft = defaultDraft(dateISO);
     setActivityEditor({
@@ -835,246 +1074,277 @@ export function CalendarCreationWorkspace() {
     setActivityModalOpen(true);
   }
 
-  function removeSeriesFromCalendars(calendarsToMutate: CalendarMonth[], seriesId: string) {
-    const nowIso = new Date().toISOString();
-    return sortCalendars(
-      calendarsToMutate.map((calendar) => ({
-        ...calendar,
-        updatedAt: nowIso,
-        days: calendar.days.map((day) =>
-          refreshDayFlags({
-            ...day,
-            activities: day.activities.filter((activity) => activity.recurringSeriesId !== seriesId)
-          })
-        )
-      }))
-    );
-  }
-
-  function buildActivityFromDraft(args: {
-    draft: ActivityDraft;
-    dateISO: string;
-    activityId: string;
-    recurringSeriesId: string | null;
-  }): CalendarActivity {
-    const { draft, dateISO, activityId, recurringSeriesId } = args;
-    const repeatOnDays = draft.recurrenceRepeatOn.length
-      ? [...new Set(draft.recurrenceRepeatOn)].sort((a, b) => a - b)
-      : [parseDate(dateISO).getDay()];
-
-    const recurringRule = buildRepeatRuleFromDraft(draft);
-
-    return {
-      id: activityId,
-      title: draft.title.trim(),
-      startTime: toDisplayTime(draft.startTime),
-      endTime: toDisplayTime(draft.endTime),
-      location: draft.location.trim() || "Activity Room",
-      category: draft.category,
-      type: draft.type,
-      description: draft.description.trim() || "Resident-friendly activity block.",
-      residentFacingDescription: draft.description.trim() || "Resident-friendly activity block.",
-      suppliesNeeded: draft.suppliesNeeded
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      internalNotes: draft.internalNotes.trim(),
-      prepLevel: "Low",
-      indoorOutdoor: "Indoor",
-      backupAlternative: draft.backupPlan.trim(),
-      reusableTemplate: false,
-      isRecurring: draft.isRecurring,
-      repeatRule: recurringRule,
-      recurrenceRule: recurringRule,
-      recurrenceType: draft.isRecurring ? draft.recurrenceType : null,
-      recurrenceInterval:
-        draft.isRecurring && draft.recurrenceType === "CUSTOM"
-          ? Math.max(1, draft.recurrenceCustomInterval || 1)
-          : draft.isRecurring && draft.recurrenceType === "BIWEEKLY"
-            ? 2
-            : draft.isRecurring && draft.recurrenceType === "WEEKLY"
-              ? 1
-              : draft.isRecurring && draft.recurrenceType === "MONTHLY"
-                ? 1
-                : draft.isRecurring && draft.recurrenceType === "DAILY"
-                  ? 1
-                  : null,
-      recurrenceDaysOfWeek:
-        draft.isRecurring &&
-        (draft.recurrenceType === "WEEKLY" ||
-          draft.recurrenceType === "BIWEEKLY" ||
-          draft.recurrenceType === "WEEKDAYS" ||
-          draft.recurrenceType === "CUSTOM")
-          ? draft.recurrenceType === "WEEKDAYS"
-            ? [1, 2, 3, 4, 5]
-            : repeatOnDays
-          : null,
-      recurrenceEndType: draft.isRecurring ? draft.recurrenceEndType : null,
-      recurrenceEndDate: draft.isRecurring && draft.recurrenceEndType === "ON_DATE" ? draft.recurrenceEndDate : null,
-      recurrenceCount: draft.isRecurring && draft.recurrenceEndType === "AFTER_OCCURRENCES" ? draft.recurrenceCount : null,
-      recurrenceExclusions: draft.isRecurring ? [...draft.recurrenceExclusions] : null,
-      recurringSeriesId: draft.isRecurring ? recurringSeriesId : null,
-      tags: [
-        draft.type,
-        `tone:${draft.colorTone.toLowerCase()}`,
-        ...(draft.category ? [draft.category] : []),
-        ...(draft.isRecurring ? ["Recurring"] : [])
-      ],
-      aiGenerated: false,
-      createdFromTemplate: false
-    };
-  }
-
-  function saveActivity(options?: { keepOpen?: boolean }) {
+  async function saveActivity(options?: { keepOpen?: boolean }) {
     const draft = activityEditor.draft;
 
     if (!draft.title.trim()) {
       setActivityFormError("Activity title is required.");
+      setActivitySavingState("error");
       return;
     }
 
     const recurrenceError = validateRecurringDraft(draft);
     if (recurrenceError) {
       setActivityFormError(recurrenceError);
+      setActivitySavingState("error");
+      return;
+    }
+
+    if (parseTimeToMinutes(draft.endTime) <= parseTimeToMinutes(draft.startTime)) {
+      setActivityFormError("End time must be later than start time.");
+      setActivitySavingState("error");
+      return;
+    }
+
+    const payload = buildPersistencePayloadFromDraft(draft, timeZone);
+    if (!payload) {
+      setActivityFormError("Invalid date or time. Please check the activity details.");
+      setActivitySavingState("error");
       return;
     }
 
     setActivityFormError(null);
+    setSavingActivity(true);
+    setActivitySavingState("saving");
 
-    setCalendars((current) => {
-      let next = [...current];
-      const isEdit = activityEditor.mode === "edit";
-      const isSeriesEdit = isEdit && activityEditor.editScope === "series" && Boolean(activityEditor.sourceSeriesId);
-      const seriesId = draft.isRecurring
-        ? isSeriesEdit && activityEditor.sourceSeriesId
-          ? activityEditor.sourceSeriesId
-          : uniqueId("series")
-        : null;
+    try {
+      let response: Response;
 
-      if (isSeriesEdit && activityEditor.sourceSeriesId) {
-        next = removeSeriesFromCalendars(next, activityEditor.sourceSeriesId);
-      } else if (isEdit) {
-        next = upsertDay(next, activityEditor.originalDate, (day) =>
-          refreshDayFlags({
-            ...day,
-            activities: day.activities.filter((activity) => activity.id !== activityEditor.activityId)
+      if (activityEditor.mode === "edit") {
+        if (activityEditor.editScope === "series" && activityEditor.sourceSeriesId) {
+          const durationMin = Math.max(15, parseTimeToMinutes(draft.endTime) - parseTimeToMinutes(draft.startTime));
+          const recurrencePayload = mapRecurrenceToApi(draft, timeZone);
+          response = await fetch(`/api/calendar/series/${encodeURIComponent(activityEditor.sourceSeriesId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scope: "series",
+              title: payload.title,
+              location: payload.location,
+              dtstart: payload.startAt,
+              durationMin,
+              rrule: recurrencePayload ? recurrencePayloadToRRule(recurrencePayload) : undefined,
+              until: recurrencePayload?.until ?? null,
+              timezone: recurrencePayload?.timezone ?? timeZone,
+              checklist: payload.checklist,
+              adaptations: payload.adaptationsEnabled
+            })
+          });
+        } else {
+          response = await fetch(`/api/calendar/activities/${encodeURIComponent(activityEditor.activityId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: payload.title,
+              startAt: payload.startAt,
+              endAt: payload.endAt,
+              location: payload.location,
+              checklist: payload.checklist,
+              adaptationsEnabled: payload.adaptationsEnabled
+            })
+          });
+        }
+      } else {
+        response = await fetch("/api/calendar/activities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: payload.title,
+            startAt: payload.startAt,
+            endAt: payload.endAt,
+            location: payload.location,
+            checklist: payload.checklist,
+            adaptationsEnabled: payload.adaptationsEnabled,
+            recurrence: payload.recurrence
           })
-        );
-      }
-
-      const recurringDates = draft.isRecurring ? generateRecurringDates(draft) : [draft.date];
-      const firstId = !isEdit || isSeriesEdit ? uniqueId("activity") : activityEditor.activityId;
-
-      recurringDates.forEach((dateISO, index) => {
-        const nextActivity = buildActivityFromDraft({
-          draft,
-          dateISO,
-          activityId: index === 0 ? firstId : uniqueId("activity"),
-          recurringSeriesId: seriesId
         });
-
-        next = upsertDay(next, dateISO, (day) =>
-          refreshDayFlags({
-            ...day,
-            activities: [...day.activities, nextActivity].sort(activitySort)
-          })
-        );
-      });
-
-      return next;
-    });
-
-    const selected = parseDate(draft.date);
-    setSelected(selected);
-
-    if (options?.keepOpen) {
-      setActivityEditor({
-        mode: "create",
-        draft: defaultDraft(draft.date)
-      });
-      return;
-    }
-
-    setActivityModalOpen(false);
-  }
-
-  function deleteActivity(dateISO: string, activity: CalendarActivity, scope: "single" | "series") {
-    setCalendars((current) => {
-      if (scope === "series" && activity.recurringSeriesId) {
-        return removeSeriesFromCalendars(current, activity.recurringSeriesId);
       }
 
-      return upsertDay(current, dateISO, (day) =>
-        refreshDayFlags({
-          ...day,
-          activities: day.activities.filter((entry) => entry.id !== activity.id)
-        })
-      );
-    });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(result.error || "We couldn't save this activity. Please try again.");
+      }
+
+      await fetchPersistedActivities();
+      setSelected(parseDate(draft.date));
+      setActivitySavingState("success");
+
+      toast({
+        title: activityEditor.mode === "edit" ? "Activity updated" : "Activity saved",
+        description:
+          activityEditor.mode === "edit"
+            ? "Changes were saved and synced to your calendar."
+            : "Activity saved and synced to your calendar."
+      });
+
+      if (options?.keepOpen) {
+        setActivityEditor({
+          mode: "create",
+          draft: defaultDraft(draft.date)
+        });
+        setActivitySavingState("idle");
+        return;
+      }
+
+      setActivityModalOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "We couldn't save this activity. Please try again.";
+      setActivityFormError(message);
+      setActivitySavingState("error");
+      toast({
+        title: "Save failed",
+        description: message,
+        variant: "destructive"
+      });
+    } finally {
+      setSavingActivity(false);
+    }
   }
 
-  function duplicateActivity(dateISO: string, activity: CalendarActivity) {
-    const duplicate: CalendarActivity = {
-      ...activity,
-      id: uniqueId("activity"),
+  async function deleteActivity(_dateISO: string, activity: CalendarActivity, scope: "single" | "series") {
+    setSavingActivity(true);
+    try {
+      if (scope === "series" && activity.recurringSeriesId) {
+        const response = await fetch(`/api/calendar/series/${encodeURIComponent(activity.recurringSeriesId)}`, {
+          method: "DELETE"
+        });
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string };
+          throw new Error(payload.error || "Unable to delete recurring activity series.");
+        }
+      } else {
+        const response = await fetch(`/api/calendar/activities/${encodeURIComponent(activity.id)}`, {
+          method: "DELETE"
+        });
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string };
+          throw new Error(payload.error || "Unable to delete activity.");
+        }
+      }
+
+      await fetchPersistedActivities();
+      toast({
+        title: "Activity deleted",
+        description: "Calendar updates were saved."
+      });
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Unable to delete activity.",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingActivity(false);
+    }
+  }
+
+  function buildDraftFromExistingActivity(activity: CalendarActivity, dateISO: string): ActivityDraft {
+    return {
+      ...defaultDraft(dateISO),
       title: `${activity.title} (Copy)`,
+      startTime: toInputTime(activity.startTime),
+      endTime: toInputTime(activity.endTime),
+      location: activity.location,
+      category: activity.category,
+      type: activity.type,
+      description: activity.description,
+      suppliesNeeded: activity.suppliesNeeded.join(", "),
+      backupPlan: activity.backupAlternative,
+      internalNotes: activity.internalNotes,
+      colorTone: COLOR_TONES.find((tone) => activity.tags.includes(`tone:${tone.toLowerCase()}`)) ?? "Teal",
       isRecurring: false,
-      repeatRule: null,
-      recurrenceRule: null,
-      recurrenceType: null,
-      recurrenceInterval: null,
-      recurrenceDaysOfWeek: null,
-      recurrenceEndType: null,
-      recurrenceEndDate: null,
-      recurrenceCount: null,
-      recurrenceExclusions: null,
-      recurringSeriesId: null,
-      tags: activity.tags.filter((tag) => tag.toLowerCase() !== "recurring")
+      recurrenceType: "WEEKLY",
+      recurrenceRepeatOn: [parseDate(dateISO).getDay()],
+      recurrenceEndType: "NEVER",
+      recurrenceEndDate: "",
+      recurrenceCount: 10,
+      recurrenceCustomInterval: 1,
+      recurrenceExclusions: []
     };
-
-    setCalendars((current) =>
-      upsertDay(current, dateISO, (day) =>
-        refreshDayFlags({
-          ...day,
-          activities: [...day.activities, duplicate].sort(activitySort)
-        })
-      )
-    );
   }
 
-  function copyDayPlan(sourceDateISO: string, targetDateISO: string) {
+  async function duplicateActivity(dateISO: string, activity: CalendarActivity) {
+    const duplicateDraft = buildDraftFromExistingActivity(activity, dateISO);
+    const payload = buildPersistencePayloadFromDraft(duplicateDraft, timeZone);
+    if (!payload) return;
+
+    try {
+      const response = await fetch("/api/calendar/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: payload.title,
+          startAt: payload.startAt,
+          endAt: payload.endAt,
+          location: payload.location,
+          checklist: payload.checklist,
+          adaptationsEnabled: payload.adaptationsEnabled
+        })
+      });
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error || "Unable to duplicate activity.");
+      }
+      await fetchPersistedActivities();
+      toast({
+        title: "Activity duplicated",
+        description: "The copied activity was saved."
+      });
+    } catch (error) {
+      toast({
+        title: "Duplicate failed",
+        description: error instanceof Error ? error.message : "Unable to duplicate activity.",
+        variant: "destructive"
+      });
+    }
+  }
+
+  async function copyDayPlan(sourceDateISO: string, targetDateISO: string) {
     if (!targetDateISO || targetDateISO === sourceDateISO) return;
 
     const sourceDay = dayLookup.get(sourceDateISO) ?? createEmptyDay(sourceDateISO);
     if (sourceDay.activities.length === 0) return;
 
-    const copies = sourceDay.activities.map((activity) => ({
-      ...activity,
-      id: uniqueId("activity"),
-      isRecurring: false,
-      repeatRule: null,
-      recurrenceRule: null,
-      recurrenceType: null,
-      recurrenceInterval: null,
-      recurrenceDaysOfWeek: null,
-      recurrenceEndType: null,
-      recurrenceEndDate: null,
-      recurrenceCount: null,
-      recurrenceExclusions: null,
-      recurringSeriesId: null,
-      tags: activity.tags.filter((tag) => tag.toLowerCase() !== "recurring")
-    }));
+    setSavingActivity(true);
+    try {
+      for (const activity of sourceDay.activities) {
+        const draft = buildDraftFromExistingActivity(activity, targetDateISO);
+        draft.title = activity.title;
+        const payload = buildPersistencePayloadFromDraft(draft, timeZone);
+        if (!payload) continue;
+        const response = await fetch("/api/calendar/activities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: payload.title,
+            startAt: payload.startAt,
+            endAt: payload.endAt,
+            location: payload.location,
+            checklist: payload.checklist,
+            adaptationsEnabled: payload.adaptationsEnabled
+          })
+        });
+        if (!response.ok) {
+          const result = (await response.json()) as { error?: string };
+          throw new Error(result.error || "Unable to copy day plan.");
+        }
+      }
 
-    setCalendars((current) =>
-      upsertDay(current, targetDateISO, (day) =>
-        refreshDayFlags({
-          ...day,
-          activities: [...day.activities, ...copies].sort(activitySort)
-        })
-      )
-    );
-
-    setSelected(parseDate(targetDateISO));
+      await fetchPersistedActivities();
+      setSelected(parseDate(targetDateISO));
+      toast({
+        title: "Day copied",
+        description: "Activities were copied and saved."
+      });
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: error instanceof Error ? error.message : "Unable to copy day plan.",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingActivity(false);
+    }
   }
 
   function requestEditActivity(activity: CalendarActivity, dateISO: string) {
@@ -1136,6 +1406,21 @@ export function CalendarCreationWorkspace() {
           }
         }}
       />
+
+      {activitiesLoadError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+          {activitiesLoadError}
+          <button
+            type="button"
+            onClick={() => void fetchPersistedActivities()}
+            className="ml-2 inline-flex rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {activitiesLoading ? <p className="text-xs font-medium text-slate-500">Loading saved activities…</p> : null}
 
       {upcomingBirthdays.length > 0 ? (
         <UpcomingBirthdaysStrip
@@ -1218,6 +1503,8 @@ export function CalendarCreationWorkspace() {
         open={activityModalOpen}
         editor={activityEditor}
         error={activityFormError}
+        saving={savingActivity}
+        saveState={activitySavingState}
         onClose={() => setActivityModalOpen(false)}
         onSave={() => saveActivity()}
         onSaveAndAddAnother={() => saveActivity({ keepOpen: true })}
@@ -2010,6 +2297,8 @@ function ActivityModal({
   open,
   editor,
   error,
+  saving,
+  saveState,
   onClose,
   onSave,
   onSaveAndAddAnother,
@@ -2018,6 +2307,8 @@ function ActivityModal({
   open: boolean;
   editor: ActivityEditorState;
   error: string | null;
+  saving: boolean;
+  saveState: "idle" | "saving" | "success" | "error";
   onClose: () => void;
   onSave: () => void;
   onSaveAndAddAnother: () => void;
@@ -2398,7 +2689,8 @@ function ActivityModal({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          disabled={saving}
+          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Cancel
         </button>
@@ -2406,19 +2698,23 @@ function ActivityModal({
           <button
             type="button"
             onClick={onSaveAndAddAnother}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            disabled={saving}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {draft.isRecurring ? "Save Series & Add Another" : "Save and Add Another"}
+            {saving ? "Saving…" : draft.isRecurring ? "Save Series & Add Another" : "Save and Add Another"}
           </button>
         ) : null}
         <button
           type="button"
           onClick={onSave}
-          className="rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          disabled={saving}
+          className="rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {editor.mode === "edit" ? "Save Changes" : draft.isRecurring ? "Save Activity Series" : "Save Activity"}
+          {saving ? "Saving activity…" : editor.mode === "edit" ? "Save Changes" : draft.isRecurring ? "Save Activity Series" : "Save Activity"}
         </button>
       </div>
+      {saveState === "success" ? <p className="mt-2 text-xs font-semibold text-emerald-600">Activity saved.</p> : null}
+      {saveState === "saving" ? <p className="mt-2 text-xs font-semibold text-slate-500">Saving activity…</p> : null}
     </ModalShell>
   );
 }
