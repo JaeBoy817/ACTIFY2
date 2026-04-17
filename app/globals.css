@@ -2110,3 +2110,38 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
     background: linear-gradient(180deg, rgba(9, 13, 20, 0.22) 0%, rgba(9, 13, 20, 0.52) 100%);
   }
 }
+
+.home-float-a {
+  animation: home-float-a 9.5s ease-in-out infinite;
+}
+
+.home-float-b {
+  animation: home-float-b 11s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-float-a,
+  .home-float-b {
+    animation: none;
+  }
+}
+
+@keyframes home-float-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes home-float-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, 5px, 0);
+  }
+}
