@@ -86,9 +86,7 @@ const COMPLETE_MONTH_DAYS: CalendarDay[] = [
   makeDay("2026-04-17"),
   makeDay("2026-04-18"),
   makeDay("2026-04-19", {
-    isHoliday: true,
-    holidayName: "Easter",
-    activities: [activity({ id: "a-8", title: "Easter Music + Memory", category: "Holiday Activity", type: "Group", startTime: "10:30 AM", endTime: "11:15 AM", tags: ["Holiday"] })]
+    activities: [activity({ id: "a-8", title: "Spring Music + Memory", category: "Holiday Activity", type: "Group", startTime: "10:30 AM", endTime: "11:15 AM", tags: ["Holiday"] })]
   }),
   makeDay("2026-04-20"),
   makeDay("2026-04-21"),

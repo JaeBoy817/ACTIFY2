@@ -39,6 +39,9 @@ import { type ReactNode, useMemo, useState } from "react";
 import { DrawerShell, ModalShell } from "@/components/workspace/shared";
 import { SAMPLE_CALENDARS } from "@/lib/calendar-creation/mockData";
 import type { CalendarActivity, CalendarActivityType, CalendarDay, CalendarMonth } from "@/lib/calendar-creation/types";
+import { buildHolidayLookup, getHolidayBadgeForDate } from "@/lib/calendar/getHolidayBadgeForDate";
+import { getHolidaysForYear } from "@/lib/calendar/getHolidaysForYear";
+import type { CalendarHoliday } from "@/lib/calendar/holidays";
 import { cn } from "@/lib/utils";
 
 type CalendarViewMode = "month" | "week" | "day";
@@ -376,6 +379,29 @@ export function CalendarCreationWorkspace() {
     return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   }, [anchorDate]);
 
+  const visibleDates = useMemo(() => {
+    if (viewMode === "month") return monthDays;
+    if (viewMode === "week") return weekDays;
+    return [selectedDate];
+  }, [monthDays, selectedDate, viewMode, weekDays]);
+
+  const holidayLookup = useMemo(() => {
+    const years = new Set<number>();
+
+    visibleDates.forEach((date) => {
+      years.add(date.getFullYear());
+    });
+
+    years.add(selectedDate.getFullYear());
+
+    if (dayDrawerDate) {
+      years.add(dayDrawerDate.getFullYear());
+    }
+
+    const holidayEntries = Array.from(years).flatMap((year) => getHolidaysForYear(year));
+    return buildHolidayLookup(holidayEntries);
+  }, [dayDrawerDate, selectedDate, visibleDates]);
+
   const selectedDay = useMemo(() => {
     const date = dayDrawerDate ?? selectedDate;
     const iso = toISODate(date);
@@ -638,6 +664,7 @@ export function CalendarCreationWorkspace() {
             anchorDate={anchorDate}
             getDay={getDay}
             getVisibleActivities={getVisibleActivities}
+            getHolidayBadges={(date) => getHolidayBadgeForDate(toISODate(date), holidayLookup)}
             onOpenDay={(date) => setSelected(date, true)}
             onQuickAdd={openCreateActivity}
           />
@@ -649,6 +676,7 @@ export function CalendarCreationWorkspace() {
             selectedDate={selectedDate}
             getDay={getDay}
             getVisibleActivities={getVisibleActivities}
+            getHolidayBadges={(date) => getHolidayBadgeForDate(toISODate(date), holidayLookup)}
             onSelectDate={setSelected}
             onQuickAdd={openCreateActivity}
             onOpenEdit={openEditActivity}
@@ -660,6 +688,7 @@ export function CalendarCreationWorkspace() {
             date={selectedDate}
             day={getDay(selectedDate)}
             categoryFilter={categoryFilter}
+            holidays={getHolidayBadgeForDate(toISODate(selectedDate), holidayLookup)}
             onAddActivity={openCreateActivity}
             onOpenEdit={openEditActivity}
             onDelete={deleteActivity}
@@ -678,6 +707,7 @@ export function CalendarCreationWorkspace() {
         date={dayDrawerDate ?? selectedDate}
         day={selectedDay}
         categoryFilter={categoryFilter}
+        holidays={getHolidayBadgeForDate(toISODate(dayDrawerDate ?? selectedDate), holidayLookup)}
         onClose={() => setDayDrawerDate(null)}
         onAddActivity={(date) => openCreateActivity(date)}
         onOpenEdit={openEditActivity}
@@ -900,6 +930,7 @@ function MonthCalendarGrid({
   anchorDate,
   getDay,
   getVisibleActivities,
+  getHolidayBadges,
   onOpenDay,
   onQuickAdd
 }: {
@@ -908,6 +939,7 @@ function MonthCalendarGrid({
   anchorDate: Date;
   getDay: (date: Date) => CalendarDay;
   getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
+  getHolidayBadges: (date: Date) => CalendarHoliday[];
   onOpenDay: (date: Date) => void;
   onQuickAdd: (date: Date) => void;
 }) {
@@ -926,18 +958,19 @@ function MonthCalendarGrid({
         {days.map((date) => {
           const day = getDay(date);
           const activities = getVisibleActivities(day);
+          const holidayBadges = getHolidayBadges(date);
 
           return (
             <MonthCalendarDayCell
               key={toISODate(date)}
               date={date}
               activities={activities}
+              holidayBadges={holidayBadges}
               outsideMonth={!isSameMonth(date, anchorDate)}
               isSelected={isSameDay(date, selectedDate)}
               onOpenDay={() => onOpenDay(date)}
               onQuickAdd={() => onQuickAdd(date)}
               isTodayDate={isToday(date)}
-              holidayName={day.holidayName}
               isSpecialEvent={day.isSpecialEvent}
             />
           );
@@ -950,26 +983,28 @@ function MonthCalendarGrid({
 function MonthCalendarDayCell({
   date,
   activities,
+  holidayBadges,
   outsideMonth,
   isSelected,
   isTodayDate,
-  holidayName,
   isSpecialEvent,
   onOpenDay,
   onQuickAdd
 }: {
   date: Date;
   activities: CalendarActivity[];
+  holidayBadges: CalendarHoliday[];
   outsideMonth: boolean;
   isSelected: boolean;
   isTodayDate: boolean;
-  holidayName: string | null;
   isSpecialEvent: boolean;
   onOpenDay: () => void;
   onQuickAdd: () => void;
 }) {
   const preview = activities.slice(0, 3);
   const overflowCount = activities.length - preview.length;
+  const holidayPreview = holidayBadges.slice(0, 1);
+  const holidayOverflow = holidayBadges.length - holidayPreview.length;
 
   return (
     <div
@@ -1001,8 +1036,11 @@ function MonthCalendarDayCell({
           >
             {format(date, "d")}
           </span>
-          {holidayName ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{holidayName}</span> : null}
-          {!holidayName && isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Event</span> : null}
+          {holidayPreview.map((holiday) => (
+            <HolidayBadge key={holiday.id} holiday={holiday} compact />
+          ))}
+          {holidayOverflow > 0 ? <span className="text-[10px] font-semibold text-slate-500">+{holidayOverflow}</span> : null}
+          {holidayBadges.length === 0 && isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Event</span> : null}
         </div>
 
         <button
@@ -1037,6 +1075,7 @@ function WeekCalendarView({
   selectedDate,
   getDay,
   getVisibleActivities,
+  getHolidayBadges,
   onSelectDate,
   onQuickAdd,
   onOpenEdit
@@ -1045,6 +1084,7 @@ function WeekCalendarView({
   selectedDate: Date;
   getDay: (date: Date) => CalendarDay;
   getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
+  getHolidayBadges: (date: Date) => CalendarHoliday[];
   onSelectDate: (date: Date, openDrawer?: boolean) => void;
   onQuickAdd: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
@@ -1054,6 +1094,7 @@ function WeekCalendarView({
       {days.map((date) => {
         const day = getDay(date);
         const activities = getVisibleActivities(day);
+        const holidayBadges = getHolidayBadges(date);
 
         return (
           <section
@@ -1071,6 +1112,13 @@ function WeekCalendarView({
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{format(date, "EEE")}</p>
                 <p className="text-sm font-semibold text-slate-900">{format(date, "MMM d")}</p>
+                {holidayBadges.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {holidayBadges.slice(0, 2).map((holiday) => (
+                      <HolidayBadge key={holiday.id} holiday={holiday} compact />
+                    ))}
+                  </div>
+                ) : null}
               </div>
               {isToday(date) ? <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">Today</span> : null}
             </button>
@@ -1115,6 +1163,7 @@ function DayCalendarView({
   date,
   day,
   categoryFilter,
+  holidays,
   onAddActivity,
   onOpenEdit,
   onDelete,
@@ -1124,6 +1173,7 @@ function DayCalendarView({
   date: Date;
   day: CalendarDay;
   categoryFilter: string;
+  holidays: CalendarHoliday[];
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
   onDelete: (dateISO: string, activityId: string) => void;
@@ -1140,6 +1190,13 @@ function DayCalendarView({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Day View</p>
           <h2 className="text-lg font-semibold text-slate-900">{format(date, "EEEE, MMMM d, yyyy")}</h2>
+          {holidays.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {holidays.map((holiday) => (
+                <HolidayBadge key={holiday.id} holiday={holiday} />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1190,6 +1247,7 @@ function DayDetailDrawer({
   date,
   day,
   categoryFilter,
+  holidays,
   onClose,
   onAddActivity,
   onOpenEdit,
@@ -1204,6 +1262,7 @@ function DayDetailDrawer({
   date: Date;
   day: CalendarDay;
   categoryFilter: string;
+  holidays: CalendarHoliday[];
   onClose: () => void;
   onAddActivity: (date: Date) => void;
   onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
@@ -1226,7 +1285,9 @@ function DayDetailDrawer({
         <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             {isToday(date) ? <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white">Today</span> : null}
-            {day.holidayName ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">{day.holidayName}</span> : null}
+            {holidays.map((holiday) => (
+              <HolidayBadge key={holiday.id} holiday={holiday} />
+            ))}
             {day.isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">Special Event</span> : null}
           </div>
 
@@ -1549,6 +1610,21 @@ function CalendarCategoryBadge({ category }: { category: string }) {
   );
 }
 
+function HolidayBadge({ holiday, compact = false }: { holiday: CalendarHoliday; compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 font-semibold",
+        compact ? "max-w-[7rem] truncate text-[10px]" : "text-[11px]",
+        holidayTone(holiday)
+      )}
+      title={holiday.name}
+    >
+      {holiday.name}
+    </span>
+  );
+}
+
 function badgeTone(category: string) {
   if (category.includes("1:1") || category.includes("Room")) {
     return "border border-violet-200 bg-violet-50 text-violet-700";
@@ -1567,6 +1643,26 @@ function badgeTone(category: string) {
   }
 
   return "border border-sky-200 bg-sky-50 text-sky-700";
+}
+
+function holidayTone(holiday: CalendarHoliday) {
+  if (holiday.type === "observed") {
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+
+  if (holiday.category === "federal") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  if (holiday.category === "religious") {
+    return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  }
+
+  if (holiday.category === "skilled-nursing") {
+    return "border-teal-200 bg-teal-50 text-teal-700";
+  }
+
+  return "border-violet-200 bg-violet-50 text-violet-700";
 }
 
 function CalendarMiniActions({ onAction, selectedDate }: { onAction: (prompt: string) => void; selectedDate: Date }) {
