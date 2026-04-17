@@ -28,8 +28,8 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   },
   {
     href: "/calendar-creation",
-    label: "Calendar Creation",
-    helpText: "Build monthly calendars and themed weeks faster.",
+    label: "Calendar",
+    helpText: "Plan activities by month, week, and day.",
     icon: CalendarDays
   }
 ];

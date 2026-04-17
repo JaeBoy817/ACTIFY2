@@ -1,859 +1,1655 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import {
-  Calendar,
+  addDays,
+  addMonths,
+  addWeeks,
+  endOfMonth,
+  endOfWeek,
+  format,
+  getDaysInMonth,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+  subMonths,
+  subWeeks
+} from "date-fns";
+import {
+  CalendarPlus2,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
   Copy,
-  FileDown,
-  Loader2,
+  Edit3,
+  MapPin,
   Plus,
   Printer,
-  Save,
   Sparkles,
-  Users,
+  Trash2,
   WandSparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { type ReactNode, useMemo, useState } from "react";
 
-import {
-  ACTIVITY_BANK_TEMPLATES,
-  CALENDAR_TEMPLATE_CARDS,
-  DAY_PATTERNS,
-  HOLIDAY_PLAN_EXAMPLE,
-  LOW_BUDGET_WEEK_EXAMPLE,
-  SAMPLE_CALENDARS,
-  THEME_WEEK_EXAMPLE
-} from "@/lib/calendar-creation/mockData";
-import type { ActivityTemplateItem, CalendarActivity, CalendarMonth } from "@/lib/calendar-creation/types";
-import {
-  ActionButton,
-  AIShortcutButton,
-  DrawerShell,
-  EmptyStateCard,
-  NotesBlock,
-  PageHeader,
-  PageSubheader,
-  SearchInput,
-  SectionCard,
-  SortDropdown,
-  StatusBadge,
-  StickyActionBar,
-  SummaryStatCard,
-  TagChip,
-  ModalShell
-} from "@/components/workspace/shared";
+import { DrawerShell, ModalShell } from "@/components/workspace/shared";
+import { SAMPLE_CALENDARS } from "@/lib/calendar-creation/mockData";
+import type { CalendarActivity, CalendarActivityType, CalendarDay, CalendarMonth } from "@/lib/calendar-creation/types";
 import { cn } from "@/lib/utils";
 
-const MONTH_OPTIONS = [
-  { key: "1", label: "January" },
-  { key: "2", label: "February" },
-  { key: "3", label: "March" },
-  { key: "4", label: "April" },
-  { key: "5", label: "May" },
-  { key: "6", label: "June" },
-  { key: "7", label: "July" },
-  { key: "8", label: "August" },
-  { key: "9", label: "September" },
-  { key: "10", label: "October" },
-  { key: "11", label: "November" },
-  { key: "12", label: "December" }
-] as const;
+type CalendarViewMode = "month" | "week" | "day";
 
-const VIEW_OPTIONS = [
-  { key: "MONTH", label: "Month" },
-  { key: "WEEK", label: "Week Preview" },
-  { key: "PRINT", label: "Print Preview" }
-] as const;
+type ActivityDraft = {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  category: string;
+  type: CalendarActivityType;
+  description: string;
+  suppliesNeeded: string;
+  backupPlan: string;
+  internalNotes: string;
+  colorTone: string;
+};
 
-type CalendarViewMode = (typeof VIEW_OPTIONS)[number]["key"];
+type ActivityEditorState =
+  | {
+      mode: "create";
+      draft: ActivityDraft;
+    }
+  | {
+      mode: "edit";
+      draft: ActivityDraft;
+      activityId: string;
+      originalDate: string;
+    };
 
-type BuilderModalKey =
-  | "create"
-  | "duplicate"
-  | "save-template"
-  | "fill-empty"
-  | "theme-week"
-  | "holiday"
-  | "low-budget"
-  | "weekend"
-  | "copy"
-  | "export"
-  | null;
+const VIEW_OPTIONS: Array<{ key: CalendarViewMode; label: string }> = [
+  { key: "month", label: "Month" },
+  { key: "week", label: "Week" },
+  { key: "day", label: "Day" }
+];
 
-const QUICK_ACTIONS = [
-  { id: "fill-empty", label: "Fill Empty Days" },
-  { id: "theme-week", label: "Generate Themed Week" },
-  { id: "holiday", label: "Generate Holiday Plan" },
-  { id: "low-budget", label: "Build Low-Budget Month" },
-  { id: "backup", label: "Add Backup Activities" },
-  { id: "weekend", label: "Create Weekend Ideas" },
-  { id: "balance", label: "Balance Group / 1:1 Mix" },
-  { id: "bed-bound", label: "Add Bed-Bound Friendly Options" },
-  { id: "duplicate-pattern", label: "Duplicate Last Week Pattern" },
-  { id: "auto-title", label: "Auto-Suggest Activity Names" },
-  { id: "rainy", label: "Build Rainy Day Backups" },
-  { id: "seasonal", label: "Add Seasonal Ideas" },
-  { id: "independent", label: "Generate Independent Room Options" }
-] as const;
+const DAY_HEADERS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const ACTIVITY_CATEGORIES = [
-  "All",
+const CATEGORY_OPTIONS = [
+  "All Categories",
   "Group Activity",
-  "1:1 Visits",
-  "Bed-Bound Support",
+  "1:1 Visit",
   "Independent Activity",
-  "Dementia-Friendly",
+  "Holiday Activity",
+  "Sensory Activity",
   "Physical Activity",
   "Cognitive Activity",
-  "Sensory Activity",
-  "Holiday Activity",
-  "Social Event",
+  "Music / Entertainment",
   "Spiritual / Religious",
-  "Creative / Craft",
-  "Entertainment / Music",
-  "Games / Trivia",
-  "Community / Family Event",
-  "Room Visit",
-  "Wellness / Relaxation",
-  "Seasonal Special"
+  "Social Event",
+  "Craft / Creative",
+  "Room Visit"
 ] as const;
 
-function monthLabel(month: number) {
-  return MONTH_OPTIONS.find((option) => Number(option.key) === month)?.label ?? "Month";
+const TYPE_OPTIONS: CalendarActivityType[] = ["Group", "1:1", "Independent"];
+
+const COLOR_TONES = ["Teal", "Blue", "Violet", "Rose", "Amber", "Slate"] as const;
+
+function toISODate(date: Date) {
+  return format(startOfDay(date), "yyyy-MM-dd");
 }
 
-function toDateLabel(value: string) {
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+function parseDate(isoDate: string) {
+  return startOfDay(parseISO(`${isoDate}T00:00:00`));
+}
+
+function createEmptyDay(date: string): CalendarDay {
+  return {
+    date,
+    holidayName: null,
+    isHoliday: false,
+    isSpecialEvent: false,
+    hasBackupPlan: false,
+    hasOneToOneCoverage: false,
+    dayNotes: "",
+    prepReminders: "",
+    staffOnlyNotes: "",
+    activities: []
+  };
+}
+
+function createBlankCalendarMonth(year: number, month: number): CalendarMonth {
+  const baseDate = new Date(year, month - 1, 1);
+  const daysInMonth = getDaysInMonth(baseDate);
+
+  const days = Array.from({ length: daysInMonth }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0");
+    return createEmptyDay(`${year}-${String(month).padStart(2, "0")}-${day}`);
+  });
+
+  return {
+    calendarId: `calendar-${year}-${String(month).padStart(2, "0")}-draft`,
+    title: `${format(baseDate, "MMMM yyyy")} Activity Calendar`,
+    month,
+    year,
+    facilityName: "Actify",
+    templateSource: null,
+    isDraft: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    days,
+    notes: "",
+    printSettings: {
+      includeInternalNotes: false,
+      includeBackupNotes: true,
+      includeDescriptions: true,
+      grayscale: false,
+      includeFacilityName: true,
+      includeHolidayBadges: true,
+      includeLegend: false
+    },
+    exportSettings: {
+      lastExportAt: null,
+      lastFormat: null
+    }
+  };
+}
+
+function sortCalendars(calendars: CalendarMonth[]) {
+  return [...calendars].sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return a.month - b.month;
+  });
+}
+
+function ensureCalendarMonth(calendars: CalendarMonth[], year: number, month: number) {
+  const index = calendars.findIndex((calendar) => calendar.year === year && calendar.month === month);
+  if (index >= 0) {
+    return {
+      index,
+      calendars: [...calendars]
+    };
+  }
+
+  return {
+    index: calendars.length,
+    calendars: [...calendars, createBlankCalendarMonth(year, month)]
+  };
+}
+
+function refreshDayFlags(day: CalendarDay): CalendarDay {
+  return {
+    ...day,
+    hasBackupPlan: day.activities.some((activity) => activity.backupAlternative.trim().length > 0),
+    hasOneToOneCoverage: day.activities.some((activity) => activity.type === "1:1")
+  };
+}
+
+function upsertDay(calendars: CalendarMonth[], dateISO: string, updater: (day: CalendarDay) => CalendarDay) {
+  const targetDate = parseDate(dateISO);
+  const year = targetDate.getFullYear();
+  const month = targetDate.getMonth() + 1;
+
+  const { calendars: withMonth, index } = ensureCalendarMonth(calendars, year, month);
+  const calendar = withMonth[index];
+  const dayIndex = calendar.days.findIndex((day) => day.date === dateISO);
+
+  const day = dayIndex >= 0 ? calendar.days[dayIndex] : createEmptyDay(dateISO);
+  const nextDay = updater(day);
+
+  const nextDays = dayIndex >= 0 ? calendar.days.map((item, idx) => (idx === dayIndex ? nextDay : item)) : [...calendar.days, nextDay];
+
+  nextDays.sort((a, b) => a.date.localeCompare(b.date));
+
+  const nextCalendar: CalendarMonth = {
+    ...calendar,
+    days: nextDays,
+    updatedAt: new Date().toISOString()
+  };
+
+  const nextCalendars = withMonth.map((item, idx) => (idx === index ? nextCalendar : item));
+  return sortCalendars(nextCalendars);
+}
+
+function uniqueId(prefix: string) {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function parseTimeToMinutes(value: string) {
+  const plain = value.trim();
+
+  const twentyFourMatch = plain.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourMatch) {
+    const hour = Number(twentyFourMatch[1]);
+    const minute = Number(twentyFourMatch[2]);
+    return hour * 60 + minute;
+  }
+
+  const meridiemMatch = plain.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!meridiemMatch) return Number.MAX_SAFE_INTEGER;
+
+  const hour = Number(meridiemMatch[1]);
+  const minute = Number(meridiemMatch[2]);
+  const meridiem = meridiemMatch[3].toUpperCase();
+  const normalizedHour = hour % 12 + (meridiem === "PM" ? 12 : 0);
+
+  return normalizedHour * 60 + minute;
+}
+
+function toDisplayTime(value: string) {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return value;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+
+  return `${hour}:${String(minute).padStart(2, "0")} ${meridiem}`;
+}
+
+function toInputTime(value: string) {
+  const trimmed = value.trim();
+  const twentyFourMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourMatch) {
+    return `${twentyFourMatch[1].padStart(2, "0")}:${twentyFourMatch[2]}`;
+  }
+
+  const meridiemMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!meridiemMatch) return "09:00";
+
+  let hour = Number(meridiemMatch[1]);
+  const minute = Number(meridiemMatch[2]);
+  const meridiem = meridiemMatch[3].toUpperCase();
+
+  if (meridiem === "PM" && hour < 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function activitySort(a: CalendarActivity, b: CalendarActivity) {
+  return parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime);
+}
+
+function formatRangeLabel(viewMode: CalendarViewMode, anchorDate: Date) {
+  if (viewMode === "month") {
+    return format(anchorDate, "MMMM yyyy");
+  }
+
+  if (viewMode === "week") {
+    const weekStart = startOfWeek(anchorDate, { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(anchorDate, { weekStartsOn: 0 });
+
+    if (weekStart.getMonth() === weekEnd.getMonth()) {
+      return `${format(weekStart, "MMMM d")}–${format(weekEnd, "d, yyyy")}`;
+    }
+
+    return `${format(weekStart, "MMM d")}–${format(weekEnd, "MMM d, yyyy")}`;
+  }
+
+  return format(anchorDate, "EEEE, MMMM d, yyyy");
+}
+
+function daySummary(day: CalendarDay, categoryFilter: string) {
+  const filtered = day.activities.filter((activity) => categoryFilter === "All Categories" || activity.category === categoryFilter);
+  const attended = filtered.length;
+  const grouped = filtered.filter((activity) => activity.type === "Group").length;
+  const oneToOne = filtered.filter((activity) => activity.type === "1:1").length;
+
+  return { attended, grouped, oneToOne };
+}
+
+function defaultDraft(dateISO: string): ActivityDraft {
+  return {
+    title: "",
+    date: dateISO,
+    startTime: "10:00",
+    endTime: "10:45",
+    location: "Activity Room",
+    category: "Group Activity",
+    type: "Group",
+    description: "",
+    suppliesNeeded: "",
+    backupPlan: "",
+    internalNotes: "",
+    colorTone: "Teal"
+  };
 }
 
 export function CalendarCreationWorkspace() {
   const router = useRouter();
+  const today = useMemo(() => startOfDay(new Date()), []);
 
   const [calendars, setCalendars] = useState<CalendarMonth[]>(SAMPLE_CALENDARS);
-  const [activeCalendarId] = useState(SAMPLE_CALENDARS[0]?.calendarId ?? "");
-  const [activeView, setActiveView] = useState<CalendarViewMode>("MONTH");
-  const [selectedDate, setSelectedDate] = useState(SAMPLE_CALENDARS[0]?.days[0]?.date ?? "");
-  const [calendarTitle, setCalendarTitle] = useState(SAMPLE_CALENDARS[0]?.title ?? "");
-  const [calendarMonth, setCalendarMonth] = useState(String(SAMPLE_CALENDARS[0]?.month ?? 1));
-  const [calendarYear, setCalendarYear] = useState(String(SAMPLE_CALENDARS[0]?.year ?? new Date().getFullYear()));
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
+  const [anchorDate, setAnchorDate] = useState<Date>(today);
+  const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [categoryFilter, setCategoryFilter] = useState<string>("All Categories");
+  const [jumpDate, setJumpDate] = useState<string>(toISODate(today));
 
-  const [activitySearch, setActivitySearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<(typeof ACTIVITY_CATEGORIES)[number]>("All");
+  const [dayDrawerDate, setDayDrawerDate] = useState<Date | null>(null);
+  const [copyTargetDate, setCopyTargetDate] = useState<string>(toISODate(addDays(today, 1)));
 
-  const [builderModal, setBuilderModal] = useState<BuilderModalKey>(null);
-  const [dayDrawerOpen, setDayDrawerOpen] = useState(false);
-  const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<CalendarActivity | null>(null);
+  const [activityModalOpen, setActivityModalOpen] = useState(false);
+  const [activityEditor, setActivityEditor] = useState<ActivityEditorState>({
+    mode: "create",
+    draft: defaultDraft(toISODate(today))
+  });
 
-  const [draftDayNotes, setDraftDayNotes] = useState("");
-  const [draftStaffNotes, setDraftStaffNotes] = useState("");
-  const [draftPrepNotes, setDraftPrepNotes] = useState("");
+  const dayLookup = useMemo(() => {
+    const map = new Map<string, CalendarDay>();
 
-  const activeCalendar = useMemo(() => calendars.find((calendar) => calendar.calendarId === activeCalendarId) ?? calendars[0], [activeCalendarId, calendars]);
-
-  const selectedDay = useMemo(() => activeCalendar?.days.find((day) => day.date === selectedDate) ?? activeCalendar?.days[0] ?? null, [activeCalendar, selectedDate]);
-
-  const filteredActivityBank = useMemo(() => {
-    const query = activitySearch.trim().toLowerCase();
-    return ACTIVITY_BANK_TEMPLATES.filter((item) => {
-      const matchesCategory = categoryFilter === "All" || item.category === categoryFilter;
-      const text = `${item.title} ${item.category} ${item.tags.join(" ")} ${item.description}`.toLowerCase();
-      const matchesQuery = query.length === 0 || text.includes(query);
-      return matchesCategory && matchesQuery;
+    calendars.forEach((calendar) => {
+      calendar.days.forEach((day) => {
+        map.set(day.date, day);
+      });
     });
-  }, [activitySearch, categoryFilter]);
 
-  const summary = useMemo(() => {
-    const days = activeCalendar.days;
-    const scheduledDays = days.filter((day) => day.activities.length > 0).length;
-    const emptyDays = days.filter((day) => day.activities.length === 0).length;
-    const specialEvents = days.filter((day) => day.isSpecialEvent).length;
-    const holidayDates = days.filter((day) => day.isHoliday).length;
-    const oneToOneCoverage = days.filter((day) => day.hasOneToOneCoverage).length;
-    const weekendGaps = days.filter((day) => {
-      const parsed = new Date(`${day.date}T00:00:00`);
-      const weekday = parsed.getDay();
-      const weekend = weekday === 0 || weekday === 6;
-      return weekend && day.activities.length === 0;
-    }).length;
-    const backupPlans = days.filter((day) => day.hasBackupPlan).length;
+    return map;
+  }, [calendars]);
 
-    return { scheduledDays, emptyDays, specialEvents, holidayDates, oneToOneCoverage, weekendGaps, backupPlans };
-  }, [activeCalendar]);
+  const monthDays = useMemo(() => {
+    const monthStart = startOfMonth(anchorDate);
+    const monthEnd = endOfMonth(anchorDate);
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
-  const aiShortcuts = [
-    {
-      id: "plan-week",
-      label: "Plan this week",
-      description: "Generate a practical week draft with group + 1:1 balance.",
-      prompt: "Plan this week for an activity department with balanced group and 1:1 coverage."
-    },
-    {
-      id: "fill-empty",
-      label: "Fill empty days",
-      description: "Get quick low-prep options for unscheduled dates.",
-      prompt: "Fill my empty calendar days with low-prep activities and backups."
-    },
-    {
-      id: "dementia-week",
-      label: "Build dementia-friendly week",
-      description: "Generate calm, familiar, low-stimulation options.",
-      prompt: "Create a dementia-friendly themed week with 1:1 alternatives."
-    },
-    {
-      id: "low-budget-month",
-      label: "Create low-budget month",
-      description: "Build a low-cost plan with reusable supplies.",
-      prompt: "Build a low-budget monthly activity framework with weekend coverage."
+    const days: Date[] = [];
+    for (let cursor = gridStart; cursor <= gridEnd; cursor = addDays(cursor, 1)) {
+      days.push(cursor);
     }
-  ];
+
+    return days;
+  }, [anchorDate]);
+
+  const weekDays = useMemo(() => {
+    const weekStart = startOfWeek(anchorDate, { weekStartsOn: 0 });
+    return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  }, [anchorDate]);
+
+  const selectedDay = useMemo(() => {
+    const date = dayDrawerDate ?? selectedDate;
+    const iso = toISODate(date);
+    return dayLookup.get(iso) ?? createEmptyDay(iso);
+  }, [dayDrawerDate, dayLookup, selectedDate]);
+
+  const categoryOptions = useMemo(() => {
+    const dynamic = new Set<string>(CATEGORY_OPTIONS);
+
+    calendars.forEach((calendar) => {
+      calendar.days.forEach((day) => {
+        day.activities.forEach((activity) => {
+          dynamic.add(activity.category);
+        });
+      });
+    });
+
+    return ["All Categories", ...Array.from(dynamic).filter((value) => value !== "All Categories").sort((a, b) => a.localeCompare(b))];
+  }, [calendars]);
+
+  function getDay(date: Date) {
+    const iso = toISODate(date);
+    return dayLookup.get(iso) ?? createEmptyDay(iso);
+  }
+
+  function getVisibleActivities(day: CalendarDay) {
+    return day.activities
+      .filter((activity) => categoryFilter === "All Categories" || activity.category === categoryFilter)
+      .sort(activitySort);
+  }
 
   function openAiPrompt(prompt: string) {
     router.push(`/app?assistantPrompt=${encodeURIComponent(prompt)}`);
   }
 
-  function addTemplateToDay(template: ActivityTemplateItem) {
-    if (!selectedDay) return;
+  function setSelected(date: Date, openDrawer = false) {
+    setSelectedDate(startOfDay(date));
+    setAnchorDate(startOfDay(date));
+    setJumpDate(toISODate(date));
 
-    setCalendars((current) =>
-      current.map((calendar) => {
-        if (calendar.calendarId !== activeCalendar.calendarId) return calendar;
-        return {
-          ...calendar,
-          updatedAt: new Date().toISOString(),
-          days: calendar.days.map((day) => {
-            if (day.date !== selectedDay.date) return day;
-            const nextActivity: CalendarActivity = {
-              id: `act-${crypto.randomUUID()}`,
-              title: template.title,
-              startTime: "10:00 AM",
-              endTime: "10:45 AM",
-              location: "Activity Room",
-              category: template.category,
-              type: template.category === "1:1 Visits" || template.category === "Room Visit" ? "1:1" : "Group",
-              description: template.description,
-              residentFacingDescription: template.description,
-              suppliesNeeded: [],
-              internalNotes: "",
-              prepLevel: template.prepLevel,
-              indoorOutdoor: template.indoorOutdoor,
-              backupAlternative: "Seated conversation circle",
-              reusableTemplate: false,
-              repeatRule: null,
-              tags: template.tags,
-              aiGenerated: false,
-              createdFromTemplate: true
-            };
-            return {
-              ...day,
-              activities: [...day.activities, nextActivity]
-            };
-          })
-        };
-      })
-    );
+    if (openDrawer) {
+      setDayDrawerDate(startOfDay(date));
+    }
   }
 
-  function selectDay(date: string) {
-    setSelectedDate(date);
-    setDayDrawerOpen(true);
+  function shiftRange(direction: "prev" | "next") {
+    const delta = direction === "next" ? 1 : -1;
 
-    const day = activeCalendar.days.find((entry) => entry.date === date);
-    setDraftDayNotes(day?.dayNotes ?? "");
-    setDraftStaffNotes(day?.staffOnlyNotes ?? "");
-    setDraftPrepNotes(day?.prepReminders ?? "");
-  }
-
-  function quickAction(actionId: string) {
-    if (["fill-empty", "theme-week", "holiday", "low-budget", "weekend", "copy", "export"].includes(actionId)) {
-      setBuilderModal(actionId as BuilderModalKey);
+    if (viewMode === "month") {
+      const next = delta > 0 ? addMonths(anchorDate, 1) : subMonths(anchorDate, 1);
+      setAnchorDate(next);
+      setSelectedDate(next);
+      setJumpDate(toISODate(next));
       return;
     }
 
-    const actionLabel = QUICK_ACTIONS.find((item) => item.id === actionId)?.label ?? "calendar planning";
-    openAiPrompt(`Help me with this calendar task: ${actionLabel}. Keep it practical for Activities Directors.`);
+    if (viewMode === "week") {
+      const next = delta > 0 ? addWeeks(anchorDate, 1) : subWeeks(anchorDate, 1);
+      setAnchorDate(next);
+      setSelectedDate(next);
+      setJumpDate(toISODate(next));
+      return;
+    }
+
+    const next = delta > 0 ? addDays(anchorDate, 1) : subDays(anchorDate, 1);
+    setAnchorDate(next);
+    setSelectedDate(next);
+    setJumpDate(toISODate(next));
   }
 
-  const dayPanel = selectedDay ? (
-    <div className="space-y-3">
-      <SectionCard
-        title={toDateLabel(selectedDay.date)}
-        action={
-          <div className="flex items-center gap-2">
-            {selectedDay.isHoliday ? <StatusBadge label={selectedDay.holidayName || "Holiday"} tone="warning" /> : null}
-            {selectedDay.isSpecialEvent ? <StatusBadge label="Special Event" tone="success" /> : null}
-          </div>
-        }
-      >
-        <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-          <p>
-            <span className="font-semibold">Total activities:</span> {selectedDay.activities.length}
-          </p>
-          <p>
-            <span className="font-semibold">1:1 coverage:</span> {selectedDay.hasOneToOneCoverage ? "Yes" : "No"}
-          </p>
-          <p>
-            <span className="font-semibold">Backup plan:</span> {selectedDay.hasBackupPlan ? "Added" : "Not added"}
-          </p>
-          <p>
-            <span className="font-semibold">Prep load:</span> {selectedDay.activities.length >= 4 ? "High" : selectedDay.activities.length >= 2 ? "Medium" : "Low"}
-          </p>
-        </div>
+  function jumpToToday() {
+    setAnchorDate(today);
+    setSelectedDate(today);
+    setDayDrawerDate(null);
+    setJumpDate(toISODate(today));
+  }
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <ActionButton tone="secondary" onClick={() => setActivityDrawerOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden />
-            Add Activity
-          </ActionButton>
-          <ActionButton tone="secondary" onClick={() => openAiPrompt(`Suggest a full schedule for ${selectedDay.date}.`)}>
-            <Sparkles className="h-4 w-4" aria-hidden />
-            Quick AI Day Help
-          </ActionButton>
-          <ActionButton tone="secondary" onClick={() => setBuilderModal("copy")}>
-            <Copy className="h-4 w-4" aria-hidden />
-            Duplicate Day
-          </ActionButton>
-        </div>
-      </SectionCard>
+  function openCreateActivity(date: Date) {
+    setActivityEditor({
+      mode: "create",
+      draft: defaultDraft(toISODate(date))
+    });
+    setActivityModalOpen(true);
+  }
 
-      <SectionCard title="Activities List">
-        {selectedDay.activities.length === 0 ? (
-          <EmptyStateCard
-            title="No activities added yet"
-            description="No activities added yet. Add one manually or ask Actify to help fill this day."
-            action={
-              <ActionButton tone="secondary" onClick={() => setActivityDrawerOpen(true)}>
-                Add Activity
-              </ActionButton>
-            }
-          />
-        ) : (
-          <div className="space-y-2">
-            {selectedDay.activities.map((item) => (
-              <article key={item.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                    <p className="text-xs text-slate-600">{item.startTime} - {item.endTime} • {item.location}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <TagChip label={item.type} />
-                    <TagChip label={item.category} />
-                  </div>
-                </div>
-                <p className="mt-1 text-sm text-slate-700">{item.description}</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <ActionButton
-                    tone="secondary"
-                    onClick={() => {
-                      setEditingActivity(item);
-                      setActivityDrawerOpen(true);
-                    }}
-                  >
-                    Edit
-                  </ActionButton>
-                  <ActionButton tone="secondary" onClick={() => setBuilderModal("copy")}>Duplicate</ActionButton>
-                  <ActionButton tone="secondary" onClick={() => openAiPrompt(`Suggest a backup for this activity: ${item.title}.`)}>
-                    AI Help
-                  </ActionButton>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+  function openEditActivity(activity: CalendarActivity, dateISO: string) {
+    setActivityEditor({
+      mode: "edit",
+      activityId: activity.id,
+      originalDate: dateISO,
+      draft: {
+        title: activity.title,
+        date: dateISO,
+        startTime: toInputTime(activity.startTime),
+        endTime: toInputTime(activity.endTime),
+        location: activity.location,
+        category: activity.category,
+        type: activity.type,
+        description: activity.description,
+        suppliesNeeded: activity.suppliesNeeded.join(", "),
+        backupPlan: activity.backupAlternative,
+        internalNotes: activity.internalNotes,
+        colorTone: COLOR_TONES.find((tone) => activity.tags.includes(`tone:${tone.toLowerCase()}`)) ?? "Teal"
+      }
+    });
+    setActivityModalOpen(true);
+  }
 
-      <SectionCard title="Quick Add Activities">
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            "Add Bingo",
-            "Add Chair Exercise",
-            "Add Trivia",
-            "Add 1:1 Visits",
-            "Add Backup Option",
-            "Add Holiday Activity",
-            "Add Sensory Activity"
-          ].map((label) => (
-            <ActionButton key={label} tone="secondary" onClick={() => openAiPrompt(`${label} to ${selectedDay.date}.`)}>
-              {label}
-            </ActionButton>
-          ))}
-        </div>
-      </SectionCard>
+  function saveActivity() {
+    if (!activityEditor.draft.title.trim()) {
+      return;
+    }
 
-      <SectionCard title="AI Suggestions for This Day">
-        <div className="space-y-2">
-          {[
-            "Fill this day with low-prep activities",
-            "Create a quiet afternoon plan",
-            "Suggest rainy-day backup",
-            "Suggest dementia-friendly options",
-            "Add 1:1 alternatives",
-            "Make this day more balanced"
-          ].map((suggestion) => (
-            <AIShortcutButton
-              key={suggestion}
-              label={suggestion}
-              description="Open in Actify Assistant"
-              onClick={() => openAiPrompt(`${suggestion} for ${selectedDay.date}.`)}
-            />
-          ))}
-        </div>
-      </SectionCard>
+    const draft = activityEditor.draft;
+    const activityId = activityEditor.mode === "edit" ? activityEditor.activityId : uniqueId("activity");
 
-      <SectionCard title="Day Notes / Internal Notes">
-        <div className="space-y-2">
-          <NotesBlock value={draftDayNotes} onChange={setDraftDayNotes} placeholder="Day notes" />
-          <NotesBlock value={draftPrepNotes} onChange={setDraftPrepNotes} placeholder="Prep reminders" />
-          <NotesBlock value={draftStaffNotes} onChange={setDraftStaffNotes} placeholder="Staff-only notes" />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <ActionButton tone="secondary" onClick={() => setBuilderModal("copy")}>Copy to Another Day</ActionButton>
-          <ActionButton tone="secondary" onClick={() => setBuilderModal("copy")}>Copy to Multiple Days</ActionButton>
-          <ActionButton tone="secondary" onClick={() => openAiPrompt(`Create a backup plan for ${selectedDay.date}.`)}>Add Backup Plan</ActionButton>
-          <ActionButton tone="secondary" onClick={() => setFeedbackToast("Day changes saved.")}>Save Day Changes</ActionButton>
-        </div>
-      </SectionCard>
-    </div>
-  ) : null;
+    const nextActivity: CalendarActivity = {
+      id: activityId,
+      title: draft.title.trim(),
+      startTime: toDisplayTime(draft.startTime),
+      endTime: toDisplayTime(draft.endTime),
+      location: draft.location.trim() || "Activity Room",
+      category: draft.category,
+      type: draft.type,
+      description: draft.description.trim() || "Resident-friendly activity block.",
+      residentFacingDescription: draft.description.trim() || "Resident-friendly activity block.",
+      suppliesNeeded: draft.suppliesNeeded
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      internalNotes: draft.internalNotes.trim(),
+      prepLevel: "Low",
+      indoorOutdoor: "Indoor",
+      backupAlternative: draft.backupPlan.trim(),
+      reusableTemplate: false,
+      repeatRule: null,
+      tags: [
+        draft.type,
+        `tone:${draft.colorTone.toLowerCase()}`,
+        ...(draft.category ? [draft.category] : [])
+      ],
+      aiGenerated: false,
+      createdFromTemplate: false
+    };
 
-  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+    setCalendars((current) => {
+      let next = [...current];
+
+      if (activityEditor.mode === "edit") {
+        next = upsertDay(next, activityEditor.originalDate, (day) =>
+          refreshDayFlags({
+            ...day,
+            activities: day.activities.filter((activity) => activity.id !== activityEditor.activityId)
+          })
+        );
+      }
+
+      next = upsertDay(next, draft.date, (day) => {
+        const withoutPreviousVersion = day.activities.filter((activity) => activity.id !== activityId);
+        return refreshDayFlags({
+          ...day,
+          activities: [...withoutPreviousVersion, nextActivity].sort(activitySort)
+        });
+      });
+
+      return next;
+    });
+
+    const date = parseDate(draft.date);
+    setSelected(date);
+    setActivityModalOpen(false);
+  }
+
+  function deleteActivity(dateISO: string, activityId: string) {
+    setCalendars((current) =>
+      upsertDay(current, dateISO, (day) =>
+        refreshDayFlags({
+          ...day,
+          activities: day.activities.filter((activity) => activity.id !== activityId)
+        })
+      )
+    );
+  }
+
+  function duplicateActivity(dateISO: string, activity: CalendarActivity) {
+    const duplicate: CalendarActivity = {
+      ...activity,
+      id: uniqueId("activity"),
+      title: `${activity.title} (Copy)`
+    };
+
+    setCalendars((current) =>
+      upsertDay(current, dateISO, (day) =>
+        refreshDayFlags({
+          ...day,
+          activities: [...day.activities, duplicate].sort(activitySort)
+        })
+      )
+    );
+  }
+
+  function copyDayPlan(sourceDateISO: string, targetDateISO: string) {
+    if (!targetDateISO || targetDateISO === sourceDateISO) return;
+
+    const sourceDay = dayLookup.get(sourceDateISO) ?? createEmptyDay(sourceDateISO);
+    if (sourceDay.activities.length === 0) return;
+
+    const copies = sourceDay.activities.map((activity) => ({
+      ...activity,
+      id: uniqueId("activity")
+    }));
+
+    setCalendars((current) =>
+      upsertDay(current, targetDateISO, (day) =>
+        refreshDayFlags({
+          ...day,
+          activities: [...day.activities, ...copies].sort(activitySort)
+        })
+      )
+    );
+
+    setSelected(parseDate(targetDateISO));
+  }
+
+  const rangeLabel = formatRangeLabel(viewMode, anchorDate);
 
   return (
-    <section className="space-y-4" aria-label="Calendar Creation workspace">
-      <header className="rounded-3xl border border-slate-200 bg-white/85 p-5 shadow-sm shadow-slate-200/70">
-        <PageHeader title="Calendar Creation">
-          <div className="flex flex-wrap items-center gap-2">
-            <ActionButton tone="secondary" onClick={() => setBuilderModal("create")}>
-              <Plus className="h-4 w-4" aria-hidden />
-              Create New Calendar
-            </ActionButton>
-            <ActionButton tone="secondary" onClick={() => setFeedbackToast("Draft saved.")}> 
-              <Save className="h-4 w-4" aria-hidden />
-              Save Draft
-            </ActionButton>
-            <ActionButton tone="secondary" onClick={() => setBuilderModal("export")}>
-              <Printer className="h-4 w-4" aria-hidden />
-              Export / Print
-            </ActionButton>
-            <ActionButton onClick={() => openAiPrompt("Help me improve this monthly calendar draft for Activities Directors.")}>
-              <Sparkles className="h-4 w-4" aria-hidden />
-              Ask Actify
-            </ActionButton>
-          </div>
-        </PageHeader>
-        <PageSubheader text="Build monthly calendars, themed weeks, and backup activity plans faster." />
+    <div className="space-y-4 pb-2">
+      <CalendarPageHeader onAddActivity={() => openCreateActivity(selectedDate)} onAskActify={() => openAiPrompt("Help me build this month with balanced activities, backups, and 1:1 options.")} />
 
-        <div className="mt-3 grid gap-2 md:grid-cols-4">
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Month</span>
-            <select
-              value={calendarMonth}
-              onChange={(event) => setCalendarMonth(event.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
-            >
-              {MONTH_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Year</span>
-            <input
-              value={calendarYear}
-              onChange={(event) => setCalendarYear(event.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Facility / Calendar Title</span>
-            <input
-              value={calendarTitle}
-              onChange={(event) => setCalendarTitle(event.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
-            />
-          </label>
-        </div>
+      <CalendarToolbar
+        rangeLabel={rangeLabel}
+        viewMode={viewMode}
+        categoryFilter={categoryFilter}
+        categoryOptions={categoryOptions}
+        jumpDate={jumpDate}
+        onShiftPrev={() => shiftRange("prev")}
+        onShiftNext={() => shiftRange("next")}
+        onToday={jumpToToday}
+        onViewChange={(nextView) => setViewMode(nextView)}
+        onJumpDateChange={(value) => {
+          setJumpDate(value);
+          if (!value) return;
+          const parsed = parseDate(value);
+          setSelected(parsed);
+        }}
+        onCategoryFilterChange={setCategoryFilter}
+        onPrint={() => {
+          if (typeof window !== "undefined") {
+            window.print();
+          }
+        }}
+      />
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-          <SummaryStatCard label="Total Scheduled Days" value={summary.scheduledDays} context="Days with at least one activity" icon={Calendar} />
-          <SummaryStatCard label="Empty Days" value={summary.emptyDays} context="Needs fill support" icon={Calendar} />
-          <SummaryStatCard label="Special Events" value={summary.specialEvents} context="Marked events" icon={Sparkles} />
-          <SummaryStatCard label="Holiday Dates" value={summary.holidayDates} context="Holiday support enabled" icon={Sparkles} />
-          <SummaryStatCard label="1:1 Coverage Days" value={summary.oneToOneCoverage} context="Personalized support days" icon={Users} />
-          <SummaryStatCard label="Weekend Gaps" value={summary.weekendGaps} context="Weekend dates with no activities" icon={Calendar} />
-          <SummaryStatCard label="Backup Plans Added" value={summary.backupPlans} context="Resilience coverage" icon={WandSparkles} />
-        </div>
-      </header>
-
-      {feedbackToast ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{feedbackToast}</div>
-      ) : null}
-
-      <StickyActionBar>
-        <div className="flex flex-wrap items-center gap-2">
-          {QUICK_ACTIONS.map((action) => (
-            <ActionButton key={action.id} tone="secondary" onClick={() => quickAction(action.id)}>
-              {action.label}
-            </ActionButton>
-          ))}
-          <SortDropdown
-            label="View"
-            options={VIEW_OPTIONS.map((option) => ({ ...option }))}
-            value={activeView}
-            onChange={setActiveView}
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white/85 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur-sm transition-all duration-200">
+        {viewMode === "month" ? (
+          <MonthCalendarGrid
+            days={monthDays}
+            selectedDate={selectedDate}
+            anchorDate={anchorDate}
+            getDay={getDay}
+            getVisibleActivities={getVisibleActivities}
+            onOpenDay={(date) => setSelected(date, true)}
+            onQuickAdd={openCreateActivity}
           />
+        ) : null}
+
+        {viewMode === "week" ? (
+          <WeekCalendarView
+            days={weekDays}
+            selectedDate={selectedDate}
+            getDay={getDay}
+            getVisibleActivities={getVisibleActivities}
+            onSelectDate={setSelected}
+            onQuickAdd={openCreateActivity}
+            onOpenEdit={openEditActivity}
+          />
+        ) : null}
+
+        {viewMode === "day" ? (
+          <DayCalendarView
+            date={selectedDate}
+            day={getDay(selectedDate)}
+            categoryFilter={categoryFilter}
+            onAddActivity={openCreateActivity}
+            onOpenEdit={openEditActivity}
+            onDelete={deleteActivity}
+            onDuplicate={duplicateActivity}
+            onAskActify={() =>
+              openAiPrompt(
+                `Plan ${format(selectedDate, "EEEE, MMMM d")} with activity ideas and backups. Keep suggestions realistic for skilled nursing activities.`
+              )
+            }
+          />
+        ) : null}
+      </div>
+
+      <DayDetailDrawer
+        open={dayDrawerDate !== null}
+        date={dayDrawerDate ?? selectedDate}
+        day={selectedDay}
+        categoryFilter={categoryFilter}
+        onClose={() => setDayDrawerDate(null)}
+        onAddActivity={(date) => openCreateActivity(date)}
+        onOpenEdit={openEditActivity}
+        onDelete={deleteActivity}
+        onDuplicate={duplicateActivity}
+        onCopyDay={copyDayPlan}
+        copyTargetDate={copyTargetDate}
+        onCopyTargetDateChange={setCopyTargetDate}
+        onAskActify={(prompt) => openAiPrompt(prompt)}
+      />
+
+      <ActivityModal
+        open={activityModalOpen}
+        editor={activityEditor}
+        onClose={() => setActivityModalOpen(false)}
+        onSave={saveActivity}
+        onChange={(patch) => {
+          setActivityEditor((current) => ({
+            ...current,
+            draft: {
+              ...current.draft,
+              ...patch
+            }
+          }));
+        }}
+      />
+
+      <CalendarMiniActions
+        onAction={(prompt) => openAiPrompt(prompt)}
+        selectedDate={selectedDate}
+      />
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-600">
+        {(() => {
+          const stats = daySummary(getDay(selectedDate), categoryFilter);
+          if (stats.attended === 0) {
+            return "No activities on the selected date yet. Add one manually or ask Actify to draft a quick plan.";
+          }
+
+          return `${format(selectedDate, "EEEE")} has ${stats.attended} scheduled activity${stats.attended === 1 ? "" : "ies"} (${stats.grouped} group, ${stats.oneToOne} 1:1).`;
+        })()}
+      </div>
+
+    </div>
+  );
+}
+
+function CalendarPageHeader({ onAddActivity, onAskActify }: { onAddActivity: () => void; onAskActify: () => void }) {
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Calendar</h1>
+        <p className="mt-1 text-sm text-slate-600 sm:text-base">Plan activities, build schedules, and manage your month at a glance.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onAskActify}
+          className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3.5 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+        >
+          <Sparkles className="h-4 w-4" aria-hidden />
+          Ask Actify
+        </button>
+        <button
+          type="button"
+          onClick={onAddActivity}
+          className="inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Add Activity
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function CalendarToolbar({
+  rangeLabel,
+  viewMode,
+  categoryFilter,
+  categoryOptions,
+  jumpDate,
+  onShiftPrev,
+  onShiftNext,
+  onToday,
+  onViewChange,
+  onJumpDateChange,
+  onCategoryFilterChange,
+  onPrint
+}: {
+  rangeLabel: string;
+  viewMode: CalendarViewMode;
+  categoryFilter: string;
+  categoryOptions: string[];
+  jumpDate: string;
+  onShiftPrev: () => void;
+  onShiftNext: () => void;
+  onToday: () => void;
+  onViewChange: (viewMode: CalendarViewMode) => void;
+  onJumpDateChange: (value: string) => void;
+  onCategoryFilterChange: (value: string) => void;
+  onPrint: () => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <CalendarDateNavigator onPrev={onShiftPrev} onNext={onShiftNext} />
+
+        <p className="text-base font-semibold text-slate-900 sm:text-lg">{rangeLabel}</p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <CalendarTodayButton onClick={onToday} />
+          <CalendarViewSwitcher viewMode={viewMode} onChange={onViewChange} />
         </div>
-      </StickyActionBar>
+      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.7fr)_minmax(260px,0.95fr)]">
-        <aside className="space-y-3">
-          <SectionCard title="Activity Bank">
-            <SearchInput value={activitySearch} onChange={setActivitySearch} placeholder="Search activities" />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {ACTIVITY_CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setCategoryFilter(category)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-xs transition",
-                    categoryFilter === category
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  )}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+          <CalendarRange className="h-3.5 w-3.5" aria-hidden />
+          <span className="sr-only">Jump to date</span>
+          <input
+            type="date"
+            value={jumpDate}
+            onChange={(event) => onJumpDateChange(event.target.value)}
+            className="bg-transparent text-xs font-medium text-slate-700 focus-visible:outline-none"
+            aria-label="Jump to date"
+          />
+        </label>
 
-            <div className="mt-3 space-y-2 max-h-[36rem] overflow-y-auto pr-1">
-              {filteredActivityBank.length === 0 ? (
-                <EmptyStateCard title="No matching activities found" description="No matching activities found." />
+        <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</span>
+          <select
+            value={categoryFilter}
+            onChange={(event) => onCategoryFilterChange(event.target.value)}
+            className="max-w-[11.5rem] truncate bg-transparent text-xs font-medium text-slate-700 focus-visible:outline-none"
+            aria-label="Filter by category"
+          >
+            {categoryOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          onClick={onPrint}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+        >
+          <Printer className="h-3.5 w-3.5" aria-hidden />
+          Print
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function CalendarDateNavigator({ onPrev, onNext }: { onPrev: () => void; onNext: () => void }) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
+      <button
+        type="button"
+        onClick={onPrev}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+        aria-label="Go to previous date range"
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={onNext}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+        aria-label="Go to next date range"
+      >
+        <ChevronRight className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function CalendarTodayButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+    >
+      Today
+    </button>
+  );
+}
+
+function CalendarViewSwitcher({ viewMode, onChange }: { viewMode: CalendarViewMode; onChange: (viewMode: CalendarViewMode) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
+      {VIEW_OPTIONS.map((option) => {
+        const active = option.key === viewMode;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200",
+              active ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MonthCalendarGrid({
+  days,
+  selectedDate,
+  anchorDate,
+  getDay,
+  getVisibleActivities,
+  onOpenDay,
+  onQuickAdd
+}: {
+  days: Date[];
+  selectedDate: Date;
+  anchorDate: Date;
+  getDay: (date: Date) => CalendarDay;
+  getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
+  onOpenDay: (date: Date) => void;
+  onQuickAdd: (date: Date) => void;
+}) {
+  return (
+    <div className="overflow-hidden">
+      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/80">
+        {DAY_HEADERS.map((dayLabel) => (
+          <div key={dayLabel} className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <span className="hidden sm:inline">{dayLabel}</span>
+            <span className="sm:hidden">{dayLabel.slice(0, 3)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7">
+        {days.map((date) => {
+          const day = getDay(date);
+          const activities = getVisibleActivities(day);
+
+          return (
+            <MonthCalendarDayCell
+              key={toISODate(date)}
+              date={date}
+              activities={activities}
+              outsideMonth={!isSameMonth(date, anchorDate)}
+              isSelected={isSameDay(date, selectedDate)}
+              onOpenDay={() => onOpenDay(date)}
+              onQuickAdd={() => onQuickAdd(date)}
+              isTodayDate={isToday(date)}
+              holidayName={day.holidayName}
+              isSpecialEvent={day.isSpecialEvent}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MonthCalendarDayCell({
+  date,
+  activities,
+  outsideMonth,
+  isSelected,
+  isTodayDate,
+  holidayName,
+  isSpecialEvent,
+  onOpenDay,
+  onQuickAdd
+}: {
+  date: Date;
+  activities: CalendarActivity[];
+  outsideMonth: boolean;
+  isSelected: boolean;
+  isTodayDate: boolean;
+  holidayName: string | null;
+  isSpecialEvent: boolean;
+  onOpenDay: () => void;
+  onQuickAdd: () => void;
+}) {
+  const preview = activities.slice(0, 3);
+  const overflowCount = activities.length - preview.length;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDay}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenDay();
+        }
+      }}
+      className={cn(
+        "group min-h-[130px] border-b border-r border-slate-100 p-2.5 transition duration-200",
+        outsideMonth ? "bg-slate-50/70" : "bg-white",
+        isSelected && "bg-sky-50/75",
+        !outsideMonth && "hover:bg-slate-50"
+      )}
+      aria-label={`View details for ${format(date, "MMMM d, yyyy")}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold",
+              isTodayDate ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700",
+              outsideMonth && "opacity-70"
+            )}
+          >
+            {format(date, "d")}
+          </span>
+          {holidayName ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{holidayName}</span> : null}
+          {!holidayName && isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Event</span> : null}
+        </div>
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onQuickAdd();
+          }}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          aria-label={`Add activity on ${format(date, "MMMM d")}`}
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+
+      <div className="mt-2 space-y-1.5">
+        {preview.map((activity) => (
+          <div key={activity.id} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+            <p className="truncate text-[11px] font-medium text-slate-800">{activity.title}</p>
+            <p className="text-[10px] text-slate-500">{activity.startTime}</p>
+          </div>
+        ))}
+
+        {overflowCount > 0 ? <p className="text-[11px] font-medium text-slate-500">+{overflowCount} more</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function WeekCalendarView({
+  days,
+  selectedDate,
+  getDay,
+  getVisibleActivities,
+  onSelectDate,
+  onQuickAdd,
+  onOpenEdit
+}: {
+  days: Date[];
+  selectedDate: Date;
+  getDay: (date: Date) => CalendarDay;
+  getVisibleActivities: (day: CalendarDay) => CalendarActivity[];
+  onSelectDate: (date: Date, openDrawer?: boolean) => void;
+  onQuickAdd: (date: Date) => void;
+  onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
+}) {
+  return (
+    <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-7">
+      {days.map((date) => {
+        const day = getDay(date);
+        const activities = getVisibleActivities(day);
+
+        return (
+          <section
+            key={toISODate(date)}
+            className={cn(
+              "flex min-h-[420px] flex-col rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm transition hover:shadow-md",
+              isSameDay(date, selectedDate) && "border-sky-300 ring-2 ring-sky-100"
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => onSelectDate(date, true)}
+              className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{format(date, "EEE")}</p>
+                <p className="text-sm font-semibold text-slate-900">{format(date, "MMM d")}</p>
+              </div>
+              {isToday(date) ? <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">Today</span> : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onQuickAdd(date)}
+              className="mt-2 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add
+            </button>
+
+            <div className="mt-2 flex-1 space-y-2 overflow-y-auto pr-0.5">
+              {activities.length === 0 ? (
+                <CalendarEmptyState title="No activities" description="Add activity or ask Actify for this day." />
               ) : (
-                filteredActivityBank.map((item) => (
-                  <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                        <p className="text-xs text-slate-600">{item.category}</p>
-                      </div>
-                      <TagChip label={`${item.prepLevel} prep`} />
+                activities.map((activity) => (
+                  <button
+                    key={activity.id}
+                    type="button"
+                    onClick={() => onOpenEdit(activity, toISODate(date))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-slate-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                  >
+                    <p className="truncate text-sm font-semibold text-slate-900">{activity.title}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">{activity.startTime} - {activity.endTime}</p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <CalendarCategoryBadge category={activity.category} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-600">{item.description}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <TagChip label={`${item.energy} energy`} />
-                      <TagChip label={item.indoorOutdoor} />
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <ActionButton tone="secondary" onClick={() => addTemplateToDay(item)}>
-                        <Plus className="h-4 w-4" aria-hidden />
-                        One-click add
-                      </ActionButton>
-                      <ActionButton tone="secondary" onClick={() => openAiPrompt(`Suggest a resident-friendly version of ${item.title}.`)}>
-                        <Sparkles className="h-4 w-4" aria-hidden />
-                        AI
-                      </ActionButton>
-                    </div>
-                  </article>
+                  </button>
                 ))
               )}
             </div>
-          </SectionCard>
-        </aside>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
-        <section className="space-y-3">
-          <SectionCard title={`${monthLabel(Number(calendarMonth))} ${calendarYear} • Month Grid`}>
-            {activeView === "PRINT" ? (
-              <div className="space-y-2">
-                <p className="text-sm text-slate-600">Print preview mode shows cleaner resident-facing output.</p>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-900">{calendarTitle || activeCalendar.title}</p>
-                  <p className="text-xs text-slate-600">{activeCalendar.facilityName}</p>
-                  <p className="mt-2 text-xs text-slate-600">Scheduled days: {summary.scheduledDays} • Empty days: {summary.emptyDays}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {activeCalendar.days.map((day) => (
-                  <button
-                    key={day.date}
-                    type="button"
-                    onClick={() => selectDay(day.date)}
-                    className={cn(
-                      "rounded-xl border p-2 text-left transition hover:border-slate-300 hover:bg-slate-50",
-                      selectedDay?.date === day.date ? "border-teal-300 bg-teal-50/70" : "border-slate-200 bg-white"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-700">{day.date.split("-").at(-1)}</p>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelectedDate(day.date);
-                          setActivityDrawerOpen(true);
-                        }}
-                        className="rounded-full border border-slate-200 bg-white p-1 text-slate-600"
-                        aria-label="Quick add activity"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+function DayCalendarView({
+  date,
+  day,
+  categoryFilter,
+  onAddActivity,
+  onOpenEdit,
+  onDelete,
+  onDuplicate,
+  onAskActify
+}: {
+  date: Date;
+  day: CalendarDay;
+  categoryFilter: string;
+  onAddActivity: (date: Date) => void;
+  onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
+  onDelete: (dateISO: string, activityId: string) => void;
+  onDuplicate: (dateISO: string, activity: CalendarActivity) => void;
+  onAskActify: () => void;
+}) {
+  const activities = day.activities
+    .filter((activity) => categoryFilter === "All Categories" || activity.category === categoryFilter)
+    .sort(activitySort);
 
-                    {day.isHoliday ? <StatusBadge label={day.holidayName || "Holiday"} tone="warning" /> : null}
-                    {day.isSpecialEvent ? <StatusBadge label="Special Event" tone="success" /> : null}
+  return (
+    <section className="space-y-3 p-4">
+      <header className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Day View</p>
+          <h2 className="text-lg font-semibold text-slate-900">{format(date, "EEEE, MMMM d, yyyy")}</h2>
+        </div>
 
-                    <div className="mt-1 space-y-1">
-                      {day.activities.slice(0, 3).map((activity) => (
-                        <p key={activity.id} className="line-clamp-1 text-xs text-slate-700">• {activity.title}</p>
-                      ))}
-                      {day.activities.length > 3 ? <p className="text-[11px] text-slate-500">+{day.activities.length - 3} more</p> : null}
-                    </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onAskActify}
+            className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+          >
+            <WandSparkles className="h-3.5 w-3.5" aria-hidden />
+            Ask Actify
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddActivity(date)}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Add Activity
+          </button>
+        </div>
+      </header>
 
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {day.hasBackupPlan ? <TagChip label="Backup" /> : null}
-                      {day.hasOneToOneCoverage ? <TagChip label="1:1" /> : null}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        </section>
-
-        <aside className="space-y-3">
-          <SectionCard title="AI Shortcuts + Templates">
-            <div className="space-y-2">
-              {aiShortcuts.map((shortcut) => (
-                <AIShortcutButton
-                  key={shortcut.id}
-                  label={shortcut.label}
-                  description={shortcut.description}
-                  onClick={() => openAiPrompt(shortcut.prompt)}
-                />
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Saved Templates">
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {CALENDAR_TEMPLATE_CARDS.map((template) => (
-                <article key={template.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-sm font-semibold text-slate-900">{template.title}</p>
-                  <p className="mt-1 text-xs text-slate-600">{template.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {template.tags.map((tag) => (
-                      <TagChip key={`${template.id}-${tag}`} label={tag} />
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">Prefilled days: {template.prefilledDays}</p>
-                  <div className="mt-2">
-                    <ActionButton tone="secondary" onClick={() => setFeedbackToast(`${template.title} applied to draft.`)}>
-                      Use template
-                    </ActionButton>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </SectionCard>
-
-          <div className="hidden xl:block">{dayPanel}</div>
-        </aside>
-      </div>
-
-      <DrawerShell open={dayDrawerOpen} title={selectedDay ? toDateLabel(selectedDay.date) : "Day Details"} onClose={() => setDayDrawerOpen(false)}>
-        {dayPanel}
-      </DrawerShell>
-
-      <DrawerShell open={activityDrawerOpen} title={editingActivity ? "Edit Activity" : "Add Activity"} onClose={() => {
-        setActivityDrawerOpen(false);
-        setEditingActivity(null);
-      }}>
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Activity Title</span>
-              <input defaultValue={editingActivity?.title} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Location</span>
-              <input defaultValue={editingActivity?.location} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Start Time</span>
-              <input defaultValue={editingActivity?.startTime || "10:00 AM"} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">End Time</span>
-              <input defaultValue={editingActivity?.endTime || "10:45 AM"} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700" />
-            </label>
-          </div>
-
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Description + Notes</span>
-            <textarea
-              defaultValue={editingActivity?.description}
-              rows={4}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+      {activities.length === 0 ? (
+        <CalendarEmptyState
+          title="No activities scheduled yet"
+          description="Add an activity or ask Actify for ideas to build this day."
+          className="min-h-[240px]"
+        />
+      ) : (
+        <div className="space-y-2.5">
+          {activities.map((activity) => (
+            <ActivityCard
+              key={activity.id}
+              activity={activity}
+              onEdit={() => onOpenEdit(activity, day.date)}
+              onDelete={() => onDelete(day.date, activity.id)}
+              onDuplicate={() => onDuplicate(day.date, activity)}
             />
-          </label>
-
-          <div className="rounded-xl border border-teal-200 bg-teal-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">AI Help</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[
-                "Improve title",
-                "Generate short description",
-                "Suggest backup",
-                "Suggest supplies",
-                "Make resident-friendly",
-                "Generate 1:1 alternatives",
-                "Suggest dementia-friendly version",
-                "Suggest low-budget version"
-              ].map((label) => (
-                <ActionButton key={label} tone="secondary" onClick={() => openAiPrompt(`${label} for ${editingActivity?.title || "this activity"}.`)}>
-                  {label}
-                </ActionButton>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
-            <ActionButton tone="secondary" onClick={() => setActivityDrawerOpen(false)}>Cancel</ActionButton>
-            <ActionButton onClick={() => {
-              setFeedbackToast("Activity saved.");
-              setActivityDrawerOpen(false);
-            }}>Save Activity</ActionButton>
-            <ActionButton tone="secondary" onClick={() => setFeedbackToast("Activity duplicated in draft.")}>Save and Duplicate</ActionButton>
-            <ActionButton tone="secondary" onClick={() => setBuilderModal("save-template")}>Save as Template</ActionButton>
-            <ActionButton tone="secondary" onClick={() => openAiPrompt("Review this activity and improve resident readability.")}>Save and Ask Actify</ActionButton>
-          </div>
-        </div>
-      </DrawerShell>
-
-      <ModalShell open={builderModal === "create"} title="Create New Calendar" onClose={() => setBuilderModal(null)}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Calendar Title</span><input className="h-10 w-full rounded-xl border border-slate-200 px-3" defaultValue="New Monthly Calendar" /></label>
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Facility Name</span><input className="h-10 w-full rounded-xl border border-slate-200 px-3" defaultValue={activeCalendar.facilityName} /></label>
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Month</span><select className="h-10 w-full rounded-xl border border-slate-200 px-3">{MONTH_OPTIONS.map((option) => <option key={option.key}>{option.label}</option>)}</select></label>
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Year</span><input className="h-10 w-full rounded-xl border border-slate-200 px-3" defaultValue={new Date().getFullYear()} /></label>
-        </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("New calendar created."); setBuilderModal(null); }}>Create Calendar</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "duplicate"} title="Duplicate Calendar" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-600">Duplicate a source calendar into a new month/year with full activities or structure only.</p>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Calendar duplicated."); setBuilderModal(null); }}>Duplicate</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "save-template"} title="Save as Template" onClose={() => setBuilderModal(null)}>
-        <div className="space-y-3">
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Template Name</span><input className="h-10 w-full rounded-xl border border-slate-200 px-3" defaultValue="My Monthly Template" /></label>
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Template Category</span><input className="h-10 w-full rounded-xl border border-slate-200 px-3" defaultValue="Balanced" /></label>
-          <label className="space-y-1"><span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Notes</span><textarea rows={3} className="w-full rounded-xl border border-slate-200 px-3 py-2" /></label>
-        </div>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Template saved."); setBuilderModal(null); }}>Save Template</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "fill-empty"} title="Fill Empty Days Wizard" onClose={() => setBuilderModal(null)}>
-        <div className="space-y-2 text-sm text-slate-700">
-          <p><span className="font-semibold">Step 1:</span> Select days to fill</p>
-          <p><span className="font-semibold">Step 2:</span> Choose style (Balanced, Low Budget, Quiet, 1:1 Heavy, Dementia-Friendly)</p>
-          <p><span className="font-semibold">Step 3:</span> Choose resident focus and budget level</p>
-          <p><span className="font-semibold">Step 4:</span> Review and apply suggestions</p>
-        </div>
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          Suggested application: Fill {summary.emptyDays} empty days with low-prep options and backup alternatives.
-        </div>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Suggestions applied to empty days."); setBuilderModal(null); }}>Apply to Calendar</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "theme-week"} title="Themed Week Builder" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-600">{THEME_WEEK_EXAMPLE.description}</p>
-        <div className="mt-3 space-y-2">
-          {THEME_WEEK_EXAMPLE.dailySubthemes.map((day) => (
-            <div key={day.day} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-              <p className="text-sm font-semibold text-slate-900">{day.day}: {day.label}</p>
-              <p className="text-xs text-slate-600">{day.focus}</p>
-            </div>
           ))}
         </div>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Themed week applied."); setBuilderModal(null); }}>Apply Week</ActionButton><ActionButton tone="secondary" onClick={() => setBuilderModal("save-template")}>Save as Template</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "holiday"} title="Holiday Plan Builder" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-700">Holiday: {HOLIDAY_PLAN_EXAMPLE.holiday}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <SectionCard title="Group Ideas">{HOLIDAY_PLAN_EXAMPLE.groupIdeas.map((item) => <p key={item} className="text-sm text-slate-700">• {item}</p>)}</SectionCard>
-          <SectionCard title="1:1 Alternatives">{HOLIDAY_PLAN_EXAMPLE.oneToOneAlternatives.map((item) => <p key={item} className="text-sm text-slate-700">• {item}</p>)}</SectionCard>
-        </div>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Holiday plan applied."); setBuilderModal(null); }}>Apply to Calendar</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "low-budget"} title="Low-Budget Month Builder" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-700">{LOW_BUDGET_WEEK_EXAMPLE.title}</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-          {LOW_BUDGET_WEEK_EXAMPLE.days.map((day) => (
-            <li key={day}>{day}</li>
-          ))}
-        </ul>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Low-budget framework applied."); setBuilderModal(null); }}>Apply Draft</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "weekend"} title="Weekend Ideas Builder" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-600">Generate weekend-specific ideas by energy level and social emphasis.</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {DAY_PATTERNS.map((pattern) => (
-            <TagChip key={pattern.id} label={pattern.label} />
-          ))}
-        </div>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Weekend plan applied."); setBuilderModal(null); }}>Apply to Calendar</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "copy"} title="Copy Day / Copy Week" onClose={() => setBuilderModal(null)}>
-        <p className="text-sm text-slate-600">Copy source day/week into target dates with times, notes, and backups.</p>
-        <div className="mt-4 flex justify-end gap-2"><ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton><ActionButton onClick={() => { setFeedbackToast("Copy operation completed."); setBuilderModal(null); }}>Copy</ActionButton></div>
-      </ModalShell>
-
-      <ModalShell open={builderModal === "export"} title="Export / Print" onClose={() => setBuilderModal(null)}>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <SectionCard title="Resident-Facing">
-            <p className="text-xs text-slate-600">Clean layout, no internal notes.</p>
-          </SectionCard>
-          <SectionCard title="Staff/Internal">
-            <p className="text-xs text-slate-600">Includes prep and backup notes.</p>
-          </SectionCard>
-          <SectionCard title="Print Preview">
-            <p className="text-xs text-slate-600">Preview before export or print.</p>
-          </SectionCard>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <ActionButton tone="secondary" onClick={() => setBuilderModal(null)}>Cancel</ActionButton>
-          <ActionButton tone="secondary" onClick={() => { setFeedbackToast("PDF export created."); }}>
-            <FileDown className="h-4 w-4" aria-hidden />
-            Export
-          </ActionButton>
-          <ActionButton onClick={() => { setFeedbackToast("Print preview opened."); }}>
-            <Printer className="h-4 w-4" aria-hidden />
-            Print
-          </ActionButton>
-        </div>
-      </ModalShell>
-
-      {feedbackToast ? (
-        <button
-          type="button"
-          onClick={() => setFeedbackToast(null)}
-          className="fixed bottom-4 right-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-lg"
-        >
-          {feedbackToast}
-          <Loader2 className="h-4 w-4" aria-hidden />
-        </button>
-      ) : null}
+      )}
     </section>
   );
+}
+
+function DayDetailDrawer({
+  open,
+  date,
+  day,
+  categoryFilter,
+  onClose,
+  onAddActivity,
+  onOpenEdit,
+  onDelete,
+  onDuplicate,
+  onCopyDay,
+  copyTargetDate,
+  onCopyTargetDateChange,
+  onAskActify
+}: {
+  open: boolean;
+  date: Date;
+  day: CalendarDay;
+  categoryFilter: string;
+  onClose: () => void;
+  onAddActivity: (date: Date) => void;
+  onOpenEdit: (activity: CalendarActivity, dateISO: string) => void;
+  onDelete: (dateISO: string, activityId: string) => void;
+  onDuplicate: (dateISO: string, activity: CalendarActivity) => void;
+  onCopyDay: (sourceDateISO: string, targetDateISO: string) => void;
+  copyTargetDate: string;
+  onCopyTargetDateChange: (value: string) => void;
+  onAskActify: (prompt: string) => void;
+}) {
+  const activities = day.activities
+    .filter((activity) => categoryFilter === "All Categories" || activity.category === categoryFilter)
+    .sort(activitySort);
+
+  const dayPrompt = `Suggest practical activity ideas for ${format(date, "EEEE, MMMM d")} with one backup option for each idea.`;
+
+  return (
+    <DrawerShell open={open} title={format(date, "EEEE, MMMM d, yyyy")} onClose={onClose}>
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            {isToday(date) ? <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white">Today</span> : null}
+            {day.holidayName ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">{day.holidayName}</span> : null}
+            {day.isSpecialEvent ? <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">Special Event</span> : null}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onAddActivity(date)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+            >
+              <CalendarPlus2 className="h-3.5 w-3.5" aria-hidden />
+              Add Activity
+            </button>
+            <button
+              type="button"
+              onClick={() => onAskActify(dayPrompt)}
+              className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              Ask Actify
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Scheduled Activities</h3>
+
+          <div className="mt-3 space-y-2">
+            {activities.length === 0 ? (
+              <CalendarEmptyState title="No activities scheduled yet" description="Add activity or ask Actify to fill this date." />
+            ) : (
+              activities.map((activity) => (
+                <ActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  onEdit={() => onOpenEdit(activity, day.date)}
+                  onDelete={() => onDelete(day.date, activity.id)}
+                  onDuplicate={() => onDuplicate(day.date, activity)}
+                />
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Copy Day Plan</h3>
+          <p className="mt-1 text-xs text-slate-600">Copy this day’s activity lineup to another date.</p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={copyTargetDate}
+              onChange={(event) => onCopyTargetDateChange(event.target.value)}
+              className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            />
+            <button
+              type="button"
+              onClick={() => onCopyDay(day.date, copyTargetDate)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+              Copy to Date
+            </button>
+          </div>
+        </section>
+      </div>
+    </DrawerShell>
+  );
+}
+
+function ActivityModal({
+  open,
+  editor,
+  onClose,
+  onSave,
+  onChange
+}: {
+  open: boolean;
+  editor: ActivityEditorState;
+  onClose: () => void;
+  onSave: () => void;
+  onChange: (patch: Partial<ActivityDraft>) => void;
+}) {
+  const draft = editor.draft;
+
+  return (
+    <ModalShell open={open} title={editor.mode === "edit" ? "Edit Activity" : "Add Activity"} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Activity Title" htmlFor="activity-title">
+          <input
+            id="activity-title"
+            value={draft.title}
+            onChange={(event) => onChange({ title: event.target.value })}
+            placeholder="Morning Bingo"
+            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Date" htmlFor="activity-date">
+            <input
+              id="activity-date"
+              type="date"
+              value={draft.date}
+              onChange={(event) => onChange({ date: event.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            />
+          </Field>
+
+          <Field label="Start" htmlFor="activity-start">
+            <input
+              id="activity-start"
+              type="time"
+              value={draft.startTime}
+              onChange={(event) => onChange({ startTime: event.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            />
+          </Field>
+
+          <Field label="End" htmlFor="activity-end">
+            <input
+              id="activity-end"
+              type="time"
+              value={draft.endTime}
+              onChange={(event) => onChange({ endTime: event.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Location" htmlFor="activity-location">
+            <input
+              id="activity-location"
+              value={draft.location}
+              onChange={(event) => onChange({ location: event.target.value })}
+              placeholder="Activity Room"
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            />
+          </Field>
+
+          <Field label="Category" htmlFor="activity-category">
+            <select
+              id="activity-category"
+              value={draft.category}
+              onChange={(event) => onChange({ category: event.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              {categorySelectOptions().map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Type" htmlFor="activity-type">
+            <select
+              id="activity-type"
+              value={draft.type}
+              onChange={(event) => onChange({ type: event.target.value as CalendarActivityType })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              {TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Color Label" htmlFor="activity-color-tone">
+            <select
+              id="activity-color-tone"
+              value={draft.colorTone}
+              onChange={(event) => onChange({ colorTone: event.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+            >
+              {COLOR_TONES.map((tone) => (
+                <option key={tone} value={tone}>
+                  {tone}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <Field label="Short Description" htmlFor="activity-description">
+          <textarea
+            id="activity-description"
+            value={draft.description}
+            onChange={(event) => onChange({ description: event.target.value })}
+            rows={3}
+            placeholder="Brief resident-facing activity summary"
+            className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          />
+        </Field>
+
+        <Field label="Supplies Needed" htmlFor="activity-supplies">
+          <input
+            id="activity-supplies"
+            value={draft.suppliesNeeded}
+            onChange={(event) => onChange({ suppliesNeeded: event.target.value })}
+            placeholder="Cards, markers, speaker"
+            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          />
+        </Field>
+
+        <Field label="Backup Plan" htmlFor="activity-backup">
+          <input
+            id="activity-backup"
+            value={draft.backupPlan}
+            onChange={(event) => onChange({ backupPlan: event.target.value })}
+            placeholder="Quiet conversation circle"
+            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          />
+        </Field>
+
+        <Field label="Internal Notes" htmlFor="activity-notes">
+          <textarea
+            id="activity-notes"
+            value={draft.internalNotes}
+            onChange={(event) => onChange({ internalNotes: event.target.value })}
+            rows={2}
+            placeholder="Staff setup details"
+            className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          className="rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+        >
+          {editor.mode === "edit" ? "Save Changes" : "Save Activity"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ActivityCard({
+  activity,
+  onEdit,
+  onDelete,
+  onDuplicate
+}: {
+  activity: CalendarActivity;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+}) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="space-y-1">
+          <h4 className="text-sm font-semibold text-slate-900">{activity.title}</h4>
+          <p className="text-xs text-slate-600">{activity.startTime} - {activity.endTime}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <CalendarCategoryBadge category={activity.category} />
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{activity.type}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <IconActionButton label="Edit activity" icon={<Edit3 className="h-3.5 w-3.5" />} onClick={onEdit} />
+          <IconActionButton label="Duplicate activity" icon={<Copy className="h-3.5 w-3.5" />} onClick={onDuplicate} />
+          <IconActionButton label="Delete activity" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={onDelete} destructive />
+        </div>
+      </div>
+
+      <p className="mt-2 text-xs text-slate-700">{activity.description}</p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1">
+          <MapPin className="h-3.5 w-3.5" aria-hidden />
+          {activity.location}
+        </span>
+        {activity.backupAlternative ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">Backup: {activity.backupAlternative}</span> : null}
+      </div>
+    </article>
+  );
+}
+
+function CalendarEmptyState({
+  title,
+  description,
+  className
+}: {
+  title: string;
+  description: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-[120px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-5 text-center",
+        className
+      )}
+    >
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      <p className="mt-1 text-xs text-slate-600">{description}</p>
+    </div>
+  );
+}
+
+function CalendarCategoryBadge({ category }: { category: string }) {
+  return (
+    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", badgeTone(category))}>{category}</span>
+  );
+}
+
+function badgeTone(category: string) {
+  if (category.includes("1:1") || category.includes("Room")) {
+    return "border border-violet-200 bg-violet-50 text-violet-700";
+  }
+
+  if (category.includes("Holiday") || category.includes("Social")) {
+    return "border border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  if (category.includes("Music") || category.includes("Entertainment")) {
+    return "border border-indigo-200 bg-indigo-50 text-indigo-700";
+  }
+
+  if (category.includes("Sensory") || category.includes("Spiritual")) {
+    return "border border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  return "border border-sky-200 bg-sky-50 text-sky-700";
+}
+
+function CalendarMiniActions({ onAction, selectedDate }: { onAction: (prompt: string) => void; selectedDate: Date }) {
+  const options = [
+    {
+      id: "day-ideas",
+      label: "Fill this date",
+      prompt: `Fill ${format(selectedDate, "EEEE, MMMM d")} with low-prep activity ideas and one backup option per activity.`
+    },
+    {
+      id: "week-backup",
+      label: "Backup ideas",
+      prompt: "Suggest backup activities for this week in case groups run low attendance."
+    },
+    {
+      id: "theme-week",
+      label: "Themed week",
+      prompt: "Build a themed activity week with day-by-day ideas and backups."
+    },
+    {
+      id: "holiday-plan",
+      label: "Holiday plan",
+      prompt: "Give me a holiday activity plan with group, 1:1, and bed-bound alternatives."
+    }
+  ];
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white/85 p-3 shadow-sm">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">AI Planning Shortcuts</h3>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onAction(option.prompt)}
+            className="rounded-xl border border-teal-100 bg-teal-50/80 px-3 py-2 text-left text-xs font-semibold text-teal-800 transition hover:-translate-y-0.5 hover:bg-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function IconActionButton({
+  label,
+  icon,
+  onClick,
+  destructive
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 w-7 items-center justify-center rounded-md border transition focus-visible:outline-none focus-visible:ring-2",
+        destructive
+          ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 focus-visible:ring-rose-200"
+          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-200"
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="space-y-1.5">
+      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function categorySelectOptions() {
+  return CATEGORY_OPTIONS.filter((option) => option !== "All Categories");
 }
