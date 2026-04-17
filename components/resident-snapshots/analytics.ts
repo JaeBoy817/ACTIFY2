@@ -14,112 +14,123 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function fallbackParticipation(resident: ResidentSnapshot) {
-  return resident.participationPercentage ?? resident.last30DayParticipation ?? null;
-}
+function deriveParticipation(offered: number, participated: number, explicit: number | null | undefined) {
+  if (Number.isFinite(explicit ?? Number.NaN)) {
+    return clampPercent(explicit ?? 0);
+  }
 
-function withMultiplier(value: number | null | undefined, multiplier: number) {
-  if (!Number.isFinite(value ?? Number.NaN)) return 0;
-  return Math.max(0, Math.round((value ?? 0) * multiplier));
+  if (offered <= 0) return null;
+  return clampPercent((participated / offered) * 100);
 }
 
 export function getResidentAnalyticsWindow(resident: ResidentSnapshot, timeframe: AnalyticsTimeframeKey) {
-  const baseParticipation = fallbackParticipation(resident);
-  const baseOffered = resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0;
-  const baseAttended = resident.attendedCountThisMonth ?? resident.attendanceCount ?? resident.totalActivitiesAttended ?? 0;
-  const baseParticipated = resident.totalActivitiesAttended ?? baseAttended + (resident.oneToOneCompletedCountThisMonth ?? 0);
-  const baseOneToOne = resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0;
-  const baseRefusals = resident.refusalCountThisMonth ?? resident.refusalCount ?? 0;
-  const baseMissed = resident.missedCountThisMonth ?? resident.missedActivitiesCount ?? 0;
+  if (timeframe === "THIS_MONTH") {
+    const offered = resident.totalTrackedOpportunitiesThisMonth ?? 0;
+    const attended = resident.attendedCountThisMonth ?? 0;
+    const oneToOne = resident.oneToOneCompletedCountThisMonth ?? 0;
+    const refusals = resident.refusalCountThisMonth ?? 0;
+    const missed = resident.missedCountThisMonth ?? 0;
+    const participated = attended + oneToOne;
 
-  if (timeframe === "THIS_MONTH" || timeframe === "LAST_30_DAYS") {
     return {
-      participation: baseParticipation,
-      offered: baseOffered,
-      attended: baseParticipated,
-      oneToOne: baseOneToOne,
-      refusals: baseRefusals,
-      missed: baseMissed,
+      participation: deriveParticipation(offered, participated, resident.participationPercentage),
+      offered,
+      attended: participated,
+      oneToOne,
+      refusals,
+      missed,
       limitedData: false
     };
   }
 
-  if (timeframe === "LAST_90_DAYS") {
-    const participation = resident.last90DayParticipation ?? baseParticipation;
-    const multiplier = resident.last90DayParticipation !== null && resident.last90DayParticipation !== undefined ? 2.8 : 1;
+  if (timeframe === "LAST_30_DAYS") {
     return {
-      participation,
-      offered: withMultiplier(baseOffered, multiplier),
-      attended: withMultiplier(baseAttended, multiplier),
-      oneToOne: withMultiplier(baseOneToOne, multiplier),
-      refusals: withMultiplier(baseRefusals, multiplier),
-      missed: withMultiplier(baseMissed, multiplier),
-      limitedData: multiplier === 1
+      participation:
+        resident.last30DayParticipation !== null && resident.last30DayParticipation !== undefined
+          ? clampPercent(resident.last30DayParticipation)
+          : null,
+      offered: 0,
+      attended: 0,
+      oneToOne: 0,
+      refusals: 0,
+      missed: 0,
+      limitedData: true
     };
   }
 
-  const participation = resident.yearToDateParticipation ?? resident.last90DayParticipation ?? baseParticipation;
-  const multiplier =
-    resident.yearToDateParticipation !== null && resident.yearToDateParticipation !== undefined
-      ? 5.5
-      : resident.last90DayParticipation !== null && resident.last90DayParticipation !== undefined
-        ? 2.2
-        : 1;
+  if (timeframe === "LAST_90_DAYS") {
+    return {
+      participation:
+        resident.last90DayParticipation !== null && resident.last90DayParticipation !== undefined
+          ? clampPercent(resident.last90DayParticipation)
+          : null,
+      offered: 0,
+      attended: 0,
+      oneToOne: 0,
+      refusals: 0,
+      missed: 0,
+      limitedData: true
+    };
+  }
 
   return {
-    participation,
-    offered: withMultiplier(baseOffered, multiplier),
-    attended: withMultiplier(baseAttended, multiplier),
-    oneToOne: withMultiplier(baseOneToOne, multiplier),
-    refusals: withMultiplier(baseRefusals, multiplier),
-    missed: withMultiplier(baseMissed, multiplier),
-    limitedData: multiplier === 1
+    participation:
+      resident.yearToDateParticipation !== null && resident.yearToDateParticipation !== undefined
+        ? clampPercent(resident.yearToDateParticipation)
+        : null,
+    offered: 0,
+    attended: 0,
+    oneToOne: 0,
+    refusals: 0,
+    missed: 0,
+    limitedData: true
   };
 }
 
 export function analyticsSummaryLabel(resident: ResidentSnapshot) {
-  const participation = fallbackParticipation(resident);
-  const offered = resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0;
-  const participated = resident.totalActivitiesAttended ?? resident.attendedCountThisMonth ?? resident.attendanceCount ?? 0;
+  const offered = resident.totalTrackedOpportunitiesThisMonth ?? 0;
+  const attended = resident.attendedCountThisMonth ?? 0;
+  const oneToOne = resident.oneToOneCompletedCountThisMonth ?? 0;
+  const participated = attended + oneToOne;
+  const participation = deriveParticipation(offered, participated, resident.participationPercentage);
 
   if (participation === null) {
     return "No attendance tracked yet this month";
   }
 
-  return `${clampPercent(participation)}% this month · ${participated}/${offered} participated`;
+  return `${participation}% this month · ${participated}/${offered} participated`;
 }
 
 export function analyticsPatternNotes(resident: ResidentSnapshot, timeframe: AnalyticsTimeframeKey) {
   const window = getResidentAnalyticsWindow(resident, timeframe);
   const notes: string[] = [];
-  const trend = resident.lastParticipationTrend ?? "flat";
 
-  if (window.participation !== null) {
-    if (window.participation >= 70) {
-      notes.push("Participation is consistently strong in the selected timeframe.");
-    } else if (window.participation <= 40) {
-      notes.push("Participation is below goal and may benefit from tailored 1:1 alternatives.");
-    } else {
-      notes.push("Participation is moderate with room to improve through targeted prompts.");
-    }
+  if (window.participation === null) {
+    notes.push("No participation data for this timeframe yet.");
+  } else if (window.participation >= 70) {
+    notes.push("Participation is currently strong for this timeframe.");
+  } else if (window.participation <= 40) {
+    notes.push("Participation is currently below goal for this timeframe.");
   } else {
-    notes.push("Not enough activity data is available yet to detect a clear trend.");
+    notes.push("Participation is moderate in this timeframe.");
   }
 
-  if (window.oneToOne >= Math.max(2, Math.round(window.attended * 0.5))) {
-    notes.push("Resident appears to engage more consistently with 1:1 support.");
-  }
-
-  if (window.refusals >= 2) {
-    notes.push("Recent refusals suggest trying lower-pressure entry activities.");
-  }
-
-  if (trend === "up") {
-    notes.push("Participation trend is improving compared with recent snapshots.");
-  } else if (trend === "down") {
-    notes.push("Participation trend has declined recently and may need follow-up.");
+  if (window.offered > 0) {
+    notes.push(`${window.attended} of ${window.offered} tracked opportunities show participation.`);
   } else {
-    notes.push("Participation trend appears stable.");
+    notes.push("Track attendance from calendar activities to generate participation insights.");
+  }
+
+  if (resident.lastParticipationTrend === "up") {
+    notes.push("Participation trend is improving from the previous period.");
+  } else if (resident.lastParticipationTrend === "down") {
+    notes.push("Participation trend is currently declining from the previous period.");
+  } else {
+    notes.push("Participation trend is currently stable.");
+  }
+
+  if (window.limitedData) {
+    notes.push("Detailed counts are only available after attendance is tracked for this timeframe.");
   }
 
   return notes.slice(0, 4);

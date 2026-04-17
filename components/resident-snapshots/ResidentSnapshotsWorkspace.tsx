@@ -18,7 +18,6 @@ import {
   toDraftPayload,
   toSnapshotCollection
 } from "@/components/resident-snapshots/helpers";
-import { MOCK_RESIDENT_SNAPSHOTS } from "@/components/resident-snapshots/mockSnapshots";
 import { ResidentCard } from "@/components/resident-snapshots/ResidentCard";
 import { ResidentFilterBar } from "@/components/resident-snapshots/ResidentFilterBar";
 import { ResidentSearchInput } from "@/components/resident-snapshots/ResidentSearchInput";
@@ -53,53 +52,6 @@ async function fetchJson(url: string, options?: RequestInit) {
   return data;
 }
 
-function toLocalSnapshot(form: ResidentSnapshotFormValue): ResidentSnapshot {
-  const draft = toDraftPayload(form);
-  const firstTag = draft.tags[0] ?? "Snapshot";
-  return {
-    id: `local-${crypto.randomUUID()}`,
-    firstName: draft.firstName,
-    lastName: draft.lastName,
-    fullName: `${draft.firstName} ${draft.lastName}`.trim(),
-    preferredName: draft.preferredName,
-    room: draft.room,
-    status: draft.status,
-    admissionDate: draft.admissionDate ? `${draft.admissionDate}T00:00:00.000Z` : null,
-    birthDate: draft.birthDate ? `${draft.birthDate}T00:00:00.000Z` : null,
-    tags: draft.tags,
-    interests: draft.preferences ? draft.preferences.split("\n").slice(0, 2).map((line) => line.replace(/^.*:\s*/, "")) : [firstTag],
-    dislikes: [],
-    favoriteActivities: [],
-    favoriteTopics: [],
-    favoriteMusic: [],
-    favoriteMedia: [],
-    independentActivities: [],
-    participationStyle: form.participationStyle || "Snapshot created. Add engagement details when available.",
-    bestTimeOfDay: form.bestTimeOfDay || "Not set",
-    groupParticipationNotes: form.groupParticipationNotes,
-    oneToOneStyle: form.oneToOneStyle,
-    commonRefusals: form.commonRefusals,
-    whatWorks: form.whatWorks,
-    whatDoesNotWork: form.whatDoesNotWork,
-    supportNeeds: form.supportNeeds,
-    quickSummary: form.participationStyle || "Snapshot created",
-    sourceNotes: draft.notes,
-    sourcePreferences: draft.preferences,
-    sourceSafetyNotes: draft.safetyNotes,
-    lastEngagementDate: null,
-    lastActivity: null,
-    lastOneToOne: null,
-    lastNoteDate: null,
-    lastAiSuggestion: null,
-    lastSuccessfulActivityType: null,
-    followUpRequired: false,
-    followUpDate: null,
-    followUpPriority: null,
-    dischargeDate: null,
-    dischargeReason: null
-  };
-}
-
 export function ResidentSnapshotsWorkspace({
   initialResidents,
   canEdit
@@ -112,10 +64,7 @@ export function ResidentSnapshotsWorkspace({
 
   const initialSnapshots = useMemo(() => toSnapshotCollection(initialResidents), [initialResidents]);
 
-  const [residents, setResidents] = useState<ResidentSnapshot[]>(
-    initialSnapshots.length > 0 ? initialSnapshots : MOCK_RESIDENT_SNAPSHOTS
-  );
-  const [isDemoSeed, setIsDemoSeed] = useState(initialSnapshots.length === 0);
+  const [residents, setResidents] = useState<ResidentSnapshot[]>(initialSnapshots);
 
   const [view, setView] = useState<SnapshotViewKey>("ACTIVE");
   const [search, setSearch] = useState("");
@@ -194,13 +143,7 @@ export function ResidentSnapshotsWorkspace({
     try {
       const payload = (await fetchJson("/api/residents?includeAll=true")) as { residents?: ResidentListRow[] };
       const next = Array.isArray(payload.residents) ? toSnapshotCollection(payload.residents) : [];
-      if (next.length > 0) {
-        setResidents(next);
-        setIsDemoSeed(false);
-      } else if (!isDemoSeed) {
-        setResidents(MOCK_RESIDENT_SNAPSHOTS);
-        setIsDemoSeed(true);
-      }
+      setResidents(next);
     } catch (error) {
       setFeedback({ tone: "error", text: getErrorMessage(error) });
     } finally {
@@ -239,9 +182,8 @@ export function ResidentSnapshotsWorkspace({
         }
 
         const created = fromResidentRow(payload.resident);
-        setResidents((current) => [created, ...current.filter((item) => !item.id.startsWith("mock-"))]);
+        setResidents((current) => [created, ...current]);
         setSelectedResidentId(created.id);
-        setIsDemoSeed(false);
         setFeedback({ tone: "success", text: "Resident snapshot created." });
       } else {
         if (!selectedResident) {
@@ -269,18 +211,7 @@ export function ResidentSnapshotsWorkspace({
       setDrawerOpen(false);
       await refreshResidents();
     } catch (error) {
-      if (isDemoSeed) {
-        const local = toLocalSnapshot(form);
-        setResidents((current) => [local, ...current]);
-        setSelectedResidentId(local.id);
-        setDrawerOpen(false);
-        setFeedback({
-          tone: "success",
-          text: "Saved locally for demo mode. Connect API access to persist this resident."
-        });
-      } else {
-        setFeedback({ tone: "error", text: getErrorMessage(error) });
-      }
+      setFeedback({ tone: "error", text: getErrorMessage(error) });
     } finally {
       setIsSavingResident(false);
     }
@@ -594,12 +525,6 @@ export function ResidentSnapshotsWorkspace({
         onConfirm={handleArchiveConfirm}
         isSubmitting={isArchiveSubmitting}
       />
-
-      {isDemoSeed ? (
-        <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Demo seed data is shown because no resident rows were found yet. Add a resident to start building live snapshots.
-        </p>
-      ) : null}
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white/75 px-4 py-3 text-sm text-slate-600">
         <p className="font-medium text-slate-800">Ask Actify</p>

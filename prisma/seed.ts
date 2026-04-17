@@ -1,16 +1,9 @@
 import {
-  AttendanceStatus,
-  BarrierReason,
-  CuesRequired,
-  MoodAffect,
-  ParticipationLevel,
   Prisma,
   PrismaClient,
-  ProgressNoteType,
-  ResponseType,
   Role
 } from "@prisma/client";
-import { addDays, addHours } from "date-fns";
+import { addDays } from "date-fns";
 
 import { defaultModuleFlags } from "../lib/module-flags";
 import { defaultFacilitySettingsInput, defaultUserSettingsInput } from "../lib/settings/defaults";
@@ -253,133 +246,7 @@ async function main() {
   });
 
   const today = new Date();
-  const instance = await prisma.activityInstance.upsert({
-    where: { id: "seed_instance_1" },
-    update: {
-      facilityId: facility.id,
-      templateId: templateIds[0],
-      title: "Bingo",
-      startAt: addHours(today, 2),
-      endAt: addHours(today, 3),
-      location: "Main Lounge",
-      adaptationsEnabled: {
-        bedBound: false,
-        dementiaFriendly: true,
-        lowVisionHearing: true,
-        oneToOneMini: false,
-        overrides: {}
-      },
-      checklist: [
-        { text: "Set up tables", done: true },
-        { text: "Print attendance roster", done: false }
-      ]
-    },
-    create: {
-      id: "seed_instance_1",
-      facilityId: facility.id,
-      templateId: templateIds[0],
-      title: "Bingo",
-      startAt: addHours(today, 2),
-      endAt: addHours(today, 3),
-      location: "Main Lounge",
-      adaptationsEnabled: {
-        bedBound: false,
-        dementiaFriendly: true,
-        lowVisionHearing: true,
-        oneToOneMini: false,
-        overrides: {}
-      },
-      checklist: [
-        { text: "Set up tables", done: true },
-        { text: "Print attendance roster", done: false }
-      ]
-    }
-  });
-
   const martha = await prisma.resident.findUniqueOrThrow({ where: { id: "martha_lane" } });
-
-  const goal = await prisma.carePlanGoal.upsert({
-    where: { id: "seed_goal_1" },
-    update: {
-      residentId: martha.id,
-      type: "SOCIALIZATION",
-      description: "Participate in group activity 3x weekly",
-      targetMetric: "3/week",
-      isActive: true
-    },
-    create: {
-      id: "seed_goal_1",
-      residentId: martha.id,
-      type: "SOCIALIZATION",
-      description: "Participate in group activity 3x weekly",
-      targetMetric: "3/week",
-      isActive: true
-    }
-  });
-
-  const attendance = await prisma.attendance.upsert({
-    where: {
-      activityInstanceId_residentId: {
-        activityInstanceId: instance.id,
-        residentId: martha.id
-      }
-    },
-    update: {
-      status: AttendanceStatus.ACTIVE,
-      barrierReason: null,
-      notes: "Engaged for full session"
-    },
-    create: {
-      activityInstanceId: instance.id,
-      residentId: martha.id,
-      status: AttendanceStatus.ACTIVE,
-      notes: "Engaged for full session"
-    }
-  });
-
-  const note = await prisma.progressNote.upsert({
-    where: { id: "seed_note_1" },
-    update: {
-      residentId: martha.id,
-      activityInstanceId: instance.id,
-      type: ProgressNoteType.GROUP,
-      participationLevel: ParticipationLevel.HIGH,
-      moodAffect: MoodAffect.BRIGHT,
-      cuesRequired: CuesRequired.VERBAL,
-      response: ResponseType.POSITIVE,
-      followUp: "Encourage Music Social tomorrow",
-      narrative: "Resident attended Bingo and was highly engaged with peers. Required occasional verbal cueing and displayed positive affect throughout session.",
-      createdByUserId: admin.id
-    },
-    create: {
-      id: "seed_note_1",
-      residentId: martha.id,
-      activityInstanceId: instance.id,
-      type: ProgressNoteType.GROUP,
-      participationLevel: ParticipationLevel.HIGH,
-      moodAffect: MoodAffect.BRIGHT,
-      cuesRequired: CuesRequired.VERBAL,
-      response: ResponseType.POSITIVE,
-      followUp: "Encourage Music Social tomorrow",
-      narrative: "Resident attended Bingo and was highly engaged with peers. Required occasional verbal cueing and displayed positive affect throughout session.",
-      createdByUserId: admin.id
-    }
-  });
-
-  await prisma.goalLink.upsert({
-    where: { id: "seed_goal_link_1" },
-    update: {
-      goalId: goal.id,
-      attendanceId: attendance.id,
-      noteId: note.id
-    },
-    create: {
-      id: "seed_goal_link_1",
-      goalId: goal.id,
-      attendanceId: attendance.id,
-      noteId: note.id
-    }
-  });
 
   const activitiesCarePlan = await prisma.activitiesCarePlan.upsert({
     where: { residentId: martha.id },
@@ -554,56 +421,6 @@ async function main() {
       completionRequiresNote: true,
       createdByUserId: admin.id,
       updatedByUserId: admin.id
-    }
-  });
-
-  await prisma.activitiesCarePlanEvidenceLink.upsert({
-    where: { id: "seed_activities_evidence_1" },
-    update: {
-      residentId: martha.id,
-      evidenceType: "ATTENDANCE",
-      attendanceId: attendance.id,
-      progressNoteId: null,
-      focusId: activitiesFocus.id,
-      goalId: activitiesGoal.id,
-      linkNote: "Attendance supports socialization goal progress.",
-      linkedByUserId: admin.id
-    },
-    create: {
-      id: "seed_activities_evidence_1",
-      residentId: martha.id,
-      evidenceType: "ATTENDANCE",
-      attendanceId: attendance.id,
-      progressNoteId: null,
-      focusId: activitiesFocus.id,
-      goalId: activitiesGoal.id,
-      linkNote: "Attendance supports socialization goal progress.",
-      linkedByUserId: admin.id
-    }
-  });
-
-  await prisma.activitiesCarePlanEvidenceLink.upsert({
-    where: { id: "seed_activities_evidence_2" },
-    update: {
-      residentId: martha.id,
-      evidenceType: "PROGRESS_NOTE",
-      attendanceId: null,
-      progressNoteId: note.id,
-      focusId: activitiesFocus.id,
-      goalId: activitiesGoal.id,
-      linkNote: "Narrative note confirms active peer engagement.",
-      linkedByUserId: admin.id
-    },
-    create: {
-      id: "seed_activities_evidence_2",
-      residentId: martha.id,
-      evidenceType: "PROGRESS_NOTE",
-      attendanceId: null,
-      progressNoteId: note.id,
-      focusId: activitiesFocus.id,
-      goalId: activitiesGoal.id,
-      linkNote: "Narrative note confirms active peer engagement.",
-      linkedByUserId: admin.id
     }
   });
 

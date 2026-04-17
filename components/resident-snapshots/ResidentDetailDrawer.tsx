@@ -52,6 +52,15 @@ export function ResidentDetailDrawer({
     () => (resident ? getResidentAnalyticsWindow(resident, timeframe) : null),
     [resident, timeframe]
   );
+  const hasTrackedAnalytics = Boolean(
+    analytics &&
+      (analytics.offered > 0 ||
+        analytics.attended > 0 ||
+        analytics.oneToOne > 0 ||
+        analytics.refusals > 0 ||
+        analytics.missed > 0 ||
+        analytics.participation !== null)
+  );
 
   if (!open || !resident) return null;
 
@@ -122,10 +131,16 @@ export function ResidentDetailDrawer({
               </select>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <MetricStripCard label="Participation %" value={analytics?.participation === null ? "N/A" : `${analytics?.participation}%`} />
-              <MetricStripCard label="Group Attendance" value={analytics?.attended ?? 0} />
-              <MetricStripCard label="1:1 Visits" value={analytics?.oneToOne ?? 0} />
-              <MetricStripCard label="Missed / Refused" value={(analytics?.missed ?? 0) + (analytics?.refusals ?? 0)} />
+              <MetricStripCard
+                label="Participation %"
+                value={analytics?.participation === null ? "No attendance tracked yet" : `${analytics?.participation}%`}
+              />
+              <MetricStripCard label="Group Attendance" value={hasTrackedAnalytics ? (analytics?.attended ?? 0) : "No data"} />
+              <MetricStripCard label="1:1 Visits" value={hasTrackedAnalytics ? (analytics?.oneToOne ?? 0) : "No data"} />
+              <MetricStripCard
+                label="Missed / Refused"
+                value={hasTrackedAnalytics ? (analytics?.missed ?? 0) + (analytics?.refusals ?? 0) : "No data"}
+              />
             </div>
           </section>
 

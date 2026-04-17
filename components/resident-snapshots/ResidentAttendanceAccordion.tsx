@@ -93,6 +93,7 @@ export function ResidentAttendanceAccordion({
 
   const summary = useMemo(() => payload?.summary ?? defaultAttendanceSummary(timeframe), [payload, timeframe]);
   const records = payload?.records ?? [];
+  const hasTrackedData = summary.totalTrackedOpportunities > 0;
 
   return (
     <div className="space-y-4">
@@ -128,9 +129,9 @@ export function ResidentAttendanceAccordion({
           label="Participation"
           value={summary.participationPercentage === null ? "No attendance tracked yet" : `${summary.participationPercentage}%`}
         />
-        <MetricCard label="Attended" value={summary.attendedCount} />
-        <MetricCard label="1:1 Completed" value={summary.oneToOneCompletedCount} />
-        <MetricCard label="Missed / Refused" value={summary.missedCount + summary.refusalCount} />
+        <MetricCard label="Attended" value={hasTrackedData ? summary.attendedCount : "No data"} />
+        <MetricCard label="1:1 Completed" value={hasTrackedData ? summary.oneToOneCompletedCount : "No data"} />
+        <MetricCard label="Missed / Refused" value={hasTrackedData ? summary.missedCount + summary.refusalCount : "No data"} />
       </div>
 
       <p className="text-sm text-slate-700">{trendSummary(payload)}</p>

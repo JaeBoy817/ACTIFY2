@@ -24,7 +24,6 @@ import {
   toDraftPayload,
   toSnapshotCollection
 } from "@/components/resident-snapshots/helpers";
-import { MOCK_RESIDENT_SNAPSHOTS } from "@/components/resident-snapshots/mockSnapshots";
 import type {
   ArchiveReason,
   ResidentSnapshot,
@@ -143,75 +142,6 @@ function getBirthdayUpcomingScore(value: string | null) {
   return nextBirthday.getTime() - now.getTime();
 }
 
-function toLocalSnapshot(form: ResidentSnapshotFormValue): ResidentSnapshot {
-  const draft = toDraftPayload(form);
-  const [firstName = "Resident", ...rest] = form.fullName.trim().split(/\s+/);
-  const lastName = rest.join(" ") || "Profile";
-
-  return {
-    id: `local-${crypto.randomUUID()}`,
-    firstName,
-    lastName,
-    fullName: `${firstName} ${lastName}`.trim(),
-    preferredName: form.preferredName || null,
-    room: form.room,
-    status: draft.status,
-    admissionDate: draft.admissionDate ? `${draft.admissionDate}T00:00:00.000Z` : null,
-    birthDate: draft.birthDate ? `${draft.birthDate}T00:00:00.000Z` : null,
-    tags: draft.tags,
-    interests: draft.preferences ? draft.preferences.split("\n").slice(0, 2).map((line) => line.replace(/^.*:\s*/, "")) : [],
-    dislikes: [],
-    favoriteActivities: [],
-    favoriteTopics: [],
-    favoriteMusic: [],
-    favoriteMedia: [],
-    independentActivities: [],
-    participationStyle: form.participationStyle || "Snapshot created. Add engagement details when available.",
-    bestTimeOfDay: form.bestTimeOfDay || "Not set",
-    groupParticipationNotes: form.groupParticipationNotes,
-    oneToOneStyle: form.oneToOneStyle,
-    commonRefusals: form.commonRefusals,
-    whatWorks: form.whatWorks,
-    whatDoesNotWork: form.whatDoesNotWork,
-    supportNeeds: form.supportNeeds,
-    quickSummary: form.participationStyle || "Snapshot created",
-    sourceNotes: draft.notes,
-    sourcePreferences: draft.preferences,
-    sourceSafetyNotes: draft.safetyNotes,
-    lastEngagementDate: null,
-    lastActivity: null,
-    lastOneToOne: null,
-    lastNoteDate: null,
-    lastAiSuggestion: null,
-    lastSuccessfulActivityType: null,
-    followUpRequired: false,
-    followUpDate: null,
-    followUpPriority: null,
-    dischargeDate: null,
-    dischargeReason: null,
-    totalActivitiesOffered: 0,
-    totalActivitiesAttended: 0,
-    participationPercentage: null,
-    attendanceCount: 0,
-    oneToOneCount: 0,
-    refusalCount: 0,
-    missedActivitiesCount: 0,
-    totalTrackedOpportunitiesThisMonth: 0,
-    attendedCountThisMonth: 0,
-    oneToOneCompletedCountThisMonth: 0,
-    refusalCountThisMonth: 0,
-    missedCountThisMonth: 0,
-    noAttendanceLoggedThisMonth: true,
-    mostlyOneToOneParticipation: false,
-    lastAttendanceDate: null,
-    last30DayParticipation: null,
-    last90DayParticipation: null,
-    yearToDateParticipation: null,
-    attendanceByActivityType: [],
-    lastParticipationTrend: "flat"
-  };
-}
-
 export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialResidents: ResidentListRow[]; canEdit: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -219,10 +149,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   const initialSnapshots = useMemo(() => toSnapshotCollection(initialResidents), [initialResidents]);
   const actions = useMemo(() => getSnapshotActions(), []);
 
-  const [residents, setResidents] = useState<ResidentSnapshot[]>(
-    initialSnapshots.length > 0 ? initialSnapshots : MOCK_RESIDENT_SNAPSHOTS
-  );
-  const [isDemoSeed, setIsDemoSeed] = useState(initialSnapshots.length === 0);
+  const [residents, setResidents] = useState<ResidentSnapshot[]>(initialSnapshots);
 
   const [view, setView] = useState<SnapshotViewKey>("ACTIVE");
   const [search, setSearch] = useState("");
@@ -275,19 +202,19 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         case "FOLLOW_UP":
           return priorityValue(a.followUpPriority) - priorityValue(b.followUpPriority);
         case "PARTICIPATION_HIGH":
-          return (b.participationPercentage ?? b.last30DayParticipation ?? 0) - (a.participationPercentage ?? a.last30DayParticipation ?? 0);
+          return (b.participationPercentage ?? -1) - (a.participationPercentage ?? -1);
         case "PARTICIPATION_LOW":
-          return (a.participationPercentage ?? a.last30DayParticipation ?? 0) - (b.participationPercentage ?? b.last30DayParticipation ?? 0);
+          return (a.participationPercentage ?? Number.MAX_SAFE_INTEGER) - (b.participationPercentage ?? Number.MAX_SAFE_INTEGER);
         case "MOST_MISSED":
-          return (b.missedCountThisMonth ?? b.missedActivitiesCount ?? 0) - (a.missedCountThisMonth ?? a.missedActivitiesCount ?? 0);
+          return (b.missedCountThisMonth ?? 0) - (a.missedCountThisMonth ?? 0);
         case "RECENT_1TO1":
           return compareNullableDate(a.lastOneToOne, b.lastOneToOne, "desc");
         case "MOST_RECENT_ATTENDANCE":
           return compareNullableDate(a.lastAttendanceDate ?? null, b.lastAttendanceDate ?? null, "desc");
         case "MOST_1TO1_COMPLETIONS":
-          return (b.oneToOneCompletedCountThisMonth ?? b.oneToOneCount ?? 0) - (a.oneToOneCompletedCountThisMonth ?? a.oneToOneCount ?? 0);
+          return (b.oneToOneCompletedCountThisMonth ?? 0) - (a.oneToOneCompletedCountThisMonth ?? 0);
         case "MOST_REFUSALS":
-          return (b.refusalCountThisMonth ?? b.refusalCount ?? 0) - (a.refusalCountThisMonth ?? a.refusalCount ?? 0);
+          return (b.refusalCountThisMonth ?? 0) - (a.refusalCountThisMonth ?? 0);
         case "NAME":
         default:
           return a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" });
@@ -349,13 +276,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     try {
       const payload = (await fetchJson("/api/residents?includeAll=true")) as { residents?: ResidentListRow[] };
       const next = Array.isArray(payload.residents) ? toSnapshotCollection(payload.residents) : [];
-      if (next.length > 0) {
-        setResidents(next);
-        setIsDemoSeed(false);
-      } else if (!isDemoSeed) {
-        setResidents(MOCK_RESIDENT_SNAPSHOTS);
-        setIsDemoSeed(true);
-      }
+      setResidents(next);
       await refreshParticipationSummaries();
     } catch (error) {
       setFeedback({ tone: "error", text: getErrorMessage(error) });
@@ -536,10 +457,9 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         if (!payload.resident) throw new Error("Resident could not be created.");
 
         const created = fromResidentRow(payload.resident);
-        setResidents((current) => [created, ...current.filter((item) => !item.id.startsWith("mock-"))]);
+        setResidents((current) => [created, ...current]);
         setSelectedResidentId(created.id);
         setFeedback({ tone: "success", text: "Resident saved." });
-        setIsDemoSeed(false);
       } else {
         if (!selectedResident) throw new Error("Select a resident to edit.");
 
@@ -560,15 +480,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
       setDrawerOpen(false);
       await refreshResidents();
     } catch (error) {
-      if (isDemoSeed) {
-        const local = toLocalSnapshot(form);
-        setResidents((current) => [local, ...current]);
-        setSelectedResidentId(local.id);
-        setDrawerOpen(false);
-        setFeedback({ tone: "success", text: "Saved locally for demo mode." });
-      } else {
-        setFeedback({ tone: "error", text: getErrorMessage(error) });
-      }
+      setFeedback({ tone: "error", text: getErrorMessage(error) });
     } finally {
       setIsSavingResident(false);
     }
@@ -576,7 +488,10 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
   async function handleSaveAndAskActify(form: ResidentSnapshotFormValue) {
     await handleSaveResident(form);
-    const target = selectedResident ?? toLocalSnapshot(form);
+    const target =
+      (selectedResidentId ? residents.find((resident) => resident.id === selectedResidentId) : null) ??
+      selectedResident;
+    if (!target) return;
     launchAssistant(getAction("idea-1to1"), target);
   }
 
@@ -933,11 +848,6 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
           </div>
         )}
 
-        {isDemoSeed ? (
-          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Demo seed data is shown because no resident rows were found yet. Add a resident to start building live snapshots.
-          </p>
-        ) : null}
       </section>
 
       <ResidentDetailDrawer

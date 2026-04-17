@@ -232,74 +232,9 @@ function inferSupportNeeds(tags: string[], safetyText: string | null) {
   });
 }
 
-function deriveParticipationLevel(value: number | null) {
-  if (value === null) return "neutral";
-  if (value >= 65) return "high";
-  if (value <= 30) return "low";
-  return "neutral";
-}
-
 function clampPercent(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function inferAttendanceTrend({
-  participation30d,
-  refusals,
-  noShows,
-  oneToOneCount
-}: {
-  participation30d: number | null;
-  refusals: number;
-  noShows: number;
-  oneToOneCount: number;
-}): "up" | "flat" | "down" {
-  if (participation30d === null) return "flat";
-  if (participation30d >= 70 && refusals <= 1) return "up";
-  if (participation30d <= 40 || refusals + noShows >= Math.max(3, oneToOneCount + 2)) return "down";
-  return "flat";
-}
-
-function toFallbackAttendanceByActivityType(row: ResidentListRow) {
-  const textBlocks = [
-    row.preferences ?? "",
-    row.notes ?? "",
-    row.safetyNotes ?? "",
-    ...row.recentNotes.map((entry) => entry.narrative)
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  const buckets = [
-    { label: "Bingo", keywords: ["bingo"] },
-    { label: "Music", keywords: ["music", "sing", "hymn", "karaoke"] },
-    { label: "Exercise", keywords: ["exercise", "stretch", "walk", "chair"] },
-    { label: "Movie", keywords: ["movie", "tv", "film"] },
-    { label: "Bible Study", keywords: ["bible", "devotion", "faith"] },
-    { label: "Crafts", keywords: ["craft", "painting", "nail"] },
-    { label: "Puzzles", keywords: ["puzzle", "crossword", "word search", "trivia"] },
-    { label: "1:1 Visits", keywords: ["1:1", "one-to-one", "room visit", "bedside"] }
-  ] as const;
-
-  const inferred = buckets
-    .map((bucket) => {
-      const hits = bucket.keywords.reduce((count, keyword) => (textBlocks.includes(keyword) ? count + 1 : count), 0);
-      return {
-        label: bucket.label,
-        count: hits
-      };
-    })
-    .filter((entry) => entry.count > 0);
-
-  if (inferred.length > 0) {
-    return inferred.sort((a, b) => b.count - a.count).slice(0, 5);
-  }
-
-  const fallbacks = splitList(row.preferences)
-    .slice(0, 4)
-    .map((label) => ({ label, count: 1 }));
-  return fallbacks.length > 0 ? fallbacks : [{ label: "General Activities", count: 1 }];
 }
 
 function maybeParseDate(value: string | null) {
@@ -358,10 +293,8 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
   );
 
   const lastNoteDate = row.recentNotes[0]?.createdAt ?? null;
-  const lastActivity = row.recentNotes[0]?.narrative ?? null;
-  const lastOneToOne = row.lastOneOnOneAt
-    ? row.recentNotes.find((note) => /1:?1|one[-\s]?to[-\s]?one|room visit/i.test(note.narrative))?.narrative ?? null
-    : null;
+  const lastActivity = parsedNotes[FORM_LINE_KEYS.lastActivity] || null;
+  const lastOneToOne = parsedNotes[FORM_LINE_KEYS.lastOneToOne] || null;
 
   const lastEngagementCandidates = [row.lastOneOnOneAt, lastNoteDate]
     .map((value) => maybeParseDate(value))
@@ -392,13 +325,7 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
     favoriteMusic,
     favoriteMedia,
     independentActivities,
-    participationStyle:
-      parsedNotes[FORM_LINE_KEYS.participationStyle] ||
-      (deriveParticipationLevel(row.attendanceSnapshot.participationPercent30d) === "high"
-        ? "Joins groups well and responds positively with social options"
-        : deriveParticipationLevel(row.attendanceSnapshot.participationPercent30d) === "low"
-          ? "Benefits from encouragement and shorter, lower-pressure options"
-          : "Watches first, then engages with clear cues"),
+    participationStyle: parsedNotes[FORM_LINE_KEYS.participationStyle] || "Watches first, then engages with clear cues",
     bestTimeOfDay: row.bestTimesOfDay || "Afternoons",
     groupParticipationNotes: parsedNotes[FORM_LINE_KEYS.groupParticipationNotes] || "",
     oneToOneStyle: parsedNotes[FORM_LINE_KEYS.oneToOneStyle] || "",
@@ -422,36 +349,26 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
       (parsedNotes["Follow-Up Priority"]?.toUpperCase() as "LOW" | "MEDIUM" | "HIGH" | undefined) ?? null,
     dischargeDate: archiveMeta.dischargeDate,
     dischargeReason: archiveMeta.dischargeReason,
-    totalActivitiesOffered: row.attendanceSnapshot.total30d,
-    totalActivitiesAttended: row.attendanceSnapshot.engaged30d,
-    participationPercentage: row.attendanceSnapshot.participationPercent30d,
-    attendanceCount: row.attendanceSnapshot.engaged30d,
-    oneToOneCount: row.recentNotes.filter((note) => {
-      const createdAt = maybeParseDate(note.createdAt);
-      if (!createdAt) return false;
-      const days = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      return days <= 30;
-    }).length,
-    refusalCount: row.attendanceSnapshot.refused30d,
-    missedActivitiesCount: row.attendanceSnapshot.noShow30d,
-    totalTrackedOpportunitiesThisMonth: row.attendanceSnapshot.total30d,
-    attendedCountThisMonth: row.attendanceSnapshot.engaged30d,
+    totalActivitiesOffered: 0,
+    totalActivitiesAttended: 0,
+    participationPercentage: null,
+    attendanceCount: 0,
+    oneToOneCount: 0,
+    refusalCount: 0,
+    missedActivitiesCount: 0,
+    totalTrackedOpportunitiesThisMonth: 0,
+    attendedCountThisMonth: 0,
     oneToOneCompletedCountThisMonth: 0,
-    refusalCountThisMonth: row.attendanceSnapshot.refused30d,
-    missedCountThisMonth: row.attendanceSnapshot.noShow30d,
-    noAttendanceLoggedThisMonth: row.attendanceSnapshot.total30d === 0,
+    refusalCountThisMonth: 0,
+    missedCountThisMonth: 0,
+    noAttendanceLoggedThisMonth: true,
     mostlyOneToOneParticipation: false,
-    lastAttendanceDate: row.lastOneOnOneAt ?? row.recentNotes[0]?.createdAt ?? null,
-    last30DayParticipation: row.attendanceSnapshot.participationPercent30d,
-    last90DayParticipation: row.attendanceSnapshot.participationPercent30d,
-    yearToDateParticipation: row.attendanceSnapshot.participationPercent30d,
-    attendanceByActivityType: toFallbackAttendanceByActivityType(row),
-    lastParticipationTrend: inferAttendanceTrend({
-      participation30d: row.attendanceSnapshot.participationPercent30d,
-      refusals: row.attendanceSnapshot.refused30d,
-      noShows: row.attendanceSnapshot.noShow30d,
-      oneToOneCount: row.recentNotes.length
-    })
+    lastAttendanceDate: null,
+    last30DayParticipation: null,
+    last90DayParticipation: null,
+    yearToDateParticipation: null,
+    attendanceByActivityType: [],
+    lastParticipationTrend: "flat"
   };
 
   snapshot.quickSummary = toSummary(snapshot);
@@ -726,7 +643,7 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
     case "PUZZLES":
       return boolIncludes(searchableValues, "puzzle") || boolIncludes(searchableValues, "crossword");
     case "ATTENDANCE_BELOW_GOAL":
-      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 50;
+      return resident.participationPercentage !== null && resident.participationPercentage !== undefined && resident.participationPercentage < 50;
     case "ATTENDANCE_IMPROVING":
       return resident.lastParticipationTrend === "up";
     case "MISSED_RECENT_GROUP":
@@ -740,22 +657,25 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
     case "FREQUENT_REFUSAL":
       return (resident.refusalCountThisMonth ?? resident.refusalCount ?? 0) >= 2 || boolIncludes([resident.commonRefusals], "decline");
     case "INCONSISTENT_PARTICIPATION":
-      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) >= 35 &&
-        (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) <= 65;
+      return (
+        resident.participationPercentage !== null &&
+        resident.participationPercentage !== undefined &&
+        resident.participationPercentage >= 35 &&
+        resident.participationPercentage <= 65
+      );
     case "PARTICIPATION_BELOW_25":
-      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 25;
+      return resident.participationPercentage !== null && resident.participationPercentage !== undefined && resident.participationPercentage < 25;
     case "PARTICIPATION_BELOW_50":
-      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 50;
+      return resident.participationPercentage !== null && resident.participationPercentage !== undefined && resident.participationPercentage < 50;
     case "MOSTLY_1TO1_PARTICIPATION":
       return (
         resident.mostlyOneToOneParticipation === true ||
-        (resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0) >
-          (resident.attendedCountThisMonth ?? resident.attendanceCount ?? 0)
+        (resident.oneToOneCompletedCountThisMonth ?? 0) > (resident.attendedCountThisMonth ?? 0)
       );
     case "NO_ATTENDANCE_THIS_MONTH":
       return (
         resident.noAttendanceLoggedThisMonth === true ||
-        (resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0) <= 0
+        (resident.totalTrackedOpportunitiesThisMonth ?? 0) <= 0
       );
     default:
       return true;
@@ -797,11 +717,12 @@ export function buildAssistantPrompt(action: SnapshotIntentAction, resident: Res
     `Support Needs: ${resident.supportNeeds.join(", ") || "Not provided"}`,
     `What Works: ${resident.whatWorks || "Not provided"}`,
     `Common Refusals: ${resident.commonRefusals || "Not provided"}`,
-    `Participation (30d): ${resident.last30DayParticipation ?? resident.participationPercentage ?? "Not enough data"}`,
-    `Attendance count (30d): ${resident.attendanceCount ?? resident.totalActivitiesAttended ?? 0}`,
-    `Recent 1:1 visits: ${resident.oneToOneCount ?? 0}`,
-    `Refusals (30d): ${resident.refusalCount ?? 0}`,
-    `Missed activities (30d): ${resident.missedActivitiesCount ?? 0}`
+    `Participation (this month): ${resident.participationPercentage ?? "No attendance tracked yet"}`,
+    `Tracked opportunities (this month): ${resident.totalTrackedOpportunitiesThisMonth ?? 0}`,
+    `Attended (this month): ${resident.attendedCountThisMonth ?? 0}`,
+    `1:1 completed (this month): ${resident.oneToOneCompletedCountThisMonth ?? 0}`,
+    `Refusals (this month): ${resident.refusalCountThisMonth ?? 0}`,
+    `Missed (this month): ${resident.missedCountThisMonth ?? 0}`
   ];
 
   return `${action.prompt}.\n\nResident context:\n${context.join("\n")}`;
