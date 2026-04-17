@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You need to sign in before managing billing." }, { status: 401 });
     }
 
     const user = await requireUser();

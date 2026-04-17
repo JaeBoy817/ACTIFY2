@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 
+import { CheckoutButton } from "@/components/billing/CheckoutButton";
 import { cn } from "@/lib/utils";
 import type { BillingCycle } from "@/components/marketing/pricing/pricing-data";
 
@@ -11,7 +12,8 @@ type PricingPlanCardProps = {
   description: string;
   features: readonly string[];
   ctaLabel: string;
-  ctaHref: string;
+  ctaHref?: string;
+  ctaPlan?: "monthly" | "annual";
   selected?: boolean;
   featured?: boolean;
   featuredLabel?: string;
@@ -27,6 +29,7 @@ export function PricingPlanCard({
   features,
   ctaLabel,
   ctaHref,
+  ctaPlan,
   selected = false,
   featured = false,
   featuredLabel,
@@ -58,17 +61,32 @@ export function PricingPlanCard({
         <p className="mt-4 text-sm leading-6 text-slate-600">{description}</p>
       </div>
 
-      <Link
-        href={ctaHref}
-        className={cn(
-          "mt-6 inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
-          featured || billingCycle === "yearly"
-            ? "bg-slate-900 text-white hover:-translate-y-0.5 hover:bg-slate-800"
-            : "border border-slate-300 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-slate-400"
-        )}
-      >
-        {ctaLabel}
-      </Link>
+      {ctaPlan ? (
+        <CheckoutButton
+          plan={ctaPlan}
+          label={ctaLabel}
+          redirectToSignInOnUnauthorized
+          signInRedirectPath={`/pricing?plan=${ctaPlan}`}
+          className={cn(
+            "mt-6 inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+            featured || billingCycle === "yearly"
+              ? "bg-slate-900 text-white hover:-translate-y-0.5 hover:bg-slate-800"
+              : "border border-slate-300 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-slate-400"
+          )}
+        />
+      ) : (
+        <Link
+          href={ctaHref ?? "/sign-up"}
+          className={cn(
+            "mt-6 inline-flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+            featured || billingCycle === "yearly"
+              ? "bg-slate-900 text-white hover:-translate-y-0.5 hover:bg-slate-800"
+              : "border border-slate-300 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-slate-400"
+          )}
+        >
+          {ctaLabel}
+        </Link>
+      )}
 
       <ul className="mt-6 space-y-2.5">
         {features.map((feature) => (

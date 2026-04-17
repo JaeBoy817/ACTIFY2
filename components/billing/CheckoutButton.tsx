@@ -6,11 +6,23 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/lib/use-toast";
 
+type CheckoutPlan = "monthly" | "annual";
+
 export function CheckoutButton({
-  endpoint = "/api/stripe/create-checkout-session",
+  endpoint = "/api/stripe/checkout",
+  plan = "monthly",
+  label = "Continue to Checkout",
+  loadingLabel = "Redirecting to Checkout...",
+  redirectToSignInOnUnauthorized = false,
+  signInRedirectPath,
   className
 }: {
   endpoint?: string;
+  plan?: CheckoutPlan;
+  label?: string;
+  loadingLabel?: string;
+  redirectToSignInOnUnauthorized?: boolean;
+  signInRedirectPath?: string;
   className?: string;
 }) {
   const { toast } = useToast();
@@ -20,14 +32,36 @@ export function CheckoutButton({
     setIsLoading(true);
     try {
       const response = await fetch(endpoint, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          plan
+        })
       });
 
       const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (response.status === 401) {
+        toast({
+          title: "Sign in required",
+          description: payload.error ?? "You need to sign in before subscribing.",
+          variant: "destructive"
+        });
+        if (redirectToSignInOnUnauthorized) {
+          const redirectPath =
+            signInRedirectPath ??
+            `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(redirectPath)}`;
+          window.location.assign(signInUrl);
+        }
+        return;
+      }
+
       if (!response.ok || !payload.url) {
         toast({
           title: "Unable to start checkout",
-          description: payload.error ?? "Please try again in a moment.",
+          description: payload.error ?? "We couldn't start checkout right now. Please try again.",
           variant: "destructive"
         });
         return;
@@ -38,7 +72,7 @@ export function CheckoutButton({
       console.error("[billing][checkout-button]", error);
       toast({
         title: "Unable to start checkout",
-        description: "Please try again in a moment.",
+        description: "We couldn't start checkout right now. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -54,7 +88,7 @@ export function CheckoutButton({
       className={className}
     >
       {isLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-1.5 h-4 w-4" />}
-      {isLoading ? "Redirecting to Checkout..." : "Continue to Checkout"}
+      {isLoading ? loadingLabel : label}
     </Button>
   );
 }

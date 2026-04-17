@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 
 import { SubscriptionActivationWatcher } from "@/components/billing/SubscriptionActivationWatcher";
+import { requireUser } from "@/lib/auth";
+import { getFacilityBillingState } from "@/lib/billing";
+import { getStripePlanDetailsFromPriceId } from "@/lib/stripe";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -26,6 +29,9 @@ export default async function SubscriptionSuccessPage({
   }
 
   const sessionId = readSearchValue(searchParams, "session_id");
+  const user = await requireUser();
+  const billing = await getFacilityBillingState(user.facilityId).catch(() => null);
+  const selectedPlan = getStripePlanDetailsFromPriceId(billing?.stripePriceId ?? null);
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-3xl items-center px-4 py-12">
@@ -39,6 +45,9 @@ export default async function SubscriptionSuccessPage({
           <p className="mt-2 text-sm text-[#bfd0eb]">
             We’re confirming your Stripe subscription through webhook events before unlocking the dashboard.
           </p>
+          {selectedPlan ? (
+            <p className="mt-2 text-xs text-[#9eb4d7]">Detected plan: {selectedPlan.planName}</p>
+          ) : null}
           {sessionId ? (
             <p className="mt-2 text-xs text-[#9eb4d7]">Session: {sessionId}</p>
           ) : null}

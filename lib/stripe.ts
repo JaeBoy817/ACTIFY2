@@ -4,6 +4,14 @@ import Stripe from "stripe";
 
 let stripeSingleton: Stripe | null = null;
 
+export type StripePlanKey = "monthly" | "annual";
+
+type StripePlanDetails = {
+  planKey: StripePlanKey;
+  planName: "Monthly" | "Annual";
+  billingInterval: "month" | "year";
+};
+
 export class StripeConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -13,6 +21,10 @@ export class StripeConfigurationError extends Error {
 
 function validateStripeSecretKey(key: string) {
   return key.startsWith("sk_") || key.startsWith("rk_");
+}
+
+function validateStripePriceId(priceId: string) {
+  return priceId.startsWith("price_");
 }
 
 function normalizeAbsoluteUrl(value: string) {
@@ -73,13 +85,65 @@ export function getStripeAppUrlWithFallback(fallbackUrl?: string) {
   }
 }
 
+function readStripePriceIdFromEnv(keys: string[], label: string) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (!value) continue;
+    if (!validateStripePriceId(value)) {
+      throw new StripeConfigurationError(`Billing is not configured: ${key} appears invalid for ${label}.`);
+    }
+    return value;
+  }
+
+  throw new StripeConfigurationError(
+    `Billing is not configured: missing ${keys.join(" or ")} for ${label}.`
+  );
+}
+
+function readOptionalStripePriceIdFromEnv(keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (!value) continue;
+    if (!validateStripePriceId(value)) return null;
+    return value;
+  }
+  return null;
+}
+
 export function getStripeMonthlyPriceId() {
-  const priceId = process.env.STRIPE_PRICE_ID_MONTHLY?.trim();
-  if (!priceId) {
-    throw new StripeConfigurationError("Billing is not configured: missing STRIPE_PRICE_ID_MONTHLY.");
+  return readStripePriceIdFromEnv(["STRIPE_PRICE_MONTHLY_ID", "STRIPE_PRICE_ID_MONTHLY"], "monthly plan");
+}
+
+export function getStripeAnnualPriceId() {
+  return readStripePriceIdFromEnv(["STRIPE_PRICE_ANNUAL_ID", "STRIPE_PRICE_ID_ANNUAL"], "annual plan");
+}
+
+export function getStripePriceIdForPlan(plan: StripePlanKey) {
+  return plan === "annual" ? getStripeAnnualPriceId() : getStripeMonthlyPriceId();
+}
+
+export function getStripePlanDetailsFromPriceId(priceId: string | null | undefined): (StripePlanDetails & { priceId: string }) | null {
+  if (!priceId) return null;
+
+  const monthlyPriceId = readOptionalStripePriceIdFromEnv(["STRIPE_PRICE_MONTHLY_ID", "STRIPE_PRICE_ID_MONTHLY"]);
+  if (monthlyPriceId && priceId === monthlyPriceId) {
+    return {
+      priceId,
+      planKey: "monthly",
+      planName: "Monthly",
+      billingInterval: "month"
+    };
   }
-  if (!priceId.startsWith("price_")) {
-    throw new StripeConfigurationError("Billing is not configured: STRIPE_PRICE_ID_MONTHLY appears invalid.");
+
+  const annualPriceId = readOptionalStripePriceIdFromEnv(["STRIPE_PRICE_ANNUAL_ID", "STRIPE_PRICE_ID_ANNUAL"]);
+  if (annualPriceId && priceId === annualPriceId) {
+    return {
+      priceId,
+      planKey: "annual",
+      planName: "Annual",
+      billingInterval: "year"
+    };
   }
-  return priceId;
+
+  return null;
 }

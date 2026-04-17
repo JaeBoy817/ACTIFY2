@@ -8,7 +8,8 @@ type FeaturedPricingCardProps = {
   description: string;
   features: readonly string[];
   ctaLabel: string;
-  ctaHref: string;
+  ctaHref?: string;
+  ctaPlan?: "monthly" | "annual";
   selected?: boolean;
   featuredLabel?: string;
   savingsLine?: string;

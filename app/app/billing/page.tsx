@@ -7,6 +7,7 @@ import { GlassCard } from "@/components/glass/GlassCard";
 import { GlassPanel } from "@/components/glass/GlassPanel";
 import { requireFacilityContext } from "@/lib/auth";
 import { getFacilityBillingState } from "@/lib/billing";
+import { getStripePlanDetailsFromPriceId } from "@/lib/stripe";
 
 function formatDate(value: Date | null, timeZone: string) {
   if (!value) return "Not available";
@@ -32,6 +33,14 @@ export default async function BillingPage() {
       hasActiveSubscription: false
     };
   });
+  const planDetails = getStripePlanDetailsFromPriceId(billing.stripePriceId);
+  const planName = planDetails?.planName ?? "Actify Pro";
+  const planPriceLabel =
+    planDetails?.planKey === "annual"
+      ? "$60 / year"
+      : planDetails?.planKey === "monthly"
+        ? "$5.99 / month"
+        : "Price based on Stripe plan";
 
   return (
     <div className="space-y-6">
@@ -46,8 +55,8 @@ export default async function BillingPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <GlassCard className="space-y-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/60">Plan</p>
-          <h2 className="text-2xl font-black text-foreground">Actify Pro</h2>
-          <p className="text-sm text-foreground/70">$20 / month</p>
+          <h2 className="text-2xl font-black text-foreground">{planName}</h2>
+          <p className="text-sm text-foreground/70">{planPriceLabel}</p>
           <p className="inline-flex items-center gap-2 rounded-full border border-emerald-300/60 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-900">
             <BadgeCheck className="h-3.5 w-3.5" />
             {billing.hasActiveSubscription ? "Active subscription" : "Subscription inactive"}

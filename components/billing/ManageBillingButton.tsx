@@ -9,10 +9,14 @@ import { useToast } from "@/lib/use-toast";
 export function ManageBillingButton({
   endpoint = "/api/stripe/customer-portal",
   disabled = false,
+  redirectToSignInOnUnauthorized = false,
+  signInRedirectPath,
   className
 }: {
   endpoint?: string;
   disabled?: boolean;
+  redirectToSignInOnUnauthorized?: boolean;
+  signInRedirectPath?: string;
   className?: string;
 }) {
   const { toast } = useToast();
@@ -25,6 +29,22 @@ export function ManageBillingButton({
         method: "POST"
       });
       const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+
+      if (response.status === 401) {
+        toast({
+          title: "Sign in required",
+          description: payload.error ?? "You need to sign in before managing billing.",
+          variant: "destructive"
+        });
+        if (redirectToSignInOnUnauthorized) {
+          const redirectPath =
+            signInRedirectPath ??
+            `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          const signInUrl = `/sign-in?redirect_url=${encodeURIComponent(redirectPath)}`;
+          window.location.assign(signInUrl);
+        }
+        return;
+      }
 
       if (!response.ok || !payload.url) {
         toast({

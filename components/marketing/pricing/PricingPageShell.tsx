@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -41,8 +42,22 @@ function money(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
-export function PricingPageShell() {
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("yearly");
+export function PricingPageShell({
+  checkoutCanceled = false,
+  initialPlan = null
+}: {
+  checkoutCanceled?: boolean;
+  initialPlan?: "monthly" | "annual" | null;
+}) {
+  const searchParams = useSearchParams();
+  const queryPlan = searchParams.get("plan");
+  const queryCanceled = searchParams.get("canceled") === "1";
+
+  const selectedPlanFromQuery = queryPlan === "monthly" || queryPlan === "annual" ? queryPlan : null;
+  const effectiveInitialPlan = selectedPlanFromQuery ?? initialPlan;
+  const effectiveCheckoutCanceled = queryCanceled || checkoutCanceled;
+
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(effectiveInitialPlan === "monthly" ? "monthly" : "yearly");
 
   const monthlyPriceLine = useMemo(() => `${money(MONTHLY_PRICE)}/mo`, []);
   const yearlyPriceLine = useMemo(() => `${money(ANNUAL_PRICE)}/yr`, []);
@@ -58,6 +73,11 @@ export function PricingPageShell() {
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
             Monthly is flexible. Annual is the best value with a lower effective monthly cost and cleaner year-round billing.
           </p>
+          {effectiveCheckoutCanceled ? (
+            <p className="mx-auto mt-4 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              Checkout was canceled. No charge was made.
+            </p>
+          ) : null}
 
           <div className="mt-6">
             <PricingToggle cycle={billingCycle} onChange={setBillingCycle} />
@@ -90,7 +110,7 @@ export function PricingPageShell() {
             description="Flexible monthly access to Actify's AI assistant, resident tools, and calendar planning features."
             features={MONTHLY_FEATURES}
             ctaLabel="Choose Monthly"
-            ctaHref="/sign-up?plan=monthly"
+            ctaPlan="monthly"
             selected={billingCycle === "monthly"}
             billingCycle={billingCycle}
           />
@@ -103,7 +123,7 @@ export function PricingPageShell() {
             description="Best for Activities Directors who want a full year of faster planning, cleaner notes, and less daily scrambling."
             features={ANNUAL_FEATURES}
             ctaLabel="Choose Annual"
-            ctaHref="/sign-up?plan=annual"
+            ctaPlan="annual"
             selected={billingCycle === "yearly"}
             billingCycle={billingCycle}
             featuredLabel="Most Recommended"

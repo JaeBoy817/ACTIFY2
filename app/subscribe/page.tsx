@@ -137,7 +137,7 @@ export default async function SubscribePage({
               </p>
               <p className="inline-flex items-center gap-2 text-sm text-[#cfe0f9]">
                 <Sparkles className="h-4 w-4 text-sky-300" />
-                Monthly billing
+                Monthly or annual billing
               </p>
               <p className="inline-flex items-center gap-2 text-sm text-[#cfe0f9]">
                 <Lock className="h-4 w-4 text-indigo-300" />
@@ -152,11 +152,20 @@ export default async function SubscribePage({
             <p className="mt-1 text-sm text-[#bbd0ee]">For Activity Directors and care teams</p>
 
             <div className="mt-4 rounded-xl border border-[#5e79a6] bg-[#0f1a2b] px-4 py-3">
-              <p className="text-3xl font-black text-white">$20</p>
-              <p className="text-sm text-[#9fb4d8]">per month</p>
+              <p className="text-3xl font-black text-white">$5.99</p>
+              <p className="text-sm text-[#9fb4d8]">monthly • annual option available</p>
             </div>
 
-            <CheckoutButton className="mt-5 h-11 w-full rounded-xl bg-white text-slate-900 hover:bg-slate-100" />
+            <CheckoutButton
+              plan="monthly"
+              label="Choose Monthly"
+              className="mt-5 h-11 w-full rounded-xl bg-white text-slate-900 hover:bg-slate-100"
+            />
+            <CheckoutButton
+              plan="annual"
+              label="Choose Annual"
+              className="mt-2 h-11 w-full rounded-xl border-[#5e79a6] bg-[#13213a] text-[#d8e6ff] hover:bg-[#1b2e4d]"
+            />
             {billing.stripeCustomerId ? (
               <ManageBillingButton className="mt-2 h-11 w-full rounded-xl border-[#5e79a6] bg-[#13213a] text-[#d8e6ff] hover:bg-[#1b2e4d]" />
             ) : null}
