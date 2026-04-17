@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { getFacilityBillingState, isActiveSubscriptionStatus } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 
-const DEFAULT_CREATOR_BYPASS_EMAIL = "jasonaddington817@gmail.com";
+const DEFAULT_CREATOR_BYPASS_EMAILS = [
+  "jasonaddington817@gmail.com",
+  "terlewis@ensignservices.net"
+];
 const BLOCKED_REDIRECT_PATH = "/subscribe";
 const SIGN_IN_PATH = "/sign-in";
 
@@ -61,9 +64,32 @@ export function normalizeEmail(email: string | null | undefined) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function parseBypassEmailList(value: string | null | undefined) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => normalizeEmail(item))
+    .filter((item): item is string => Boolean(item));
+}
+
+export function getCreatorBypassEmails() {
+  const normalizedDefaults = DEFAULT_CREATOR_BYPASS_EMAILS.map((item) => normalizeEmail(item)).filter(
+    (item): item is string => Boolean(item)
+  );
+  const fromSingleValue = parseBypassEmailList(process.env.CREATOR_BYPASS_EMAIL);
+  const fromListValue = parseBypassEmailList(process.env.CREATOR_BYPASS_EMAILS);
+
+  return [...new Set([...normalizedDefaults, ...fromSingleValue, ...fromListValue])];
+}
+
 export function getCreatorBypassEmail() {
-  const fromEnv = process.env.CREATOR_BYPASS_EMAIL;
-  return normalizeEmail(fromEnv) ?? DEFAULT_CREATOR_BYPASS_EMAIL;
+  return getCreatorBypassEmails()[0] ?? DEFAULT_CREATOR_BYPASS_EMAILS[0];
+}
+
+export function isCreatorBypassEmail(email: string | null | undefined) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  return getCreatorBypassEmails().includes(normalized);
 }
 
 async function getPrimarySessionEmail() {
@@ -155,7 +181,7 @@ export async function getAccessStateForUser(user: AppAccessUserRecord): Promise<
     });
   }
 
-  if (normalizedEmail === creatorBypassEmail) {
+  if (isCreatorBypassEmail(normalizedEmail)) {
     return {
       isAuthenticated: true,
       clerkUserId: user.clerkUserId,

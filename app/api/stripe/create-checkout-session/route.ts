@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { z } from "zod";
 
+import { getAccessStateForUser } from "@/lib/access-control";
 import { requireUser } from "@/lib/auth";
 import { ensureFacilitySubscriptionRecord } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
@@ -53,6 +54,17 @@ export async function POST(request: Request) {
     const appUrl = getStripeAppUrlWithFallback(new URL(request.url).origin);
     const selectedPriceId = getStripePriceIdForPlan(requestedPlan);
     const selectedPlanDetails = getStripePlanDetailsFromPriceId(selectedPriceId);
+    const accessState = await getAccessStateForUser({
+      id: dbUser.id,
+      clerkUserId: dbUser.clerkUserId,
+      email: dbUser.email,
+      facilityId: dbUser.facilityId,
+      role: dbUser.role
+    });
+
+    if (accessState.isCreatorBypass) {
+      return NextResponse.json({ url: `${appUrl}/app` }, { status: 200 });
+    }
 
     const existingBilling = await ensureFacilitySubscriptionRecord(dbUser.facilityId);
 

@@ -87,11 +87,11 @@ export default async function SubscribePage({
             Subscription Active
           </p>
           <h1 className="mt-3 text-3xl font-black text-white md:text-4xl">
-            {accessState.isCreatorBypass ? "Creator access is active." : "Actify Pro is active for your facility."}
+            {accessState.isCreatorBypass ? "Internal admin access is active." : "Actify Pro is active for your facility."}
           </h1>
           <p className="mt-2 text-sm text-[#c6d5ed]">
             {accessState.isCreatorBypass
-              ? "This account bypasses subscription enforcement and can access the app."
+              ? "This internal account bypasses subscription billing and can access the app."
               : "Your billing is current. Continue to your dashboard."}
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
