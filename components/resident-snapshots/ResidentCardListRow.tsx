@@ -13,6 +13,7 @@ export function ResidentCardListRow({
   selected,
   onSelect,
   onAskActify,
+  onTrackAttendance,
   onViewDetails,
   moreActions,
   showCheckbox,
@@ -23,6 +24,7 @@ export function ResidentCardListRow({
   selected?: boolean;
   onSelect: () => void;
   onAskActify: () => void;
+  onTrackAttendance: () => void;
   onViewDetails: () => void;
   moreActions: ResidentMoreMenuAction[];
   showCheckbox?: boolean;
@@ -50,6 +52,9 @@ export function ResidentCardListRow({
         <ActionButton tone="secondary" onClick={onAskActify}>
           <Sparkles className="h-4 w-4" aria-hidden />
           Ask Actify
+        </ActionButton>
+        <ActionButton tone="secondary" onClick={onTrackAttendance}>
+          Track
         </ActionButton>
         <ActionButton tone="secondary" onClick={onViewDetails}>
           View Details

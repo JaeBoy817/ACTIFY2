@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays, Clock3, Sparkles, X } from "lucide-react";
 
 import { ResidentAccordionSection } from "@/components/resident-snapshots/ResidentAccordionSection";
-import { ResidentAnalyticsAccordion } from "@/components/resident-snapshots/ResidentAnalyticsAccordion";
+import { ResidentAttendanceAccordion } from "@/components/resident-snapshots/ResidentAttendanceAccordion";
 import { ResidentQuickChips } from "@/components/resident-snapshots/ResidentQuickChips";
 import {
   ANALYTICS_TIMEFRAME_OPTIONS,
@@ -25,7 +25,9 @@ export function ResidentDetailDrawer({
   onAskActify,
   onEdit,
   onArchive,
-  onAddFollowUp
+  onAddFollowUp,
+  onTrackAttendance,
+  attendanceRefreshToken
 }: {
   open: boolean;
   resident: ResidentSnapshot | null;
@@ -35,8 +37,10 @@ export function ResidentDetailDrawer({
   onEdit: () => void;
   onArchive: () => void;
   onAddFollowUp: () => void;
+  onTrackAttendance: () => void;
+  attendanceRefreshToken: number;
 }) {
-  const [timeframe, setTimeframe] = useState<AnalyticsTimeframeKey>("LAST_30_DAYS");
+  const [timeframe, setTimeframe] = useState<AnalyticsTimeframeKey>("THIS_MONTH");
 
   const actionById = useMemo(
     () =>
@@ -193,8 +197,14 @@ export function ResidentDetailDrawer({
             <LabeledText label="Conversation Starters" value={resident.favoriteTopics.join(", ")} />
           </ResidentAccordionSection>
 
-          <ResidentAccordionSection title="Participation & Attendance Analytics">
-            <ResidentAnalyticsAccordion resident={resident} onAskActify={onAskActify} actionsById={actionById} />
+          <ResidentAccordionSection title="Participation & Attendance">
+            <ResidentAttendanceAccordion
+              resident={resident}
+              refreshToken={attendanceRefreshToken}
+              onTrackAttendance={onTrackAttendance}
+              onAskActify={onAskActify}
+              actionsById={actionById}
+            />
           </ResidentAccordionSection>
 
           <ResidentAccordionSection title="AI Actions" defaultOpen>
@@ -216,6 +226,9 @@ export function ResidentDetailDrawer({
               Ask Actify
             </ActionButton>
             <ActionButton onClick={onAddFollowUp}>Add Follow-Up</ActionButton>
+            <ActionButton tone="secondary" onClick={onTrackAttendance}>
+              Track Attendance
+            </ActionButton>
             <ActionButton tone="secondary" onClick={onArchive}>
               Archive / Discharge
             </ActionButton>

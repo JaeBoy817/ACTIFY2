@@ -15,7 +15,10 @@ type SortKey =
   | "PARTICIPATION_HIGH"
   | "PARTICIPATION_LOW"
   | "MOST_MISSED"
-  | "RECENT_1TO1";
+  | "RECENT_1TO1"
+  | "MOST_RECENT_ATTENDANCE"
+  | "MOST_1TO1_COMPLETIONS"
+  | "MOST_REFUSALS";
 
 export function ResidentsControlBar({
   search,
@@ -57,7 +60,10 @@ export function ResidentsControlBar({
     { key: "PARTICIPATION_HIGH", label: "Highest Participation %" },
     { key: "PARTICIPATION_LOW", label: "Lowest Participation %" },
     { key: "MOST_MISSED", label: "Most Missed Activities" },
-    { key: "RECENT_1TO1", label: "Most Recent 1:1" }
+    { key: "RECENT_1TO1", label: "Most Recent 1:1" },
+    { key: "MOST_RECENT_ATTENDANCE", label: "Most Recent Attendance" },
+    { key: "MOST_1TO1_COMPLETIONS", label: "Most 1:1 Completions" },
+    { key: "MOST_REFUSALS", label: "Most Refusals" }
   ];
 
   return (

@@ -39,7 +39,11 @@ export const SNAPSHOT_FILTER_OPTIONS = [
   { key: "MISSED_RECENT_GROUP", label: "Missed Recent Group Activities" },
   { key: "ONE_TO_ONE_PRIORITY", label: "1:1 Priority" },
   { key: "FREQUENT_REFUSAL", label: "Frequent Refusal" },
-  { key: "INCONSISTENT_PARTICIPATION", label: "Inconsistent Participation" }
+  { key: "INCONSISTENT_PARTICIPATION", label: "Inconsistent Participation" },
+  { key: "PARTICIPATION_BELOW_25", label: "Participation Below 25%" },
+  { key: "PARTICIPATION_BELOW_50", label: "Participation Below 50%" },
+  { key: "MOSTLY_1TO1_PARTICIPATION", label: "Mostly 1:1 Participation" },
+  { key: "NO_ATTENDANCE_THIS_MONTH", label: "No Attendance Logged This Month" }
 ] as const;
 
 export type SnapshotFilterKey = (typeof SNAPSHOT_FILTER_OPTIONS)[number]["key"];
@@ -107,6 +111,14 @@ export type ResidentSnapshot = {
   oneToOneCount?: number;
   refusalCount?: number;
   missedActivitiesCount?: number;
+  totalTrackedOpportunitiesThisMonth?: number;
+  attendedCountThisMonth?: number;
+  oneToOneCompletedCountThisMonth?: number;
+  refusalCountThisMonth?: number;
+  missedCountThisMonth?: number;
+  noAttendanceLoggedThisMonth?: boolean;
+  mostlyOneToOneParticipation?: boolean;
+  lastAttendanceDate?: string | null;
   last30DayParticipation?: number | null;
   last90DayParticipation?: number | null;
   yearToDateParticipation?: number | null;

@@ -25,17 +25,18 @@ function withMultiplier(value: number | null | undefined, multiplier: number) {
 
 export function getResidentAnalyticsWindow(resident: ResidentSnapshot, timeframe: AnalyticsTimeframeKey) {
   const baseParticipation = fallbackParticipation(resident);
-  const baseOffered = resident.totalActivitiesOffered ?? 0;
-  const baseAttended = resident.totalActivitiesAttended ?? resident.attendanceCount ?? 0;
-  const baseOneToOne = resident.oneToOneCount ?? 0;
-  const baseRefusals = resident.refusalCount ?? 0;
-  const baseMissed = resident.missedActivitiesCount ?? 0;
+  const baseOffered = resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0;
+  const baseAttended = resident.attendedCountThisMonth ?? resident.attendanceCount ?? resident.totalActivitiesAttended ?? 0;
+  const baseParticipated = resident.totalActivitiesAttended ?? baseAttended + (resident.oneToOneCompletedCountThisMonth ?? 0);
+  const baseOneToOne = resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0;
+  const baseRefusals = resident.refusalCountThisMonth ?? resident.refusalCount ?? 0;
+  const baseMissed = resident.missedCountThisMonth ?? resident.missedActivitiesCount ?? 0;
 
   if (timeframe === "THIS_MONTH" || timeframe === "LAST_30_DAYS") {
     return {
       participation: baseParticipation,
       offered: baseOffered,
-      attended: baseAttended,
+      attended: baseParticipated,
       oneToOne: baseOneToOne,
       refusals: baseRefusals,
       missed: baseMissed,
@@ -78,14 +79,14 @@ export function getResidentAnalyticsWindow(resident: ResidentSnapshot, timeframe
 
 export function analyticsSummaryLabel(resident: ResidentSnapshot) {
   const participation = fallbackParticipation(resident);
-  const attendance = resident.attendanceCount ?? resident.totalActivitiesAttended ?? 0;
-  const oneToOne = resident.oneToOneCount ?? 0;
+  const offered = resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0;
+  const participated = resident.totalActivitiesAttended ?? resident.attendedCountThisMonth ?? resident.attendanceCount ?? 0;
 
   if (participation === null) {
-    return "Not enough activity data yet";
+    return "No attendance tracked yet this month";
   }
 
-  return `${clampPercent(participation)}% participation · ${attendance} group attends · ${oneToOne} recent 1:1s`;
+  return `${clampPercent(participation)}% this month · ${participated}/${offered} participated`;
 }
 
 export function analyticsPatternNotes(resident: ResidentSnapshot, timeframe: AnalyticsTimeframeKey) {

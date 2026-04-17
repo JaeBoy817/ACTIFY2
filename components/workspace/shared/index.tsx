@@ -154,13 +154,15 @@ export function ActionButton({
   tone = "primary",
   onClick,
   disabled,
-  type = "button"
+  type = "button",
+  className
 }: {
   children: React.ReactNode;
   tone?: "primary" | "secondary" | "ghost";
   onClick?: () => void;
   disabled?: boolean;
   type?: "button" | "submit";
+  className?: string;
 }) {
   return (
     <button
@@ -171,7 +173,8 @@ export function ActionButton({
         "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50",
         tone === "primary" && "border border-teal-300 bg-teal-600 text-white hover:bg-teal-700",
         tone === "secondary" && "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-        tone === "ghost" && "border border-transparent bg-transparent text-slate-700 hover:bg-slate-100"
+        tone === "ghost" && "border border-transparent bg-transparent text-slate-700 hover:bg-slate-100",
+        className
       )}
     >
       {children}

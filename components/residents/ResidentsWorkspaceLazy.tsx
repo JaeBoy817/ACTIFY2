@@ -6,7 +6,7 @@ import type { ResidentListRow } from "@/lib/residents/types";
 import { LoadingSkeleton } from "@/components/resident-snapshots/LoadingSkeleton";
 
 const ResidentsWorkspaceClient = dynamic(
-  () => import("@/components/resident-snapshots/ResidentSnapshotsWorkspace").then((mod) => mod.ResidentSnapshotsWorkspace),
+  () => import("@/components/resident-snapshots/ResidentsTabWorkspace").then((mod) => mod.ResidentsTabWorkspace),
   {
     loading: () => <LoadingSkeleton />
   }

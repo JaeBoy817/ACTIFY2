@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AddResidentDrawerSimple } from "@/components/resident-snapshots/AddResidentDrawerSimple";
+import type { BulkResidentParticipationPayload, ResidentAttendanceWorkflowPayload } from "@/components/resident-snapshots/attendanceTypes";
 import { ArchiveResidentModal } from "@/components/resident-snapshots/ArchiveResidentModal";
 import { FollowUpModal, type FollowUpDraft } from "@/components/resident-snapshots/FollowUpModal";
 import { ResidentCardListRow } from "@/components/resident-snapshots/ResidentCardListRow";
@@ -35,6 +36,7 @@ import type {
 import type { ResidentListRow } from "@/lib/residents/types";
 import { ActionButton, EmptyStateCard, QuickActionMenu } from "@/components/workspace/shared";
 import { cn } from "@/lib/utils";
+import { TrackAttendanceModal } from "@/components/resident-snapshots/TrackAttendanceModal";
 
 type SortKey =
   | "NAME"
@@ -47,7 +49,10 @@ type SortKey =
   | "PARTICIPATION_HIGH"
   | "PARTICIPATION_LOW"
   | "MOST_MISSED"
-  | "RECENT_1TO1";
+  | "RECENT_1TO1"
+  | "MOST_RECENT_ATTENDANCE"
+  | "MOST_1TO1_COMPLETIONS"
+  | "MOST_REFUSALS";
 
 type DisplayMode = "GRID" | "LIST";
 
@@ -82,11 +87,15 @@ const MORE_FILTERS: Array<{ key: SnapshotFilterKey; label: string }> = [
   { key: "MOVIES_TV", label: "Movies / TV" },
   { key: "WORD_SEARCHES", label: "Word Searches" },
   { key: "PUZZLES", label: "Puzzles" },
-  { key: "ATTENDANCE_BELOW_GOAL", label: "Attendance Below Goal" },
-  { key: "ATTENDANCE_IMPROVING", label: "Attendance Improving" },
-  { key: "MISSED_RECENT_GROUP", label: "Missed Recent Group Activities" },
+  { key: "PARTICIPATION_BELOW_25", label: "Participation Below 25%" },
+  { key: "PARTICIPATION_BELOW_50", label: "Participation Below 50%" },
+  { key: "ATTENDANCE_IMPROVING", label: "Participation Improving" },
+  { key: "FREQUENT_REFUSAL", label: "Frequent Refusals" },
+  { key: "MISSED_RECENT_GROUP", label: "Missed Recent Activities" },
+  { key: "MOSTLY_1TO1_PARTICIPATION", label: "Mostly 1:1 Participation" },
+  { key: "NO_ATTENDANCE_THIS_MONTH", label: "No Attendance Logged This Month" },
   { key: "ONE_TO_ONE_PRIORITY", label: "1:1 Priority" },
-  { key: "FREQUENT_REFUSAL", label: "Frequent Refusal" },
+  { key: "ATTENDANCE_BELOW_GOAL", label: "Attendance Below Goal" },
   { key: "INCONSISTENT_PARTICIPATION", label: "Inconsistent Participation" }
 ];
 
@@ -187,6 +196,14 @@ function toLocalSnapshot(form: ResidentSnapshotFormValue): ResidentSnapshot {
     oneToOneCount: 0,
     refusalCount: 0,
     missedActivitiesCount: 0,
+    totalTrackedOpportunitiesThisMonth: 0,
+    attendedCountThisMonth: 0,
+    oneToOneCompletedCountThisMonth: 0,
+    refusalCountThisMonth: 0,
+    missedCountThisMonth: 0,
+    noAttendanceLoggedThisMonth: true,
+    mostlyOneToOneParticipation: false,
+    lastAttendanceDate: null,
     last30DayParticipation: null,
     last90DayParticipation: null,
     yearToDateParticipation: null,
@@ -222,10 +239,14 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [trackAttendanceOpen, setTrackAttendanceOpen] = useState(false);
+  const [trackResidentId, setTrackResidentId] = useState<string | null>(null);
+  const [attendanceRefreshToken, setAttendanceRefreshToken] = useState(0);
 
   const [isSavingResident, setIsSavingResident] = useState(false);
   const [isArchiveSubmitting, setIsArchiveSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingParticipation, setIsLoadingParticipation] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const visibleResidents = useMemo(() => {
@@ -258,9 +279,15 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         case "PARTICIPATION_LOW":
           return (a.participationPercentage ?? a.last30DayParticipation ?? 0) - (b.participationPercentage ?? b.last30DayParticipation ?? 0);
         case "MOST_MISSED":
-          return (b.missedActivitiesCount ?? 0) - (a.missedActivitiesCount ?? 0);
+          return (b.missedCountThisMonth ?? b.missedActivitiesCount ?? 0) - (a.missedCountThisMonth ?? a.missedActivitiesCount ?? 0);
         case "RECENT_1TO1":
           return compareNullableDate(a.lastOneToOne, b.lastOneToOne, "desc");
+        case "MOST_RECENT_ATTENDANCE":
+          return compareNullableDate(a.lastAttendanceDate ?? null, b.lastAttendanceDate ?? null, "desc");
+        case "MOST_1TO1_COMPLETIONS":
+          return (b.oneToOneCompletedCountThisMonth ?? b.oneToOneCount ?? 0) - (a.oneToOneCompletedCountThisMonth ?? a.oneToOneCount ?? 0);
+        case "MOST_REFUSALS":
+          return (b.refusalCountThisMonth ?? b.refusalCount ?? 0) - (a.refusalCountThisMonth ?? a.refusalCount ?? 0);
         case "NAME":
         default:
           return a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" });
@@ -275,6 +302,13 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     }
     return visibleResidents[0] ?? null;
   }, [residents, selectedResidentId, visibleResidents]);
+
+  const trackedResident = useMemo(() => {
+    if (trackResidentId) {
+      return residents.find((resident) => resident.id === trackResidentId) ?? null;
+    }
+    return selectedResident;
+  }, [residents, selectedResident, trackResidentId]);
 
   useEffect(() => {
     const residentParam = searchParams.get("resident") || searchParams.get("residentId");
@@ -301,6 +335,15 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     }
   }, [bulkMode]);
 
+  const residentIdSignature = useMemo(
+    () =>
+      residents
+        .map((resident) => resident.id)
+        .sort((a, b) => a.localeCompare(b))
+        .join("|"),
+    [residents]
+  );
+
   async function refreshResidents() {
     setIsRefreshing(true);
     try {
@@ -313,6 +356,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         setResidents(MOCK_RESIDENT_SNAPSHOTS);
         setIsDemoSeed(true);
       }
+      await refreshParticipationSummaries();
     } catch (error) {
       setFeedback({ tone: "error", text: getErrorMessage(error) });
     } finally {
@@ -323,6 +367,78 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   function getAction(id: string) {
     return actions.find((action) => action.id === id) ?? actions[0];
   }
+
+  const applyParticipationSummaries = useCallback((payload: BulkResidentParticipationPayload) => {
+    const summaryMap = new Map(payload.summaries.map((summary) => [summary.residentId, summary]));
+    setResidents((current) =>
+      current.map((resident) => {
+        const summary = summaryMap.get(resident.id);
+        if (!summary) {
+          return {
+            ...resident,
+            totalTrackedOpportunitiesThisMonth: 0,
+            attendedCountThisMonth: 0,
+            oneToOneCompletedCountThisMonth: 0,
+            refusalCountThisMonth: 0,
+            missedCountThisMonth: 0,
+            totalActivitiesOffered: 0,
+            totalActivitiesAttended: 0,
+            participationPercentage: null,
+            attendanceCount: 0,
+            oneToOneCount: 0,
+            refusalCount: 0,
+            missedActivitiesCount: 0,
+            noAttendanceLoggedThisMonth: true,
+            mostlyOneToOneParticipation: false,
+            lastAttendanceDate: null,
+            lastParticipationTrend: "flat"
+          };
+        }
+
+        return {
+          ...resident,
+          totalTrackedOpportunitiesThisMonth: summary.totalTrackedOpportunities,
+          attendedCountThisMonth: summary.attendedCount,
+          oneToOneCompletedCountThisMonth: summary.oneToOneCompletedCount,
+          refusalCountThisMonth: summary.refusalCount,
+          missedCountThisMonth: summary.missedCount,
+          totalActivitiesOffered: summary.totalTrackedOpportunities,
+          totalActivitiesAttended: summary.participatedCount,
+          participationPercentage: summary.participationPercentage,
+          attendanceCount: summary.attendedCount,
+          oneToOneCount: summary.oneToOneCompletedCount,
+          refusalCount: summary.refusalCount,
+          missedActivitiesCount: summary.missedCount,
+          noAttendanceLoggedThisMonth: summary.totalTrackedOpportunities === 0,
+          mostlyOneToOneParticipation:
+            summary.oneToOneCompletedCount > 0 && summary.oneToOneCompletedCount > summary.attendedCount,
+          lastAttendanceDate: summary.lastTrackedAt,
+          lastParticipationTrend: summary.trend
+        };
+      })
+    );
+  }, []);
+
+  const refreshParticipationSummaries = useCallback(async () => {
+    setIsLoadingParticipation(true);
+    try {
+      const payload = (await fetchJson(
+        "/api/attendance/residents/participation?timeframe=THIS_MONTH"
+      )) as BulkResidentParticipationPayload;
+      if (payload.ok) {
+        applyParticipationSummaries(payload);
+      }
+    } catch {
+      // Keep resident cards usable even if attendance summary is temporarily unavailable.
+    } finally {
+      setIsLoadingParticipation(false);
+    }
+  }, [applyParticipationSummaries]);
+
+  useEffect(() => {
+    if (!residentIdSignature) return;
+    void refreshParticipationSummaries();
+  }, [refreshParticipationSummaries, residentIdSignature]);
 
   function launchAssistant(action: SnapshotIntentAction, resident: ResidentSnapshot) {
     const prompt = buildAssistantPrompt(action, resident);
@@ -361,6 +477,47 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     if (!selectedResident) return;
     setDrawerMode("edit");
     setDrawerOpen(true);
+  }
+
+  function openTrackAttendance(residentId: string) {
+    setTrackResidentId(residentId);
+    setSelectedResidentId(residentId);
+    setTrackAttendanceOpen(true);
+  }
+
+  function handleAttendanceSaved(payload: ResidentAttendanceWorkflowPayload) {
+    setResidents((current) =>
+      current.map((resident) =>
+        resident.id === payload.resident.id
+          ? {
+              ...resident,
+              totalTrackedOpportunitiesThisMonth: payload.summary.totalTrackedOpportunities,
+              attendedCountThisMonth: payload.summary.attendedCount,
+              oneToOneCompletedCountThisMonth: payload.summary.oneToOneCompletedCount,
+              refusalCountThisMonth: payload.summary.refusalCount,
+              missedCountThisMonth: payload.summary.missedCount,
+              totalActivitiesOffered: payload.summary.totalTrackedOpportunities,
+              totalActivitiesAttended: payload.summary.participatedCount,
+              participationPercentage: payload.summary.participationPercentage,
+              attendanceCount: payload.summary.attendedCount,
+              oneToOneCount: payload.summary.oneToOneCompletedCount,
+              refusalCount: payload.summary.refusalCount,
+              missedActivitiesCount: payload.summary.missedCount,
+              noAttendanceLoggedThisMonth: payload.summary.totalTrackedOpportunities === 0,
+              mostlyOneToOneParticipation:
+                payload.summary.oneToOneCompletedCount > 0 &&
+                payload.summary.oneToOneCompletedCount > payload.summary.attendedCount,
+              lastAttendanceDate: payload.summary.lastTrackedAt,
+              lastParticipationTrend: payload.summary.trend,
+              lastActivity: payload.records[0]?.activityTitle ?? resident.lastActivity,
+              lastEngagementDate: payload.summary.lastTrackedAt ?? resident.lastEngagementDate
+            }
+          : resident
+      )
+    );
+    setAttendanceRefreshToken((current) => current + 1);
+    setFeedback({ tone: "success", text: "Attendance updated." });
+    void refreshParticipationSummaries();
   }
 
   async function handleSaveResident(form: ResidentSnapshotFormValue) {
@@ -658,6 +815,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   setSelectedResidentId(resident.id);
                 }}
                 onAskActify={() => launchAssistant(getAction("idea-1to1"), resident)}
+                onTrackAttendance={() => openTrackAttendance(resident.id)}
                 onViewDetails={() => {
                   setSelectedResidentId(resident.id);
                   setDetailOpen(true);
@@ -678,6 +836,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                       setSelectedResidentId(resident.id);
                       setFollowUpOpen(true);
                     }
+                  },
+                  {
+                    id: `track-${resident.id}`,
+                    label: "Track Attendance",
+                    onClick: () => openTrackAttendance(resident.id)
                   },
                   {
                     id: `draft-note-${resident.id}`,
@@ -722,6 +885,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   setSelectedResidentId(resident.id);
                 }}
                 onAskActify={() => launchAssistant(getAction("idea-1to1"), resident)}
+                onTrackAttendance={() => openTrackAttendance(resident.id)}
                 onViewDetails={() => {
                   setSelectedResidentId(resident.id);
                   setDetailOpen(true);
@@ -742,6 +906,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                       setSelectedResidentId(resident.id);
                       setFollowUpOpen(true);
                     }
+                  },
+                  {
+                    id: `track-list-${resident.id}`,
+                    label: "Track Attendance",
+                    onClick: () => openTrackAttendance(resident.id)
                   },
                   {
                     id: `archive-list-${resident.id}`,
@@ -790,6 +959,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
           setArchiveOpen(true);
         }}
         onAddFollowUp={() => setFollowUpOpen(true)}
+        onTrackAttendance={() => {
+          if (!selectedResident) return;
+          openTrackAttendance(selectedResident.id);
+        }}
+        attendanceRefreshToken={attendanceRefreshToken}
       />
 
       <AddResidentDrawerSimple
@@ -827,6 +1001,20 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         }}
       />
 
+      <TrackAttendanceModal
+        open={trackAttendanceOpen}
+        resident={trackedResident}
+        onClose={() => {
+          setTrackAttendanceOpen(false);
+          setTrackResidentId(null);
+        }}
+        onSaved={handleAttendanceSaved}
+        onSaveAndAskActify={() => {
+          if (!trackedResident) return;
+          launchAssistant(getAction("analytics-participation-boost"), trackedResident);
+        }}
+      />
+
       <button
         type="button"
         onClick={() => {
@@ -835,7 +1023,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         className="fixed bottom-5 right-5 inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
       >
         <RefreshCcw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : "")} aria-hidden />
-        Refresh
+        {isLoadingParticipation ? "Refreshing Metrics..." : "Refresh"}
       </button>
     </section>
   );

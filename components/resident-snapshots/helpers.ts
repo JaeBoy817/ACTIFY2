@@ -434,6 +434,14 @@ export function fromResidentRow(row: ResidentListRow): ResidentSnapshot {
     }).length,
     refusalCount: row.attendanceSnapshot.refused30d,
     missedActivitiesCount: row.attendanceSnapshot.noShow30d,
+    totalTrackedOpportunitiesThisMonth: row.attendanceSnapshot.total30d,
+    attendedCountThisMonth: row.attendanceSnapshot.engaged30d,
+    oneToOneCompletedCountThisMonth: 0,
+    refusalCountThisMonth: row.attendanceSnapshot.refused30d,
+    missedCountThisMonth: row.attendanceSnapshot.noShow30d,
+    noAttendanceLoggedThisMonth: row.attendanceSnapshot.total30d === 0,
+    mostlyOneToOneParticipation: false,
+    lastAttendanceDate: row.lastOneOnOneAt ?? row.recentNotes[0]?.createdAt ?? null,
     last30DayParticipation: row.attendanceSnapshot.participationPercent30d,
     last90DayParticipation: row.attendanceSnapshot.participationPercent30d,
     yearToDateParticipation: row.attendanceSnapshot.participationPercent30d,
@@ -642,7 +650,11 @@ export const SNAPSHOT_FILTER_KEYS = [
   "MISSED_RECENT_GROUP",
   "ONE_TO_ONE_PRIORITY",
   "FREQUENT_REFUSAL",
-  "INCONSISTENT_PARTICIPATION"
+  "INCONSISTENT_PARTICIPATION",
+  "PARTICIPATION_BELOW_25",
+  "PARTICIPATION_BELOW_50",
+  "MOSTLY_1TO1_PARTICIPATION",
+  "NO_ATTENDANCE_THIS_MONTH"
 ] as const satisfies SnapshotFilterKey[];
 
 export function residentMatchesFilter(resident: ResidentSnapshot, filter: SnapshotFilterKey) {
@@ -714,18 +726,37 @@ export function residentMatchesFilter(resident: ResidentSnapshot, filter: Snapsh
     case "PUZZLES":
       return boolIncludes(searchableValues, "puzzle") || boolIncludes(searchableValues, "crossword");
     case "ATTENDANCE_BELOW_GOAL":
-      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 45;
+      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 50;
     case "ATTENDANCE_IMPROVING":
       return resident.lastParticipationTrend === "up";
     case "MISSED_RECENT_GROUP":
-      return (resident.missedActivitiesCount ?? 0) >= 2;
+      return (resident.missedCountThisMonth ?? resident.missedActivitiesCount ?? 0) >= 2;
     case "ONE_TO_ONE_PRIORITY":
-      return (resident.oneToOneCount ?? 0) >= 2 || boolIncludes(searchableValues, "1:1") || boolIncludes(searchableValues, "bed");
+      return (
+        (resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0) >= 2 ||
+        boolIncludes(searchableValues, "1:1") ||
+        boolIncludes(searchableValues, "bed")
+      );
     case "FREQUENT_REFUSAL":
-      return (resident.refusalCount ?? 0) >= 2 || boolIncludes([resident.commonRefusals], "decline");
+      return (resident.refusalCountThisMonth ?? resident.refusalCount ?? 0) >= 2 || boolIncludes([resident.commonRefusals], "decline");
     case "INCONSISTENT_PARTICIPATION":
       return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) >= 35 &&
         (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) <= 65;
+    case "PARTICIPATION_BELOW_25":
+      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 25;
+    case "PARTICIPATION_BELOW_50":
+      return (resident.participationPercentage ?? resident.last30DayParticipation ?? 0) < 50;
+    case "MOSTLY_1TO1_PARTICIPATION":
+      return (
+        resident.mostlyOneToOneParticipation === true ||
+        (resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0) >
+          (resident.attendedCountThisMonth ?? resident.attendanceCount ?? 0)
+      );
+    case "NO_ATTENDANCE_THIS_MONTH":
+      return (
+        resident.noAttendanceLoggedThisMonth === true ||
+        (resident.totalTrackedOpportunitiesThisMonth ?? resident.totalActivitiesOffered ?? 0) <= 0
+      );
     default:
       return true;
   }
