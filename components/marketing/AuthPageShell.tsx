@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2, FileCheck2, NotebookPen, ShieldCheck, UserCog } from "lucide-react";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { AmbientBackdrop } from "@/components/marketing/AmbientBackdrop";
 import { GlassButton, GlassCard, GlassPanel } from "@/components/marketing/Glass";
 import { MarketingHero } from "@/components/marketing/Hero";

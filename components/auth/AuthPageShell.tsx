@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { AuthBackgroundScene } from "@/components/auth/AuthBackgroundScene";
 import { AuthFooterLinks } from "@/components/auth/AuthFooterLinks";
 import { AuthGlassCard } from "@/components/auth/AuthGlassCard";
@@ -36,6 +37,17 @@ export function AuthPageShell({
           <AuthGlassCard>
             <div className="space-y-5">
               <header className="space-y-3">
+                <span className="inline-flex items-center">
+                  <ActifyLogo
+                    size={28}
+                    variant="lockup"
+                    className="gap-2.5"
+                    imageClassName="opacity-95"
+                    wordmarkClassName="text-slate-50"
+                    priority
+                    aria-label="Actify"
+                  />
+                </span>
                 <p className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-100/90">
                   {eyebrow}
                 </p>

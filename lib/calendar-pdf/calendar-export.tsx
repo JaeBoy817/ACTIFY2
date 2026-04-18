@@ -24,6 +24,7 @@ import {
   startOfWeek
 } from "date-fns";
 
+import { ACTIFY_LOGO_FILE_CANDIDATES } from "@/lib/branding/constants";
 import { type ReportThemeTokens, defaultReportTheme } from "@/lib/report-pdf/ReportTheme";
 import { PDF_BODY_FONT, PDF_DISPLAY_FONT } from "@/lib/report-pdf/fonts";
 
@@ -57,16 +58,18 @@ function getActifyLogoDataUri() {
     return cachedActifyLogoDataUri;
   }
 
-  try {
-    const preferredPath = path.join(process.cwd(), "public", "actify-logo-liquid-glass-nodots.svg");
-    const fallbackPath = path.join(process.cwd(), "public", "actify-logo.svg");
-    const sourcePath = fs.existsSync(preferredPath) ? preferredPath : fallbackPath;
-    const svgContent = fs.readFileSync(sourcePath, "utf8");
-    cachedActifyLogoDataUri = `data:image/svg+xml;base64,${Buffer.from(svgContent, "utf8").toString("base64")}`;
-  } catch {
-    cachedActifyLogoDataUri = "";
+  for (const candidate of ACTIFY_LOGO_FILE_CANDIDATES) {
+    try {
+      const filePath = path.join(process.cwd(), "public", candidate.fileName);
+      const logoBytes = fs.readFileSync(filePath);
+      cachedActifyLogoDataUri = `data:${candidate.mimeType};base64,${logoBytes.toString("base64")}`;
+      return cachedActifyLogoDataUri;
+    } catch {
+      continue;
+    }
   }
 
+  cachedActifyLogoDataUri = "";
   return cachedActifyLogoDataUri;
 }
 

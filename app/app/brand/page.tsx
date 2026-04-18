@@ -1,4 +1,4 @@
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { CopySnippet } from "@/components/app/copy-snippet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

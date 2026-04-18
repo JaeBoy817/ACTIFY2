@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 
 const FOOTER_LINKS = [
   { label: "Features", href: "/#features" },

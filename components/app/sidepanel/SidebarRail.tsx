@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { LifeBuoy, Settings } from "lucide-react";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { SidebarNavGroup } from "@/components/app/sidepanel/SidebarNavGroup";
 import { SidebarTooltip } from "@/components/app/sidepanel/SidebarTooltip";
 import type { SidebarGroup } from "@/components/app/sidepanel/types";

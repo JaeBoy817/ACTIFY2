@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { CalendarCheck2, FileCheck2, NotebookPen, ShieldCheck, UserCog } from "lucide-react";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { HeatmapGridOverlay } from "@/components/auth/HeatmapGridOverlay";
 import type { AuthVariantProps } from "@/components/auth/types";
 import { GlassSurface } from "@/components/marketing/animations/GlassSurface";

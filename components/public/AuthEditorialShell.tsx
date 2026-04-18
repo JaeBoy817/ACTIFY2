@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ClipboardCheck, FileText, Users } from "lucide-react";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import {
   AccentTag,
   Eyebrow,

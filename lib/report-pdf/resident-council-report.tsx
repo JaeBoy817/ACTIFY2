@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Defs, Document, Image, LinearGradient, Page, Rect, Stop, Svg, Text, View, pdf } from "@react-pdf/renderer";
 
+import { ACTIFY_LOGO_FILE_CANDIDATES } from "@/lib/branding/constants";
 import { GlassCard, GlassPill, SectionHeader } from "./components";
 import { defaultReportTheme, type ReportThemeTokens } from "./ReportTheme";
 import { PDF_BODY_FONT, PDF_DISPLAY_FONT } from "./fonts";
@@ -41,15 +42,11 @@ function getActifyLogoDataUri() {
     return cachedActifyLogoDataUri;
   }
 
-  const candidates = [
-    path.join(process.cwd(), "public", "actify-logo-liquid-glass-nodots.svg"),
-    path.join(process.cwd(), "public", "actify-logo.svg")
-  ];
-
-  for (const filePath of candidates) {
+  for (const candidate of ACTIFY_LOGO_FILE_CANDIDATES) {
     try {
-      const svgContent = fs.readFileSync(filePath, "utf8");
-      cachedActifyLogoDataUri = `data:image/svg+xml;base64,${Buffer.from(svgContent, "utf8").toString("base64")}`;
+      const filePath = path.join(process.cwd(), "public", candidate.fileName);
+      const logoBytes = fs.readFileSync(filePath);
+      cachedActifyLogoDataUri = `data:${candidate.mimeType};base64,${logoBytes.toString("base64")}`;
       return cachedActifyLogoDataUri;
     } catch {
       // Continue to next candidate.

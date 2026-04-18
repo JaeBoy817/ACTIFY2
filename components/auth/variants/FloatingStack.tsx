@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import type { AuthVariantProps } from "@/components/auth/types";
 import { GlassSurface } from "@/components/marketing/animations/GlassSurface";
 

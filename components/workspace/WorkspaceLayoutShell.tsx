@@ -2,7 +2,7 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { CircleDot } from "lucide-react";
 
-import { ActifyLogo } from "@/components/ActifyLogo";
+import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { MainTabs } from "@/components/workspace/MainTabs";
 import { actifyUserButtonAppearance } from "@/lib/clerk/appearance";
 import { isClerkConfigured } from "@/lib/clerk-config";
