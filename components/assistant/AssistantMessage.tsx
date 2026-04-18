@@ -30,8 +30,8 @@ function inferCardLabel(text: string) {
 }
 
 const markdownComponents: Components = {
-  h1: ({ children }) => <h4 className="mt-4 text-base font-semibold leading-7 text-slate-900">{children}</h4>,
-  h2: ({ children }) => <h4 className="mt-4 text-base font-semibold leading-7 text-slate-900">{children}</h4>,
+  h1: ({ children }) => <h4 className="mt-4 text-[17px] font-semibold leading-7 text-slate-900">{children}</h4>,
+  h2: ({ children }) => <h4 className="mt-4 text-[17px] font-semibold leading-7 text-slate-900">{children}</h4>,
   h3: ({ children }) => <h5 className="mt-3 text-[15px] font-semibold leading-7 text-slate-900">{children}</h5>,
   p: ({ children }) => <p className="mt-3 text-[15px] leading-7 text-slate-800">{children}</p>,
   ul: ({ children }) => <ul className="mt-3 list-disc space-y-2 pl-6 text-[15px] leading-7 text-slate-800">{children}</ul>,
@@ -78,21 +78,21 @@ function AssistantMessageComponent({
       className={cn(
         "transition duration-200",
         isAssistant
-          ? "max-w-[96%] rounded-[1.55rem] border border-slate-200/95 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-[0_18px_36px_-28px_rgba(15,23,42,0.55)]"
-          : "ml-auto max-w-[86%] rounded-[1.35rem] border border-slate-200 bg-[linear-gradient(180deg,#eef2ff_0%,#f8fafc_100%)]"
+          ? "max-w-[94%] rounded-[1.55rem] border border-slate-200/95 bg-[linear-gradient(180deg,#ffffff_0%,#f8f9ff_100%)] shadow-[0_22px_42px_-32px_rgba(15,23,42,0.58)]"
+          : "ml-auto max-w-[84%] rounded-[1.35rem] border border-violet-200/70 bg-[linear-gradient(180deg,#f4f3ff_0%,#eef2ff_100%)] shadow-[0_18px_30px_-30px_rgba(79,70,229,0.6)]"
       )}
     >
-      <div className={cn("px-4 py-3.5", isAssistant ? "sm:px-5 sm:py-4" : "")}> 
+      <div className={cn("px-4 py-3.5", isAssistant ? "sm:px-5 sm:py-4" : "")}>
         {isAssistant ? (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-700">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700">
               <Sparkles className="h-3.5 w-3.5" aria-hidden />
               {cardLabel}
             </div>
             <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Actify Assistant</span>
           </div>
         ) : (
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">You</p>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-700">You</p>
         )}
 
         {isAssistant ? (
@@ -116,7 +116,7 @@ function AssistantMessageComponent({
           <button
             type="button"
             onClick={() => onCopy(message.id, formattedAssistantText)}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
           >
             <Clipboard className="h-3.5 w-3.5" aria-hidden />
             {copyState === "copied" ? "Copied" : "Copy"}
@@ -126,7 +126,7 @@ function AssistantMessageComponent({
               type="button"
               onClick={onRegenerate}
               disabled={isLoading}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
               Try Another Response

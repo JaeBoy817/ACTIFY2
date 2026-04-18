@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleDot, Sparkles } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
+import { Sparkles } from "lucide-react";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
+import { AssistantEmptyState } from "@/components/assistant/AssistantEmptyState";
 import { AssistantMessage } from "@/components/assistant/AssistantMessage";
-import { PromptChips } from "@/components/assistant/PromptChips";
+import { type AssistantExampleCard } from "@/components/assistant/AssistantExampleCardGrid";
+import { AssistantTopBar } from "@/components/assistant/AssistantTopBar";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
 import type {
   AssistantApiErrorResponse,
@@ -58,12 +61,43 @@ const MAX_MESSAGES = 24;
 const MAX_HISTORY_THREADS = 14;
 const ASSISTANT_PREFILL_QUERY_PARAM = "assistantPrompt";
 
-const QUICK_PROMPTS = [
-  "Give me a backup activity",
-  "Reword this progress note: Resident attended bingo, needed encouragement at first, then smiled and talked with peers.",
-  "Write a 1:1 note",
-  "Help me plan next week’s calendar",
-  "Give me a 1:1 idea for a bed-bound resident"
+const QUICK_PROMPTS: AssistantExampleCard[] = [
+  {
+    id: "note-reword",
+    title: "Reword a progress note for bingo participation",
+    prompt: "Reword this progress note: Resident attended bingo, needed encouragement at first, then smiled and talked with peers.",
+    kind: "notes"
+  },
+  {
+    id: "one-to-one",
+    title: "Generate a 1:1 idea for a bed-bound resident",
+    prompt: "Give me a 1:1 idea for a bed-bound resident.",
+    kind: "one-to-one"
+  },
+  {
+    id: "fill-days",
+    title: "Help me fill empty activity days this week",
+    prompt: "Help me fill empty activity days this week with low-prep ideas.",
+    kind: "calendar"
+  },
+  {
+    id: "afternoon-group",
+    title: "Suggest a low-energy afternoon group activity",
+    prompt: "Suggest a low-energy afternoon group activity for mixed mobility residents.",
+    kind: "ideas"
+  },
+  {
+    id: "draft-note",
+    title: "Draft a 1:1 note for a room visit",
+    prompt: "Draft a 1:1 note for a room visit with a resident who was initially withdrawn but became conversational.",
+    kind: "notes"
+  },
+  {
+    id: "themed-week",
+    title: "Build a themed week for next month",
+    prompt: "Build a themed activity week for next month with daily anchor activities and one backup option each day.",
+    kind: "calendar"
+  }
 ];
 
 function toEmptyCurrentState(): PersistedAssistantChatState {
@@ -275,6 +309,7 @@ async function requestAssistantResponse(payload: AssistantApiRequest) {
 }
 
 export function AssistantChat() {
+  const { user } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyThreads, setHistoryThreads] = useState<AssistantHistoryThread[]>([]);
   const [activeTab, setActiveTab] = useState<"chat" | "history">("chat");
@@ -290,6 +325,14 @@ export function AssistantChat() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
+
+  const displayName = useMemo(() => {
+    const fromFirstName = user?.firstName?.trim();
+    if (fromFirstName) return fromFirstName;
+    const fullName = user?.fullName?.trim();
+    if (!fullName) return null;
+    return fullName.split(" ")[0] || null;
+  }, [user?.firstName, user?.fullName]);
 
   useEffect(() => {
     const parsedStore = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
@@ -469,194 +512,204 @@ export function AssistantChat() {
     void regenerateLastAssistant();
   }, [regenerateLastAssistant]);
 
+  const startNewChat = useCallback(() => {
+    const { nextStore } = archiveCurrentConversation({
+      current: {
+        messages,
+        conversationId,
+        model: activeModel
+      },
+      history: historyThreads
+    });
+
+    setMessages(nextStore.current.messages);
+    setConversationId(nextStore.current.conversationId);
+    setActiveModel(nextStore.current.model);
+    setHistoryThreads(nextStore.history);
+    setPrompt("");
+    setErrorMessage(null);
+    setLastAttempt(null);
+    setLastAssistantSnapshot(null);
+    setActivePrompt(null);
+    setActiveTab("chat");
+  }, [messages, conversationId, activeModel, historyThreads]);
+
+  const insertToolPrompt = useCallback((prefix: string) => {
+    setPrompt((current) => {
+      if (!current.trim()) return prefix;
+      if (current.toLowerCase().startsWith(prefix.toLowerCase())) return current;
+      return `${prefix} ${current}`.trim();
+    });
+  }, []);
+
+  const chatComposer = (
+    <AssistantComposer
+      value={prompt}
+      onChange={setPrompt}
+      onQuickInsert={insertToolPrompt}
+      onSubmit={() => {
+        void sendPrompt(prompt);
+      }}
+      disabled={isSubmitting}
+    />
+  );
+
   return (
-    <div className="space-y-4 rounded-[2rem] border border-slate-200/85 bg-[linear-gradient(180deg,#ffffff_0%,#f6faff_100%)] p-4 shadow-[0_28px_50px_-36px_rgba(15,23,42,0.55)] sm:p-5">
-      <header className="rounded-[1.7rem] border border-slate-200/90 bg-white/85 p-4 shadow-sm shadow-slate-200/80">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[radial-gradient(circle_at_30%_20%,#cffafe_0%,#e0e7ff_58%,#f8fafc_100%)] text-slate-700 shadow-inner shadow-sky-100">
-                <Sparkles className="h-4 w-4" aria-hidden />
-              </span>
-              <h3 className="text-lg font-semibold text-slate-900">Actify AI Assistant</h3>
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                <CircleDot className="h-2.5 w-2.5 fill-current" aria-hidden />
-                Ready to help
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-slate-600">
-              Ask for activity ideas, note support, planning help, and resident engagement suggestions.
-            </p>
-          </div>
+    <div className="assistant-surface relative overflow-hidden rounded-[2rem] border border-slate-200/85 bg-[linear-gradient(180deg,#ffffff_0%,#f7f8ff_100%)] p-4 shadow-[0_32px_54px_-40px_rgba(15,23,42,0.6)] sm:p-5">
+      <div className="assistant-bg-blob assistant-bg-blob-a" />
+      <div className="assistant-bg-blob assistant-bg-blob-b" />
+      <div className="assistant-bg-blob assistant-bg-blob-c" />
 
-          <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("chat")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                activeTab === "chat" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white"
-              }`}
-            >
-              New Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("history")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                activeTab === "history" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white"
-              }`}
-            >
-              History
-              <span className="ml-1 text-[11px] opacity-80">({historyThreads.length})</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {activeTab === "chat" ? (
-        <PromptChips
-          prompts={quickPrompts}
-          activePrompt={activePrompt}
-          onPickPrompt={(selectedPrompt) => {
-            setPrompt(selectedPrompt);
-            setActiveTab("chat");
-            void sendPrompt(selectedPrompt);
-          }}
+      <div className="relative z-[1] space-y-4">
+        <AssistantTopBar
+          activeTab={activeTab}
+          historyCount={historyThreads.length}
+          activeModel={activeModel}
+          onSelectTab={setActiveTab}
+          onNewChat={startNewChat}
         />
-      ) : null}
 
-      <div
-        ref={scrollRef}
-        className="h-[460px] scroll-smooth overflow-y-auto rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-4 shadow-inner shadow-slate-100/70 md:h-[560px] md:p-5"
-        aria-live="polite"
-      >
         {activeTab === "history" ? (
-          historyThreads.length === 0 ? (
-            <EmptyState
-              icon={Sparkles}
-              title="No previous chats yet"
-              description="After you send messages, refreshed sessions will appear here."
-              className="rounded-3xl border-slate-200 bg-white/80 p-8"
-            />
-          ) : (
-            <div className="space-y-3">
-              {historyThreads.map((thread) => (
-                <article
-                  key={thread.id}
-                  className="rounded-3xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70"
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <h4 className="line-clamp-1 text-sm font-semibold text-slate-800">{thread.title}</h4>
-                    <span className="shrink-0 text-[11px] text-slate-500">
-                      {new Date(thread.createdAt).toLocaleString([], {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit"
-                      })}
-                    </span>
-                  </div>
-                  <p className="mb-3 text-xs text-slate-500">
-                    {thread.messages.length} messages{thread.model ? ` • ${thread.model}` : ""}
-                  </p>
-                  <div className="space-y-2.5">
-                    {thread.messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={
-                          message.role === "user"
-                            ? "ml-auto max-w-[88%] rounded-2xl border border-slate-200 bg-indigo-50/70 px-3 py-2"
-                            : "max-w-[96%] rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
-                        }
-                      >
-                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )
+          <section className="rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,#fbfdff_0%,#ffffff_100%)] p-4 shadow-inner shadow-slate-100/80 md:p-5">
+            {historyThreads.length === 0 ? (
+              <EmptyState
+                icon={Sparkles}
+                title="No previous chats yet"
+                description="After you send messages, refreshed sessions will appear here."
+                className="rounded-3xl border-slate-200 bg-white/80 p-8"
+              />
+            ) : (
+              <div className="space-y-3">
+                {historyThreads.map((thread) => (
+                  <article
+                    key={thread.id}
+                    className="rounded-3xl border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h4 className="line-clamp-1 text-sm font-semibold text-slate-800">{thread.title}</h4>
+                      <span className="shrink-0 text-[11px] text-slate-500">
+                        {new Date(thread.createdAt).toLocaleString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit"
+                        })}
+                      </span>
+                    </div>
+                    <p className="mb-3 text-xs text-slate-500">
+                      {thread.messages.length} messages{thread.model ? ` • ${thread.model}` : ""}
+                    </p>
+                    <div className="space-y-2.5">
+                      {thread.messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={
+                            message.role === "user"
+                              ? "ml-auto max-w-[88%] rounded-2xl border border-violet-200/70 bg-violet-50/70 px-3 py-2"
+                              : "max-w-[96%] rounded-2xl border border-slate-200 bg-white px-3 py-2.5"
+                          }
+                        >
+                          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{message.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         ) : messages.length === 0 && !isSubmitting ? (
-          <EmptyState
-            icon={Sparkles}
-            title="What do you need help with today?"
-            description="Get activity ideas, rewrite notes, build plans, and find resident-friendly suggestions fast."
-            className="rounded-3xl border-slate-200 bg-[radial-gradient(circle_at_25%_0%,#e0f2fe_0%,#ffffff_38%,#f8fafc_100%)] px-6 py-10"
+          <AssistantEmptyState
+            name={displayName}
+            activePrompt={activePrompt}
+            cards={quickPrompts}
+            onSelectPrompt={(selectedPrompt) => {
+              setPrompt(selectedPrompt);
+              setActiveTab("chat");
+              void sendPrompt(selectedPrompt);
+            }}
+            composer={
+              <AssistantComposer
+                value={prompt}
+                onChange={setPrompt}
+                onQuickInsert={insertToolPrompt}
+                onSubmit={() => {
+                  void sendPrompt(prompt);
+                }}
+                placeholder="What can Actify help you with today?"
+                centered
+                disabled={isSubmitting}
+              />
+            }
           />
         ) : (
-          <div className="space-y-4 pb-2">
-            {messages.map((message) => {
-              const isLastAssistant = message.role === "assistant" && message.id === lastAssistantMessageId;
+          <section className="rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,#f8faff_0%,#ffffff_100%)] p-3.5 shadow-inner shadow-slate-100/80 md:p-4">
+            <div
+              ref={scrollRef}
+              className="h-[460px] scroll-smooth overflow-y-auto rounded-[1.35rem] border border-white/90 bg-white/72 p-3.5 md:h-[540px] md:p-4"
+              aria-live="polite"
+            >
+              <div className="space-y-4 pb-2">
+                {messages.map((message) => {
+                  const isLastAssistant = message.role === "assistant" && message.id === lastAssistantMessageId;
 
-              return (
-                <AssistantMessage
-                  key={message.id}
-                  message={message}
-                  isLastAssistant={isLastAssistant}
-                  isLoading={isSubmitting}
-                  copyState={copyStateByMessageId[message.id] || "idle"}
-                  onCopy={copyMessage}
-                  onRegenerate={handleRegenerate}
-                />
-              );
-            })}
+                  return (
+                    <AssistantMessage
+                      key={message.id}
+                      message={message}
+                      isLastAssistant={isLastAssistant}
+                      isLoading={isSubmitting}
+                      copyState={copyStateByMessageId[message.id] || "idle"}
+                      onCopy={copyMessage}
+                      onRegenerate={handleRegenerate}
+                    />
+                  );
+                })}
 
-            {isSubmitting ? (
-              <div className="max-w-[96%] rounded-[1.5rem] border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70">
-                <div className="mb-3 h-3 w-28 animate-pulse rounded-full bg-slate-200/70" />
-                <div className="space-y-2">
-                  <div className="h-3 w-full animate-pulse rounded-full bg-slate-200/70" />
-                  <div className="h-3 w-11/12 animate-pulse rounded-full bg-slate-200/70" />
-                  <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-200/70" />
-                </div>
-                <p className="mt-3 text-xs font-medium text-slate-500">Actify is thinking…</p>
+                {isSubmitting ? (
+                  <div className="max-w-[94%] rounded-[1.5rem] border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70">
+                    <div className="mb-3 h-3 w-28 animate-pulse rounded-full bg-slate-200/70" />
+                    <div className="space-y-2">
+                      <div className="h-3 w-full animate-pulse rounded-full bg-slate-200/70" />
+                      <div className="h-3 w-11/12 animate-pulse rounded-full bg-slate-200/70" />
+                      <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-200/70" />
+                    </div>
+                    <p className="mt-3 text-xs font-medium text-slate-500">Actify is thinking…</p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {errorMessage ? (
+              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <p>{errorMessage}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void retryLastAttempt();
+                  }}
+                  disabled={isSubmitting || !lastAttempt}
+                  className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Retry
+                </button>
               </div>
             ) : null}
-          </div>
+
+            <div className="mt-3">{chatComposer}</div>
+          </section>
         )}
+
+        <p className="text-center text-xs text-slate-500">
+          Engine: <span className="font-medium text-slate-700">Mistral Agent</span>
+          {activeModel ? (
+            <>
+              {" "}
+              <span className="text-slate-400">({activeModel})</span>
+            </>
+          ) : null}
+        </p>
       </div>
-
-      {errorMessage && activeTab === "chat" ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          <p>{errorMessage}</p>
-          <button
-            type="button"
-            onClick={() => {
-              void retryLastAttempt();
-            }}
-            disabled={isSubmitting || !lastAttempt}
-            className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-
-      {activeTab === "chat" ? (
-        <AssistantComposer
-          value={prompt}
-          onChange={setPrompt}
-          onSubmit={() => {
-            void sendPrompt(prompt);
-          }}
-          disabled={isSubmitting}
-        />
-      ) : (
-        <div className="rounded-[1.65rem] border border-dashed border-slate-300 bg-white/70 px-4 py-3 text-sm text-slate-600">
-          Start a new message from the <span className="font-medium text-slate-800">New Chat</span> tab.
-        </div>
-      )}
-
-      <p className="text-xs text-slate-500">
-        Engine: <span className="font-medium text-slate-700">Mistral Agent</span>
-        {activeModel ? (
-          <>
-            {" "}
-            <span className="text-slate-400">({activeModel})</span>
-          </>
-        ) : null}
-      </p>
     </div>
   );
 }
