@@ -1052,6 +1052,11 @@ export function CalendarWeekWorkspace({
                 <DropdownMenuItem asChild>
                   <Link href={`/app/calendar/pdf?view=monthly&month=${monthKey}&preview=1`} target="_blank" rel="noreferrer">Monthly PDF</Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/app/calendar/pdf?view=monthly&audience=resident&month=${monthKey}&preview=1`} target="_blank" rel="noreferrer">
+                    Resident Calendar PDF
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 

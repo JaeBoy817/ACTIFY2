@@ -19,16 +19,21 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getYear,
   isSameMonth,
   startOfMonth,
   startOfWeek
 } from "date-fns";
 
 import { ACTIFY_LOGO_FILE_CANDIDATES } from "@/lib/branding/constants";
+import { buildHolidayLookup, getHolidayBadgeForDate } from "@/lib/calendar/getHolidayBadgeForDate";
+import { type CalendarHoliday } from "@/lib/calendar/holidays";
+import { buildResidentBirthdayLookup, getBirthdayBadgeForDate } from "@/lib/calendar/resident-birthdays";
 import { type ReportThemeTokens, defaultReportTheme } from "@/lib/report-pdf/ReportTheme";
 import { PDF_BODY_FONT, PDF_DISPLAY_FONT } from "@/lib/report-pdf/fonts";
 
 export type CalendarPdfView = "daily" | "weekly" | "monthly";
+export type CalendarPdfAudience = "internal" | "resident";
 
 export type CalendarPdfActivity = {
   id: string;
@@ -37,15 +42,31 @@ export type CalendarPdfActivity = {
   endAt: Date;
   location: string;
   attendanceCount: number;
+  dateKey?: string;
+  startTimeLabel?: string;
+  endTimeLabel?: string;
+};
+
+export type CalendarPdfBirthdayResident = {
+  residentId: string;
+  residentName: string;
+  birthDate: string;
+};
+
+export type CalendarPdfResidentMonthData = {
+  holidays: Pick<CalendarHoliday, "date" | "name" | "displayBadge">[];
+  birthdays: CalendarPdfBirthdayResident[];
 };
 
 type CalendarPdfDocumentArgs = {
   view: CalendarPdfView;
+  audience: CalendarPdfAudience;
   anchorDate: Date;
   activities: CalendarPdfActivity[];
   facilityName: string;
   generatedAt: string;
   theme: ReportThemeTokens;
+  residentMonthData?: CalendarPdfResidentMonthData;
   paperSize?: "LETTER" | "A4";
   margins?: "NORMAL" | "NARROW" | "WIDE";
   includeFooterMeta?: boolean;
@@ -83,8 +104,9 @@ function truncate(value: string | number | null | undefined, max = 58) {
 function buildGroupedByDay(activities: CalendarPdfActivity[]) {
   const map = new Map<string, CalendarPdfActivity[]>();
   for (const activity of activities) {
-    const key = format(activity.startAt, "yyyy-MM-dd");
-    map.set(key, [...(map.get(key) ?? []), activity]);
+    const key = activity.dateKey ?? format(activity.startAt, "yyyy-MM-dd");
+    const nextRows = [...(map.get(key) ?? []), activity].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    map.set(key, nextRows);
   }
   return map;
 }
@@ -600,9 +622,224 @@ function renderMonthlyBody(args: CalendarPdfDocumentArgs) {
   );
 }
 
+function formatResidentActivityLine(activity: CalendarPdfActivity) {
+  const timeLabel = activity.startTimeLabel ?? format(activity.startAt, "h:mm a");
+  return truncate(`${timeLabel} ${activity.title}`, 29);
+}
+
+function buildResidentMonthLines(params: {
+  activities: CalendarPdfActivity[];
+  holidayNames: string[];
+  birthdayNames: string[];
+  maxLines: number;
+}) {
+  const lines: Array<{ text: string; tone: "holiday" | "birthday" | "activity" | "overflow" }> = [];
+
+  if (params.holidayNames.length > 0) {
+    lines.push({
+      text: truncate(`Holiday: ${params.holidayNames[0]}`, 31),
+      tone: "holiday"
+    });
+  }
+
+  if (params.birthdayNames.length > 0) {
+    if (params.birthdayNames.length === 1) {
+      lines.push({
+        text: truncate(`Birthday: ${params.birthdayNames[0]}`, 31),
+        tone: "birthday"
+      });
+    } else {
+      lines.push({
+        text: truncate(`Birthdays: ${params.birthdayNames[0]} +${params.birthdayNames.length - 1}`, 31),
+        tone: "birthday"
+      });
+    }
+  }
+
+  params.activities.forEach((activity) => {
+    lines.push({
+      text: formatResidentActivityLine(activity),
+      tone: "activity"
+    });
+  });
+
+  if (lines.length <= params.maxLines) {
+    return lines;
+  }
+
+  const trimmed = lines.slice(0, Math.max(params.maxLines - 1, 0));
+  const overflowCount = lines.length - trimmed.length;
+
+  return [
+    ...trimmed,
+    {
+      text: `+${overflowCount} more`,
+      tone: "overflow" as const
+    }
+  ];
+}
+
+function renderResidentMonthlyBody(args: CalendarPdfDocumentArgs) {
+  const { anchorDate, activities, theme, facilityName, generatedAt, residentMonthData } = args;
+  const monthStart = startOfMonth(anchorDate);
+  const monthEnd = endOfMonth(anchorDate);
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  const byDay = buildGroupedByDay(activities);
+
+  const days: Date[] = [];
+  for (let cursor = gridStart; cursor <= gridEnd; cursor = addDays(cursor, 1)) {
+    days.push(cursor);
+  }
+
+  const weeks: Date[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+
+  const holidayLookup = buildHolidayLookup(
+    (residentMonthData?.holidays ?? []).map((holiday, index) => ({
+      id: `holiday-${holiday.date}-${index}`,
+      name: holiday.name,
+      date: holiday.date,
+      type: "holiday",
+      category: "seasonal",
+      displayBadge: holiday.displayBadge ?? true,
+      observedDate: null,
+      observedFor: null
+    }))
+  );
+  const birthdayLookup = buildResidentBirthdayLookup({
+    residents: residentMonthData?.birthdays ?? [],
+    years: Array.from(new Set(days.map((day) => getYear(day))))
+  });
+
+  const gridBorderColor = theme.colors.accentCoral;
+  const dayLabels = ["S", "M", "T", "W", "TH", "F", "S"];
+  const weekRowHeight = weeks.length >= 6 ? 69 : 84;
+  const maxLinesPerDay = weeks.length >= 6 ? 4 : 5;
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ marginBottom: 8 }}>
+        <Text
+          style={{
+            fontFamily: PDF_DISPLAY_FONT,
+            fontSize: 108,
+            lineHeight: 0.84,
+            letterSpacing: 1.5,
+            color: gridBorderColor
+          }}
+        >
+          {format(monthStart, "MMM").toUpperCase()}
+        </Text>
+        <Text style={{ marginTop: 6, fontFamily: PDF_DISPLAY_FONT, fontSize: 15, color: theme.colors.textPrimary }}>
+          {truncate(facilityName, 74)}
+        </Text>
+        <Text style={{ marginTop: 2, fontFamily: PDF_BODY_FONT, fontSize: 11, color: theme.colors.textSecondary }}>
+          Activity Calendar | {format(monthStart, "MMMM yyyy")}
+        </Text>
+      </View>
+
+      <View style={{ flexDirection: "row", marginBottom: 6 }}>
+        {dayLabels.map((label) => (
+          <View key={`resident-header-${label}`} style={{ flex: 1, alignItems: "center" }}>
+            <Text style={{ fontFamily: PDF_DISPLAY_FONT, fontSize: 15, color: gridBorderColor }}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View
+        style={{
+          borderWidth: 1.2,
+          borderColor: gridBorderColor,
+          backgroundColor: "#FFFFFF",
+          flexGrow: 1
+        }}
+      >
+        {weeks.map((week, weekIndex) => (
+          <View key={`resident-week-${weekIndex}`} style={{ flexDirection: "row" }}>
+            {week.map((day, dayIndex) => {
+              const key = format(day, "yyyy-MM-dd");
+              const rows = byDay.get(key) ?? [];
+              const inMonth = isSameMonth(day, monthStart);
+              const holidays = getHolidayBadgeForDate(key, holidayLookup).map((holiday) => holiday.name);
+              const birthdays = getBirthdayBadgeForDate(key, birthdayLookup).map((birthday) => birthday.residentName);
+              const lines = buildResidentMonthLines({
+                activities: rows,
+                holidayNames: holidays,
+                birthdayNames: birthdays,
+                maxLines: maxLinesPerDay
+              });
+
+              return (
+                <View
+                  key={key}
+                  style={{
+                    flex: 1,
+                    minHeight: weekRowHeight,
+                    borderRightWidth: dayIndex === 6 ? 0 : 1,
+                    borderBottomWidth: weekIndex === weeks.length - 1 ? 0 : 1,
+                    borderColor: gridBorderColor,
+                    paddingHorizontal: 5,
+                    paddingVertical: 4,
+                    backgroundColor: inMonth ? "#FFFFFF" : "#FAFAFA"
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: PDF_DISPLAY_FONT,
+                      fontSize: 12,
+                      color: inMonth ? theme.colors.textPrimary : "#A1A1AA"
+                    }}
+                  >
+                    {format(day, "d")}
+                  </Text>
+                  <View style={{ marginTop: 2 }}>
+                    {lines.map((line, index) => (
+                      <Text
+                        key={`${key}-line-${index}-${line.text}`}
+                        style={{
+                          fontFamily: PDF_BODY_FONT,
+                          fontSize: 7.7,
+                          lineHeight: 1.25,
+                          color:
+                            line.tone === "holiday"
+                              ? gridBorderColor
+                              : line.tone === "birthday"
+                                ? "#7C3AED"
+                                : line.tone === "overflow"
+                                  ? theme.colors.textMuted
+                                  : theme.colors.textPrimary
+                        }}
+                      >
+                        {line.text}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+
+      <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between" }}>
+        <Text style={{ fontFamily: PDF_DISPLAY_FONT, fontSize: 12, color: gridBorderColor }}>
+          Resident-Facing Monthly Calendar
+        </Text>
+        <Text style={{ fontFamily: PDF_BODY_FONT, fontSize: 8.8, color: theme.colors.textMuted }}>
+          Generated {generatedAt}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function calendarPdfDocument(args: CalendarPdfDocumentArgs) {
-  const { view, anchorDate, facilityName, generatedAt, theme, paperSize, margins, includeFooterMeta } = args;
-  const pagePadding = getPagePadding(margins);
+  const { view, audience, anchorDate, facilityName, generatedAt, theme, paperSize, margins, includeFooterMeta } = args;
+  const isResidentMonthly = audience === "resident" && view === "monthly";
+  const pagePadding = isResidentMonthly ? 16 : getPagePadding(margins);
 
   const title = view === "daily" ? "Daily Calendar PDF" : view === "weekly" ? "Weekly Calendar PDF" : "Monthly Calendar PDF";
   const subtitle = view === "daily"
@@ -615,28 +852,35 @@ function calendarPdfDocument(args: CalendarPdfDocumentArgs) {
     <Document>
       <Page
         size={paperSize ?? "LETTER"}
+        orientation={isResidentMonthly ? "landscape" : "portrait"}
         style={{
-          backgroundColor: theme.colors.background,
+          backgroundColor: isResidentMonthly ? "#F5F5F5" : theme.colors.background,
           paddingTop: Math.max(pagePadding - 2, 14),
           paddingRight: pagePadding,
-          paddingBottom: pagePadding + 8,
+          paddingBottom: isResidentMonthly ? pagePadding : pagePadding + 8,
           paddingLeft: pagePadding,
           fontFamily: PDF_BODY_FONT
         }}
       >
-        <Header
-          theme={theme}
-          title={title}
-          subtitle={subtitle}
-          facilityName={facilityName}
-          generatedAt={generatedAt}
-        />
+        {isResidentMonthly ? (
+          renderResidentMonthlyBody(args)
+        ) : (
+          <>
+            <Header
+              theme={theme}
+              title={title}
+              subtitle={subtitle}
+              facilityName={facilityName}
+              generatedAt={generatedAt}
+            />
 
-        {view === "daily" ? renderDailyBody(args) : null}
-        {view === "weekly" ? renderWeeklyBody(args) : null}
-        {view === "monthly" ? renderMonthlyBody(args) : null}
+            {view === "daily" ? renderDailyBody(args) : null}
+            {view === "weekly" ? renderWeeklyBody(args) : null}
+            {view === "monthly" ? renderMonthlyBody(args) : null}
 
-        <Footer theme={theme} generatedAt={generatedAt} includeMeta={includeFooterMeta ?? true} />
+            <Footer theme={theme} generatedAt={generatedAt} includeMeta={includeFooterMeta ?? true} />
+          </>
+        )}
       </Page>
     </Document>
   );
@@ -645,10 +889,12 @@ function calendarPdfDocument(args: CalendarPdfDocumentArgs) {
 export async function generateCalendarPdf(
   args: {
     view: CalendarPdfView;
+    audience?: CalendarPdfAudience;
     anchorDate: Date;
     activities: CalendarPdfActivity[];
     facilityName: string;
     generatedAt: string;
+    residentMonthData?: CalendarPdfResidentMonthData;
   },
   theme: ReportThemeTokens = defaultReportTheme,
   options?: {
@@ -659,6 +905,7 @@ export async function generateCalendarPdf(
 ) {
   const doc = calendarPdfDocument({
     ...args,
+    audience: args.audience ?? "internal",
     theme,
     paperSize: options?.paperSize,
     margins: options?.margins,
