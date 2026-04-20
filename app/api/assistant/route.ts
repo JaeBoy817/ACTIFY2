@@ -20,6 +20,24 @@ const conversationEntrySchema = z.object({
   content: z.string().trim().min(1).max(4000)
 });
 
+const residentContextSchema = z.object({
+  residentId: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
+  preferredName: z.string().trim().max(120).nullable().optional().default(null),
+  roomNumber: z.string().trim().max(40).nullable().optional().default(null),
+  birthday: z.string().trim().max(64).nullable().optional().default(null),
+  interests: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  dislikes: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  favoriteActivities: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  favoriteMusic: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  favoriteConversationTopics: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  participationStyle: z.string().trim().max(220).nullable().optional().default(null),
+  supportNeeds: z.array(z.string().trim().min(1).max(120)).max(20).optional().default([]),
+  bestTimeOfDay: z.string().trim().max(120).nullable().optional().default(null),
+  whatWorks: z.string().trim().max(320).nullable().optional().default(null),
+  whatDoesNotWork: z.string().trim().max(320).nullable().optional().default(null)
+});
+
 const assistantRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
   conversationHistory: z.array(conversationEntrySchema).max(24).optional().default([]),
@@ -27,7 +45,8 @@ const assistantRequestSchema = z.object({
     .enum(["auto", "activity_ideas", "calendar_planning", "note_support", "note_rewrite", "resident_support"])
     .optional()
     .default("auto"),
-  conversationId: z.string().trim().min(1).max(200).optional().nullable()
+  conversationId: z.string().trim().min(1).max(200).optional().nullable(),
+  residentContext: residentContextSchema.nullable().optional().default(null)
 });
 
 function shouldUseLocalFallback(error: MistralAssistantError) {
@@ -99,7 +118,8 @@ export async function POST(request: Request) {
       message: parsed.data.message,
       conversationHistory: parsed.data.conversationHistory as AssistantConversationMessage[],
       mode: parsed.data.mode,
-      conversationId: parsed.data.conversationId ?? null
+      conversationId: parsed.data.conversationId ?? null,
+      residentContext: parsed.data.residentContext ?? null
     };
     parsedMessageForFallback = requestBody.message;
 
@@ -107,7 +127,8 @@ export async function POST(request: Request) {
       message: requestBody.message,
       conversationHistory: requestBody.conversationHistory ?? [],
       mode: requestBody.mode ?? "auto",
-      conversationId: requestBody.conversationId ?? null
+      conversationId: requestBody.conversationId ?? null,
+      residentContext: requestBody.residentContext ?? null
     });
 
     const response: AssistantApiSuccessResponse = {

@@ -1,6 +1,7 @@
 import type { ResidentStatus } from "@prisma/client";
 
 import type { ResidentListRow } from "@/lib/residents/types";
+import type { ResidentAIContext } from "@/lib/assistant/types";
 
 import type {
   ResidentDraftPayload,
@@ -29,44 +30,56 @@ const ARCHIVED_STATUSES: ResidentStatus[] = ["DISCHARGED", "TRANSFERRED", "DECEA
 
 const AI_ACTIONS: SnapshotIntentAction[] = [
   {
+    id: "ask-resident",
+    label: "Ask Actify About This Resident",
+    description: "Open assistant support with this resident profile already attached.",
+    prompt: "Help me with this resident and suggest the best next engagement steps"
+  },
+  {
     id: "idea-1to1",
-    label: "Suggest a 1:1 idea",
-    description: "Quick individualized idea based on this resident's style.",
-    prompt: "Give me a 10-minute 1:1 idea for this resident"
+    label: "Suggest 1:1 Idea",
+    description: "Instant individualized room-visit ideas based on this resident profile.",
+    prompt: "Give me 3-5 personalized 1:1 activity ideas for this resident"
   },
   {
     id: "idea-group",
-    label: "Suggest a group activity fit",
-    description: "Find a group format this resident is likely to engage with.",
-    prompt: "Suggest a group activity this resident may enjoy"
+    label: "Suggest Group Fit",
+    description: "Find lower-pressure group options likely to match their preferences.",
+    prompt: "Suggest group activities that are a better fit for this resident"
   },
   {
     id: "conversation",
-    label: "Generate conversation starters",
-    description: "Create practical prompts for room visits and social check-ins.",
-    prompt: "Give me conversation starters for this resident"
+    label: "Generate Conversation Starters",
+    description: "Create copy-ready prompts for room visits and social check-ins.",
+    prompt: "Generate 5-8 conversation starters for this resident"
+  },
+  {
+    id: "birthday-idea",
+    label: "Suggest Birthday Idea",
+    description: "Generate resident-friendly birthday recognition and room-visit ideas.",
+    prompt: "Suggest birthday ideas and celebration options for this resident"
   },
   {
     id: "backup",
-    label: "Suggest backup activity",
+    label: "Suggest Backup Activity",
     description: "Give a quick fallback if this resident declines the planned group.",
-    prompt: "Suggest a backup activity if this resident refuses group"
+    prompt: "Suggest backup activities if this resident declines the planned group"
   },
   {
     id: "note-progress",
-    label: "Draft a progress note",
-    description: "Turn rough details into polished progress-note support wording.",
-    prompt: "Draft a progress note for this resident"
+    label: "Draft Progress Note",
+    description: "Generate a focused progress-note draft using resident context.",
+    prompt: "Draft a progress note for this resident using provided event details"
   },
   {
     id: "note-1to1",
-    label: "Draft a 1:1 note",
-    description: "Generate a clean 1:1 documentation draft.",
-    prompt: "Draft a 1:1 note for this resident"
+    label: "Draft 1:1 Note",
+    description: "Generate a clean 1:1 documentation draft with resident-aware wording.",
+    prompt: "Draft a 1:1 note for this resident using provided visit details"
   },
   {
     id: "reword",
-    label: "Reword a note",
+    label: "Reword Note",
     description: "Rewrite rough wording while preserving the original meaning.",
     prompt: "Reword this note using this resident's preferences"
   },
@@ -90,7 +103,7 @@ const AI_ACTIONS: SnapshotIntentAction[] = [
   },
   {
     id: "mini-plan",
-    label: "Build mini engagement plan",
+    label: "Build Mini Engagement Plan",
     description: "Generate a quick plan for the next few touchpoints.",
     prompt: "Build a mini engagement plan for this resident for the next 7 days"
   },
@@ -102,7 +115,7 @@ const AI_ACTIONS: SnapshotIntentAction[] = [
   },
   {
     id: "analytics-participation-boost",
-    label: "Suggest activities to improve participation",
+    label: "Suggest Activities to Improve Participation",
     description: "Target engagement with practical alternatives.",
     prompt: "Suggest activities to improve this resident's participation based on attendance trends"
   },
@@ -706,26 +719,31 @@ export function residentMatchesSearch(resident: ResidentSnapshot, searchTerm: st
 }
 
 export function buildAssistantPrompt(action: SnapshotIntentAction, resident: ResidentSnapshot) {
-  const context = [
-    `Resident: ${resident.fullName}`,
-    `Preferred Name: ${resident.preferredName ?? "Not provided"}`,
-    `Room: ${resident.room}`,
-    `Participation Style: ${resident.participationStyle || "Not provided"}`,
-    `Interests: ${resident.interests.join(", ") || "Not provided"}`,
-    `Dislikes: ${resident.dislikes.join(", ") || "Not provided"}`,
-    `Best Time: ${resident.bestTimeOfDay || "Not provided"}`,
-    `Support Needs: ${resident.supportNeeds.join(", ") || "Not provided"}`,
-    `What Works: ${resident.whatWorks || "Not provided"}`,
-    `Common Refusals: ${resident.commonRefusals || "Not provided"}`,
-    `Participation (this month): ${resident.participationPercentage ?? "No attendance tracked yet"}`,
-    `Tracked opportunities (this month): ${resident.totalTrackedOpportunitiesThisMonth ?? 0}`,
-    `Attended (this month): ${resident.attendedCountThisMonth ?? 0}`,
-    `1:1 completed (this month): ${resident.oneToOneCompletedCountThisMonth ?? 0}`,
-    `Refusals (this month): ${resident.refusalCountThisMonth ?? 0}`,
-    `Missed (this month): ${resident.missedCountThisMonth ?? 0}`
-  ];
+  const name = resident.preferredName?.trim() || resident.fullName;
+  if (action.id === "ask-resident") {
+    return `Help me with ${name}. Review this resident context and suggest practical next steps.`;
+  }
+  return `${action.prompt} for ${name}.`;
+}
 
-  return `${action.prompt}.\n\nResident context:\n${context.join("\n")}`;
+export function buildResidentAIContext(resident: ResidentSnapshot): ResidentAIContext {
+  return {
+    residentId: resident.id,
+    name: resident.fullName,
+    preferredName: resident.preferredName ?? null,
+    roomNumber: resident.room || null,
+    birthday: resident.birthDate ?? null,
+    interests: resident.interests,
+    dislikes: resident.dislikes,
+    favoriteActivities: resident.favoriteActivities,
+    favoriteMusic: resident.favoriteMusic,
+    favoriteConversationTopics: resident.favoriteTopics,
+    participationStyle: resident.participationStyle || null,
+    supportNeeds: resident.supportNeeds,
+    bestTimeOfDay: resident.bestTimeOfDay || null,
+    whatWorks: resident.whatWorks || null,
+    whatDoesNotWork: resident.whatDoesNotWork || resident.commonRefusals || null
+  };
 }
 
 export function calculateParticipationRate(attended: number, offered: number) {

@@ -13,6 +13,24 @@ export type AssistantConversationMessage = {
   content: string;
 };
 
+export type ResidentAIContext = {
+  residentId: string;
+  name: string;
+  preferredName: string | null;
+  roomNumber: string | null;
+  birthday: string | null;
+  interests: string[];
+  dislikes: string[];
+  favoriteActivities: string[];
+  favoriteMusic: string[];
+  favoriteConversationTopics: string[];
+  participationStyle: string | null;
+  supportNeeds: string[];
+  bestTimeOfDay: string | null;
+  whatWorks: string | null;
+  whatDoesNotWork: string | null;
+};
+
 export type AssistantIntent =
   | "rewrite_progress_note"
   | "rewrite_1to1_note"
@@ -36,6 +54,7 @@ export type AssistantApiRequest = {
   conversationHistory?: AssistantConversationMessage[];
   mode?: AssistantMode;
   conversationId?: string | null;
+  residentContext?: ResidentAIContext | null;
 };
 
 export type AssistantApiSuccessResponse = {

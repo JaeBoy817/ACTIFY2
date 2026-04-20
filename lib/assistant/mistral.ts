@@ -3,10 +3,12 @@ import { Mistral } from "@mistralai/mistralai";
 import { extractAssistantTextFromMistralResponse } from "@/lib/assistant/extractAssistantText";
 import { matchPromptToIntent } from "@/lib/assistant/matchPromptToIntent";
 import { parseRewriteRequest } from "@/lib/assistant/parseRewriteRequest";
+import { createResidentScopedPrompt, isResidentScopedRequest } from "@/lib/assistant/residentContext";
 import type {
   AssistantConversationMessage,
   AssistantIntent,
-  AssistantMode
+  AssistantMode,
+  ResidentAIContext
 } from "@/lib/assistant/types";
 
 const DEFAULT_MISTRAL_AGENT_ID = "ag_019d92c5923371f19d586b2c54926fad";
@@ -27,6 +29,7 @@ export type MistralAssistantRequest = {
   conversationHistory: AssistantConversationMessage[];
   mode: AssistantMode;
   conversationId?: string | null;
+  residentContext?: ResidentAIContext | null;
 };
 
 export type MistralAssistantResult = {
@@ -173,12 +176,23 @@ function buildRewritePrompt(input: {
   ].join("\n");
 }
 
-function buildFinalPrompt(message: string) {
+function buildFinalPrompt(message: string, residentContext?: ResidentAIContext | null) {
+  const withResidentContext = (prompt: string) => {
+    if (!isResidentScopedRequest({ residentContext: residentContext ?? null }) || !residentContext) {
+      return prompt;
+    }
+
+    return createResidentScopedPrompt({
+      residentContext,
+      prompt
+    });
+  };
+
   const parsed = parseRewriteRequest(message);
   if (parsed.intent !== "rewriteNote") {
     return {
       intentData: deriveIntent(message),
-      prompt: trimContent(message, MAX_INPUT_CHARS)
+      prompt: withResidentContext(trimContent(message, MAX_INPUT_CHARS))
     };
   }
 
@@ -202,11 +216,13 @@ function buildFinalPrompt(message: string) {
 
   return {
     intentData: deriveIntent(message),
-    prompt: buildRewritePrompt({
-      noteText: rawNoteText,
-      noteType: parsed.noteType,
-      style: parsed.style
-    })
+    prompt: withResidentContext(
+      buildRewritePrompt({
+        noteText: rawNoteText,
+        noteType: parsed.noteType,
+        style: parsed.style
+      })
+    )
   };
 }
 
@@ -412,7 +428,7 @@ export async function runMistralAssistant(request: MistralAssistantRequest): Pro
   const config = getMistralConfig();
   const client = getMistralClient(config.apiKey);
   const history = normalizeConversationHistory(request.conversationHistory);
-  const { intentData, prompt } = buildFinalPrompt(request.message);
+  const { intentData, prompt } = buildFinalPrompt(request.message, request.residentContext ?? null);
 
   try {
     let providerResponse:
@@ -478,7 +494,7 @@ export async function runMistralAssistantStream(
   const config = getMistralConfig();
   const client = getMistralClient(config.apiKey);
   const history = normalizeConversationHistory(request.conversationHistory);
-  const { intentData, prompt } = buildFinalPrompt(request.message);
+  const { intentData, prompt } = buildFinalPrompt(request.message, request.residentContext ?? null);
 
   try {
     let providerStream:

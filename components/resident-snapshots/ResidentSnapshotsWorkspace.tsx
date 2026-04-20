@@ -9,6 +9,7 @@ import { ArchiveResidentModal } from "@/components/resident-snapshots/ArchiveRes
 import { EmptyState } from "@/components/resident-snapshots/EmptyState";
 import {
   appendArchiveContext,
+  buildResidentAIContext,
   buildAssistantPrompt,
   fromResidentRow,
   getSnapshotActions,
@@ -31,6 +32,7 @@ import type {
   SnapshotViewKey
 } from "@/components/resident-snapshots/types";
 import type { ResidentListRow } from "@/lib/residents/types";
+import { queueResidentScopedAssistantRequest } from "@/lib/assistant/residentContext";
 
 function isArchivedStatus(status: ResidentSnapshot["status"]) {
   return status === "DISCHARGED" || status === "TRANSFERRED" || status === "DECEASED";
@@ -296,6 +298,12 @@ export function ResidentSnapshotsWorkspace({
 
   function launchAssistant(action: SnapshotIntentAction, resident: ResidentSnapshot) {
     const prompt = buildAssistantPrompt(action, resident);
+    queueResidentScopedAssistantRequest({
+      prompt,
+      actionId: action.id,
+      actionLabel: action.label,
+      residentContext: buildResidentAIContext(resident)
+    });
     router.push(`/app?assistantPrompt=${encodeURIComponent(prompt)}`);
   }
 

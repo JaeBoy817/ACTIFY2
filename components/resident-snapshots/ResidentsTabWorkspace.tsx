@@ -14,6 +14,7 @@ import { ResidentsControlBar } from "@/components/resident-snapshots/ResidentsCo
 import { ResidentsPageHeader } from "@/components/resident-snapshots/ResidentsPageHeader";
 import {
   appendArchiveContext,
+  buildResidentAIContext,
   buildAssistantPrompt,
   fromResidentRow,
   getSnapshotActions,
@@ -32,6 +33,7 @@ import type {
 } from "@/components/resident-snapshots/types";
 import type { ResidentListRow } from "@/lib/residents/types";
 import { ActionButton, EmptyStateCard, QuickActionMenu } from "@/components/workspace/shared";
+import { queueResidentScopedAssistantRequest } from "@/lib/assistant/residentContext";
 import { cn } from "@/lib/utils";
 
 const AddResidentDrawerSimple = dynamic(
@@ -389,6 +391,12 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
   function launchAssistant(action: SnapshotIntentAction, resident: ResidentSnapshot) {
     const prompt = buildAssistantPrompt(action, resident);
+    queueResidentScopedAssistantRequest({
+      prompt,
+      actionId: action.id,
+      actionLabel: action.label,
+      residentContext: buildResidentAIContext(resident)
+    });
     router.push(`/app?assistantPrompt=${encodeURIComponent(prompt)}`);
   }
 
@@ -759,7 +767,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                 onSelect={() => {
                   setSelectedResidentId(resident.id);
                 }}
-                onAskActify={() => launchAssistant(getAction("idea-1to1"), resident)}
+                onAskActify={() => launchAssistant(getAction("ask-resident"), resident)}
                 onTrackAttendance={() => openTrackAttendance(resident.id)}
                 onViewDetails={() => {
                   setSelectedResidentId(resident.id);
@@ -829,7 +837,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                 onSelect={() => {
                   setSelectedResidentId(resident.id);
                 }}
-                onAskActify={() => launchAssistant(getAction("idea-1to1"), resident)}
+                onAskActify={() => launchAssistant(getAction("ask-resident"), resident)}
                 onTrackAttendance={() => openTrackAttendance(resident.id)}
                 onViewDetails={() => {
                   setSelectedResidentId(resident.id);

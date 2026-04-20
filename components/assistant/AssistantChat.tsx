@@ -10,13 +10,19 @@ import { AssistantMessage } from "@/components/assistant/AssistantMessage";
 import { type AssistantExampleCard } from "@/components/assistant/AssistantExampleCardGrid";
 import { AssistantTopBar } from "@/components/assistant/AssistantTopBar";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
+import {
+  buildResidentContextLabel,
+  consumeResidentScopedAssistantRequest,
+  isResidentScopedRequest
+} from "@/lib/assistant/residentContext";
 import type {
   AssistantApiErrorResponse,
   AssistantApiResponse,
   AssistantApiRequest,
   AssistantApiSuccessResponse,
   AssistantConversationMessage,
-  AssistantIntent
+  AssistantIntent,
+  ResidentAIContext
 } from "@/lib/assistant/types";
 
 type ChatRole = "assistant" | "user";
@@ -35,6 +41,8 @@ type RequestSnapshot = {
   prompt: string;
   historySnapshot: AssistantConversationMessage[];
   forceNewConversation: boolean;
+  residentContext: ResidentAIContext | null;
+  includeResidentContext: boolean;
 };
 
 type PersistedAssistantChatState = {
@@ -407,6 +415,8 @@ export function AssistantChat() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [residentContext, setResidentContext] = useState<ResidentAIContext | null>(null);
+  const [includeResidentContext, setIncludeResidentContext] = useState(true);
   const [lastAttempt, setLastAttempt] = useState<RequestSnapshot | null>(null);
   const [lastAssistantSnapshot, setLastAssistantSnapshot] = useState<RequestSnapshot | null>(null);
   const [copyStateByMessageId, setCopyStateByMessageId] = useState<Record<string, "idle" | "copied">>({});
@@ -423,6 +433,11 @@ export function AssistantChat() {
     if (!fullName) return null;
     return fullName.split(" ")[0] || null;
   }, [user?.firstName, user?.fullName]);
+
+  const residentContextLabel = useMemo(() => {
+    if (!residentContext) return null;
+    return buildResidentContextLabel(residentContext);
+  }, [residentContext]);
 
   useEffect(() => {
     const parsedStore = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
@@ -448,16 +463,25 @@ export function AssistantChat() {
       setActiveModel(nextStore.current.model);
     }
 
+    const scopedResidentRequest = consumeResidentScopedAssistantRequest();
+    if (scopedResidentRequest && isResidentScopedRequest(scopedResidentRequest)) {
+      setResidentContext(scopedResidentRequest.residentContext);
+      setIncludeResidentContext(true);
+    }
+
     const params = new URLSearchParams(window.location.search);
     const prefillPrompt = params.get(ASSISTANT_PREFILL_QUERY_PARAM);
+    const nextPrompt = prefillPrompt?.trim() || scopedResidentRequest?.prompt?.trim() || "";
 
-    if (prefillPrompt && prefillPrompt.trim().length > 0) {
-      setPrompt(prefillPrompt);
+    if (nextPrompt.length > 0) {
+      setPrompt(nextPrompt);
       setActiveTab("chat");
-      params.delete(ASSISTANT_PREFILL_QUERY_PARAM);
-      const query = params.toString();
-      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-      window.history.replaceState(window.history.state, "", nextUrl);
+      if (prefillPrompt && prefillPrompt.trim().length > 0) {
+        params.delete(ASSISTANT_PREFILL_QUERY_PARAM);
+        const query = params.toString();
+        const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+        window.history.replaceState(window.history.state, "", nextUrl);
+      }
     }
 
     hydratedRef.current = true;
@@ -530,6 +554,8 @@ export function AssistantChat() {
       appendUserMessage?: boolean;
       historySnapshot?: AssistantConversationMessage[];
       forceNewConversation?: boolean;
+      residentContext?: ResidentAIContext | null;
+      includeResidentContext?: boolean;
     }
   ) => {
     const content = value.trim();
@@ -542,6 +568,8 @@ export function AssistantChat() {
     const appendUserMessage = options?.appendUserMessage ?? true;
     const historySnapshot = options?.historySnapshot ?? mapMessagesToConversationHistory(messages);
     const forceNewConversation = options?.forceNewConversation ?? false;
+    const scopedResidentContext = options?.residentContext ?? residentContext;
+    const shouldIncludeResidentContext = options?.includeResidentContext ?? includeResidentContext;
 
     if (appendUserMessage) {
       const nextUserMessage: ChatMessage = {
@@ -557,7 +585,9 @@ export function AssistantChat() {
     const snapshot: RequestSnapshot = {
       prompt: content,
       historySnapshot,
-      forceNewConversation
+      forceNewConversation,
+      residentContext: scopedResidentContext,
+      includeResidentContext: shouldIncludeResidentContext
     };
 
     setLastAttempt(snapshot);
@@ -587,7 +617,8 @@ export function AssistantChat() {
           message: content,
           conversationHistory: historySnapshot,
           mode: "auto",
-          conversationId: forceNewConversation ? null : conversationId
+          conversationId: forceNewConversation ? null : conversationId,
+          residentContext: shouldIncludeResidentContext ? scopedResidentContext : null
         },
         {
           signal: abortController.signal,
@@ -684,7 +715,7 @@ export function AssistantChat() {
       setIsSubmitting(false);
       setActivePrompt(null);
     }
-  }, [conversationId, isSubmitting, messages]);
+  }, [conversationId, includeResidentContext, isSubmitting, messages, residentContext]);
 
   const stopStreaming = useCallback(() => {
     if (!abortControllerRef.current) return;
@@ -696,7 +727,9 @@ export function AssistantChat() {
     await sendPrompt(lastAttempt.prompt, {
       appendUserMessage: false,
       historySnapshot: lastAttempt.historySnapshot,
-      forceNewConversation: lastAttempt.forceNewConversation
+      forceNewConversation: lastAttempt.forceNewConversation,
+      residentContext: lastAttempt.residentContext,
+      includeResidentContext: lastAttempt.includeResidentContext
     });
   }, [isSubmitting, lastAttempt, sendPrompt]);
 
@@ -705,7 +738,9 @@ export function AssistantChat() {
     await sendPrompt(lastAssistantSnapshot.prompt, {
       appendUserMessage: false,
       historySnapshot: lastAssistantSnapshot.historySnapshot,
-      forceNewConversation: true
+      forceNewConversation: true,
+      residentContext: lastAssistantSnapshot.residentContext,
+      includeResidentContext: lastAssistantSnapshot.includeResidentContext
     });
   }, [isSubmitting, lastAssistantSnapshot, sendPrompt]);
 
@@ -761,18 +796,74 @@ export function AssistantChat() {
     });
   }, []);
 
+  const residentContextControls = residentContext ? (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-200/75 bg-sky-50/80 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+          Using resident context
+        </span>
+        <p className="text-xs font-medium text-slate-700">{residentContextLabel}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={includeResidentContext}
+            onChange={(event) => {
+              setIncludeResidentContext(event.target.checked);
+            }}
+            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-sky-300"
+          />
+          Include resident context
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setResidentContext(null);
+            setIncludeResidentContext(false);
+          }}
+          className="rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   const chatComposer = (
-    <AssistantComposer
-      value={prompt}
-      onChange={setPrompt}
-      onQuickInsert={insertToolPrompt}
-      onSubmit={() => {
-        void sendPrompt(prompt);
-      }}
-      disabled={isSubmitting}
-      isStreaming={isSubmitting}
-      onStop={stopStreaming}
-    />
+    <div className="space-y-2.5">
+      {residentContextControls}
+      <AssistantComposer
+        value={prompt}
+        onChange={setPrompt}
+        onQuickInsert={insertToolPrompt}
+        onSubmit={() => {
+          void sendPrompt(prompt);
+        }}
+        disabled={isSubmitting}
+        isStreaming={isSubmitting}
+        onStop={stopStreaming}
+      />
+    </div>
+  );
+
+  const emptyComposer = (
+    <div className="space-y-2.5">
+      {residentContextControls}
+      <AssistantComposer
+        value={prompt}
+        onChange={setPrompt}
+        onQuickInsert={insertToolPrompt}
+        onSubmit={() => {
+          void sendPrompt(prompt);
+        }}
+        placeholder="What can Actify help you with today?"
+        centered
+        disabled={isSubmitting}
+        isStreaming={isSubmitting}
+        onStop={stopStreaming}
+      />
+    </div>
   );
 
   return (
@@ -849,21 +940,7 @@ export function AssistantChat() {
               setActiveTab("chat");
               void sendPrompt(selectedPrompt);
             }}
-            composer={
-              <AssistantComposer
-                value={prompt}
-                onChange={setPrompt}
-                onQuickInsert={insertToolPrompt}
-                onSubmit={() => {
-                  void sendPrompt(prompt);
-                }}
-                placeholder="What can Actify help you with today?"
-                centered
-                disabled={isSubmitting}
-                isStreaming={isSubmitting}
-                onStop={stopStreaming}
-              />
-            }
+            composer={emptyComposer}
           />
         ) : (
           <section className="rounded-[1.7rem] border border-slate-200/90 bg-[linear-gradient(180deg,#f8faff_0%,#ffffff_100%)] p-3.5 shadow-inner shadow-slate-100/80 md:p-4">
