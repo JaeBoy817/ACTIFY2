@@ -25,6 +25,7 @@ type ChatMessage = {
   id: string;
   role: ChatRole;
   text: string;
+  status?: "streaming" | "complete" | "error";
   intent?: AssistantIntent;
   sourcePrompt?: string;
   model?: string | null;
@@ -119,6 +120,7 @@ function sanitizeMessages(input: unknown): ChatMessage[] {
         id?: unknown;
         role?: unknown;
         text?: unknown;
+        status?: unknown;
         intent?: unknown;
         sourcePrompt?: unknown;
         model?: unknown;
@@ -128,6 +130,7 @@ function sanitizeMessages(input: unknown): ChatMessage[] {
         id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
         role: value.role === "user" ? "user" : "assistant",
         text: typeof value.text === "string" ? value.text : "",
+        status: value.status === "error" ? "error" : "complete",
         intent: typeof value.intent === "string" ? (value.intent as AssistantIntent) : undefined,
         sourcePrompt: typeof value.sourcePrompt === "string" ? value.sourcePrompt : undefined,
         model: typeof value.model === "string" ? value.model : null
@@ -262,6 +265,7 @@ function archiveCurrentConversation(store: PersistedAssistantStore) {
 
 function mapMessagesToConversationHistory(messages: ChatMessage[]): AssistantConversationMessage[] {
   return messages
+    .filter((message) => message.status !== "error")
     .map((message) => ({
       role: message.role,
       content: message.text
@@ -270,36 +274,125 @@ function mapMessagesToConversationHistory(messages: ChatMessage[]): AssistantCon
     .slice(-MAX_MESSAGES);
 }
 
-function isAssistantApiError(data: AssistantApiResponse): data is AssistantApiErrorResponse {
-  return data.ok === false;
+function isAssistantApiError(data: AssistantApiResponse | null): data is AssistantApiErrorResponse {
+  return Boolean(data && data.ok === false);
 }
 
-async function requestAssistantResponse(payload: AssistantApiRequest) {
-  const response = await fetch("/api/assistant", {
+type AssistantStreamDonePayload = {
+  meta: AssistantApiSuccessResponse["meta"];
+};
+
+function parseSseFrames(buffer: string) {
+  const frames = buffer.split(/\r?\n\r?\n/);
+  const remainingBuffer = frames.pop() ?? "";
+  return {
+    frames: frames.filter((frame) => frame.trim().length > 0),
+    remainingBuffer
+  };
+}
+
+async function requestAssistantResponseStream(
+  payload: AssistantApiRequest,
+  options: {
+    signal: AbortSignal;
+    onChunk: (chunk: string) => void;
+    onMeta: (meta: Partial<AssistantApiSuccessResponse["meta"]>) => void;
+  }
+) {
+  const response = await fetch("/api/assistant/stream", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Accept: "text/event-stream"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: options.signal
   });
 
-  const data = (await response.json().catch(() => null)) as AssistantApiResponse | null;
-  if (!data) {
-    throw new Error("We couldn’t generate a response right now. Please try again.");
-  }
-
   if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as AssistantApiResponse | null;
     if (isAssistantApiError(data)) {
       throw new Error(data.error || "We couldn’t generate a response right now. Please try again.");
     }
     throw new Error("We couldn’t generate a response right now. Please try again.");
   }
 
-  if (isAssistantApiError(data)) {
-    throw new Error(data.error || "We couldn’t generate a response right now. Please try again.");
+  if (!response.body) {
+    throw new Error("We couldn’t stream a response right now. Please try again.");
   }
 
-  return data as AssistantApiSuccessResponse;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const { frames, remainingBuffer } = parseSseFrames(buffer);
+    buffer = remainingBuffer;
+
+    for (const frame of frames) {
+      const lines = frame.split(/\r?\n/);
+      let eventName = "message";
+      const dataLines: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice("event:".length).trim();
+          continue;
+        }
+
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice("data:".length).trimStart());
+        }
+      }
+
+      if (dataLines.length === 0) continue;
+
+      const dataText = dataLines.join("\n");
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(dataText);
+      } catch {
+        parsed = null;
+      }
+
+      if (eventName === "chunk") {
+        const chunk = parsed && typeof parsed === "object" ? (parsed as { text?: unknown }).text : undefined;
+        if (typeof chunk === "string" && chunk.length > 0) {
+          options.onChunk(chunk);
+        }
+        continue;
+      }
+
+      if (eventName === "meta") {
+        if (parsed && typeof parsed === "object") {
+          options.onMeta(parsed as Partial<AssistantApiSuccessResponse["meta"]>);
+        }
+        continue;
+      }
+
+      if (eventName === "error") {
+        const errorText =
+          parsed && typeof parsed === "object" && typeof (parsed as { error?: unknown }).error === "string"
+            ? (parsed as { error: string }).error
+            : "Response stopped unexpectedly. Try again.";
+        throw new Error(errorText);
+      }
+
+      if (eventName === "aborted") {
+        throw new DOMException("Request aborted", "AbortError");
+      }
+
+      if (eventName === "done") {
+        return (parsed as AssistantStreamDonePayload | null) ?? null;
+      }
+    }
+  }
+
+  return null;
 }
 
 export function AssistantChat() {
@@ -310,6 +403,7 @@ export function AssistantChat() {
   const [prompt, setPrompt] = useState("");
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
@@ -319,6 +413,8 @@ export function AssistantChat() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   const displayName = useMemo(() => {
     const fromFirstName = user?.firstName?.trim();
@@ -371,7 +467,13 @@ export function AssistantChat() {
     if (!hydratedRef.current) return;
     const payload: PersistedAssistantStore = {
       current: {
-        messages: messages.slice(-MAX_MESSAGES),
+        messages: messages
+          .filter((message) => message.status !== "streaming")
+          .slice(-MAX_MESSAGES)
+          .map((message) => ({
+            ...message,
+            status: message.status === "error" ? "error" : "complete"
+          })),
         conversationId,
         model: activeModel
       },
@@ -382,7 +484,34 @@ export function AssistantChat() {
 
   useEffect(() => {
     if (activeTab !== "chat") return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const updateAutoScrollAnchor = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      shouldAutoScrollRef.current = distanceFromBottom < 128;
+    };
+
+    updateAutoScrollAnchor();
+    container.addEventListener("scroll", updateAutoScrollAnchor);
+    return () => {
+      container.removeEventListener("scroll", updateAutoScrollAnchor);
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "chat") return;
     if (!scrollRef.current) return;
+    if (!shouldAutoScrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isSubmitting, errorMessage, activeTab]);
 
@@ -436,41 +565,131 @@ export function AssistantChat() {
     setErrorMessage(null);
     setActivePrompt(content);
 
+    const assistantMessageId = crypto.randomUUID();
+    const streamingAssistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      text: "",
+      status: "streaming",
+      sourcePrompt: content,
+      model: null
+    };
+
+    setMessages((current) => [...current, streamingAssistantMessage].slice(-MAX_MESSAGES));
+    setStreamingMessageId(assistantMessageId);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
-      const apiResponse = await requestAssistantResponse({
-        message: content,
-        conversationHistory: historySnapshot,
-        mode: "auto",
-        conversationId: forceNewConversation ? null : conversationId
-      });
+      const donePayload = await requestAssistantResponseStream(
+        {
+          message: content,
+          conversationHistory: historySnapshot,
+          mode: "auto",
+          conversationId: forceNewConversation ? null : conversationId
+        },
+        {
+          signal: abortController.signal,
+          onMeta: (meta) => {
+            if (typeof meta.conversationId === "string") {
+              setConversationId(meta.conversationId);
+            }
+            if (typeof meta.model === "string") {
+              setActiveModel(meta.model);
+            }
+          },
+          onChunk: (chunk) => {
+            setMessages((current) =>
+              current.map((message) => {
+                if (message.id !== assistantMessageId) return message;
+                return {
+                  ...message,
+                  status: "streaming",
+                  text: `${message.text}${chunk}`
+                };
+              })
+            );
+          }
+        }
+      );
 
-      const assistantReply: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        text: apiResponse.message,
-        intent: apiResponse.meta.intent,
-        sourcePrompt: content,
-        model: apiResponse.meta.model ?? null
-      };
+      const doneMeta = donePayload?.meta;
 
-      setMessages((current) => [...current, assistantReply].slice(-MAX_MESSAGES));
+      setMessages((current) =>
+        current.map((message) => {
+          if (message.id !== assistantMessageId) return message;
+          return {
+            ...message,
+            status: "complete",
+            intent: doneMeta?.intent ?? message.intent,
+            model: doneMeta?.model ?? message.model,
+            sourcePrompt: content
+          };
+        })
+      );
+
+      if (doneMeta?.conversationId) {
+        setConversationId(doneMeta.conversationId);
+      }
+      if (doneMeta?.model) {
+        setActiveModel(doneMeta.model);
+      }
+
       setLastAssistantSnapshot(snapshot);
-      setConversationId(apiResponse.meta.conversationId ?? null);
-
-      if (apiResponse.meta.model) {
-        setActiveModel(apiResponse.meta.model);
-      }
     } catch (error) {
-      if (error instanceof Error && error.message) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("We couldn’t generate a response right now. Please try again.");
+      const wasAborted =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError");
+
+      if (wasAborted) {
+        setMessages((current) => {
+          const activeMessage = current.find((message) => message.id === assistantMessageId);
+          if (!activeMessage) return current;
+          if (activeMessage.text.trim().length === 0) {
+            return current.filter((message) => message.id !== assistantMessageId);
+          }
+          return current.map((message) =>
+            message.id === assistantMessageId
+              ? {
+                  ...message,
+                  status: "complete"
+                }
+              : message
+          );
+        });
+        setErrorMessage(null);
+        return;
       }
+
+      const resolvedError =
+        error instanceof Error && error.message
+          ? error.message
+          : "Response stopped unexpectedly. Try again.";
+
+      setErrorMessage(resolvedError);
+      setMessages((current) =>
+        current.map((message) => {
+          if (message.id !== assistantMessageId) return message;
+          return {
+            ...message,
+            text: message.text.trim().length > 0 ? message.text : "Response stopped unexpectedly. Try again.",
+            status: "error"
+          };
+        })
+      );
     } finally {
+      abortControllerRef.current = null;
+      setStreamingMessageId(null);
       setIsSubmitting(false);
       setActivePrompt(null);
     }
   }, [conversationId, isSubmitting, messages]);
+
+  const stopStreaming = useCallback(() => {
+    if (!abortControllerRef.current) return;
+    abortControllerRef.current.abort();
+  }, []);
 
   const retryLastAttempt = useCallback(async () => {
     if (!lastAttempt || isSubmitting) return;
@@ -507,6 +726,11 @@ export function AssistantChat() {
   }, [regenerateLastAssistant]);
 
   const startNewChat = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
     const { nextStore } = archiveCurrentConversation({
       current: {
         messages,
@@ -525,6 +749,7 @@ export function AssistantChat() {
     setLastAttempt(null);
     setLastAssistantSnapshot(null);
     setActivePrompt(null);
+    setStreamingMessageId(null);
     setActiveTab("chat");
   }, [messages, conversationId, activeModel, historyThreads]);
 
@@ -545,6 +770,8 @@ export function AssistantChat() {
         void sendPrompt(prompt);
       }}
       disabled={isSubmitting}
+      isStreaming={isSubmitting}
+      onStop={stopStreaming}
     />
   );
 
@@ -633,6 +860,8 @@ export function AssistantChat() {
                 placeholder="What can Actify help you with today?"
                 centered
                 disabled={isSubmitting}
+                isStreaming={isSubmitting}
+                onStop={stopStreaming}
               />
             }
           />
@@ -653,24 +882,13 @@ export function AssistantChat() {
                       message={message}
                       isLastAssistant={isLastAssistant}
                       isLoading={isSubmitting}
+                      isStreaming={streamingMessageId === message.id}
                       copyState={copyStateByMessageId[message.id] || "idle"}
                       onCopy={copyMessage}
                       onRegenerate={handleRegenerate}
                     />
                   );
                 })}
-
-                {isSubmitting ? (
-                  <div className="max-w-[94%] rounded-[1.5rem] border border-slate-200/90 bg-white p-4 shadow-sm shadow-slate-200/70">
-                    <div className="mb-3 h-3 w-28 animate-pulse rounded-full bg-slate-200/70" />
-                    <div className="space-y-2">
-                      <div className="h-3 w-full animate-pulse rounded-full bg-slate-200/70" />
-                      <div className="h-3 w-11/12 animate-pulse rounded-full bg-slate-200/70" />
-                      <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-200/70" />
-                    </div>
-                    <p className="mt-3 text-xs font-medium text-slate-500">Actify is thinking…</p>
-                  </div>
-                ) : null}
               </div>
             </div>
 

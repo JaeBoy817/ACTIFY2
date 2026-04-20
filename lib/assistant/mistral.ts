@@ -38,6 +38,13 @@ export type MistralAssistantResult = {
   agentVersion: number;
 };
 
+export type MistralAssistantStreamCallbacks = {
+  onTextChunk: (chunk: string) => void | Promise<void>;
+  onConversationId?: (conversationId: string) => void | Promise<void>;
+  onModel?: (model: string) => void | Promise<void>;
+  signal?: AbortSignal;
+};
+
 export class MistralAssistantError extends Error {
   status: number;
   code: string;
@@ -277,6 +284,130 @@ async function appendConversation(input: {
   );
 }
 
+async function startConversationStream(input: StartConversationInput) {
+  const inputs = [
+    ...input.history.map((entry) => ({
+      role: entry.role,
+      content: entry.content
+    })),
+    { role: "user" as const, content: input.prompt }
+  ];
+
+  return input.client.beta.conversations.startStream(
+    {
+      agentId: input.config.agentId,
+      agentVersion: input.config.agentVersion,
+      inputs
+    },
+    {
+      timeoutMs: REQUEST_TIMEOUT_MS
+    }
+  );
+}
+
+async function appendConversationStream(input: {
+  client: Mistral;
+  conversationId: string;
+  prompt: string;
+}) {
+  return input.client.beta.conversations.appendStream(
+    {
+      conversationId: input.conversationId,
+      conversationAppendStreamRequest: {
+        inputs: [{ role: "user", content: input.prompt }]
+      }
+    },
+    {
+      timeoutMs: REQUEST_TIMEOUT_MS
+    }
+  );
+}
+
+function extractDeltaTextChunk(eventData: unknown) {
+  if (!eventData || typeof eventData !== "object") return "";
+  const typed = eventData as {
+    content?: unknown;
+  };
+
+  if (typeof typed.content === "string") {
+    return typed.content;
+  }
+
+  if (typed.content && typeof typed.content === "object") {
+    const chunk = typed.content as { text?: unknown; type?: unknown };
+    if (typeof chunk.text === "string") {
+      return chunk.text;
+    }
+  }
+
+  return "";
+}
+
+async function consumeConversationStream(
+  stream: AsyncIterable<unknown>,
+  callbacks: MistralAssistantStreamCallbacks
+) {
+  let generatedMessage = "";
+  let conversationId = "";
+  let model: string | null = null;
+
+  for await (const rawEvent of stream) {
+    if (callbacks.signal?.aborted) {
+      throw new MistralAssistantError("Request was canceled.", {
+        status: 499,
+        code: "REQUEST_ABORTED"
+      });
+    }
+
+    const event = rawEvent as {
+      event?: string;
+      data?: Record<string, unknown>;
+    };
+    const eventType = event.event;
+    const eventData = event.data;
+
+    if (eventType === "conversation.response.error") {
+      const message =
+        eventData && typeof eventData.message === "string"
+          ? eventData.message
+          : "We couldn’t generate a response right now. Please try again.";
+      throw new MistralAssistantError(message, {
+        status: 502,
+        code: "MISTRAL_PROVIDER_ERROR"
+      });
+    }
+
+    if (eventType === "conversation.response.started" && eventData && typeof eventData.conversationId === "string") {
+      conversationId = eventData.conversationId;
+      if (callbacks.onConversationId) {
+        await callbacks.onConversationId(conversationId);
+      }
+      continue;
+    }
+
+    if (eventType === "message.output.delta") {
+      if (eventData && typeof eventData.model === "string") {
+        model = eventData.model;
+        if (callbacks.onModel) {
+          await callbacks.onModel(model);
+        }
+      }
+
+      const chunk = extractDeltaTextChunk(eventData);
+      if (chunk.length > 0) {
+        generatedMessage += chunk;
+        await callbacks.onTextChunk(chunk);
+      }
+    }
+  }
+
+  return {
+    generatedMessage,
+    conversationId,
+    model
+  };
+}
+
 export async function runMistralAssistant(request: MistralAssistantRequest): Promise<MistralAssistantResult> {
   const config = getMistralConfig();
   const client = getMistralClient(config.apiKey);
@@ -330,6 +461,75 @@ export async function runMistralAssistant(request: MistralAssistantRequest): Pro
     return {
       message: extracted.text,
       model: extracted.model,
+      conversationId,
+      intent: intentData.intent,
+      agentId: config.agentId,
+      agentVersion: config.agentVersion
+    };
+  } catch (error) {
+    throw toProviderError(error);
+  }
+}
+
+export async function runMistralAssistantStream(
+  request: MistralAssistantRequest,
+  callbacks: MistralAssistantStreamCallbacks
+): Promise<MistralAssistantResult> {
+  const config = getMistralConfig();
+  const client = getMistralClient(config.apiKey);
+  const history = normalizeConversationHistory(request.conversationHistory);
+  const { intentData, prompt } = buildFinalPrompt(request.message);
+
+  try {
+    let providerStream:
+      | Awaited<ReturnType<typeof startConversationStream>>
+      | Awaited<ReturnType<typeof appendConversationStream>>;
+
+    const hasConversationId = Boolean(request.conversationId && request.conversationId.trim().length > 0);
+
+    if (hasConversationId) {
+      try {
+        providerStream = await appendConversationStream({
+          client,
+          conversationId: request.conversationId!.trim(),
+          prompt
+        });
+      } catch {
+        providerStream = await startConversationStream({
+          client,
+          config,
+          prompt,
+          history
+        });
+      }
+    } else {
+      providerStream = await startConversationStream({
+        client,
+        config,
+        prompt,
+        history
+      });
+    }
+
+    const { generatedMessage, conversationId, model } = await consumeConversationStream(providerStream, callbacks);
+
+    if (!conversationId) {
+      throw new MistralAssistantError("We couldn’t generate a response right now. Please try again.", {
+        status: 502,
+        code: "MISSING_CONVERSATION_ID"
+      });
+    }
+
+    if (!generatedMessage.trim()) {
+      throw new MistralAssistantError("We couldn’t generate a response right now. Please try again.", {
+        status: 502,
+        code: "MISTRAL_EMPTY_OUTPUT"
+      });
+    }
+
+    return {
+      message: generatedMessage,
+      model,
       conversationId,
       intent: intentData.intent,
       agentId: config.agentId,

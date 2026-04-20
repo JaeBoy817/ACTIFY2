@@ -10,12 +10,14 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  status?: "streaming" | "complete" | "error";
 };
 
 type AssistantMessageProps = {
   message: ChatMessage;
   isLastAssistant: boolean;
   isLoading: boolean;
+  isStreaming?: boolean;
   copyState: "idle" | "copied";
   onCopy: (id: string, text: string) => void;
   onRegenerate: () => void;
@@ -64,6 +66,7 @@ function AssistantMessageComponent({
   message,
   isLastAssistant,
   isLoading,
+  isStreaming = false,
   copyState,
   onCopy,
   onRegenerate
@@ -102,9 +105,21 @@ function AssistantMessageComponent({
               isNoteSupport ? "rounded-2xl border border-slate-200/85 bg-slate-50/60 px-3 py-2.5 sm:px-4" : ""
             )}
           >
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {formattedAssistantText}
-            </ReactMarkdown>
+            {isStreaming && formattedAssistantText.trim().length === 0 ? (
+              <div className="inline-flex items-center gap-1.5 py-1 text-[13px] text-slate-500">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300" />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 [animation-delay:120ms]" />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 [animation-delay:240ms]" />
+                <span className="ml-1 text-xs font-medium text-slate-500">Actify is responding…</span>
+              </div>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {formattedAssistantText}
+              </ReactMarkdown>
+            )}
+            {isStreaming && formattedAssistantText.trim().length > 0 ? (
+              <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse rounded-full bg-violet-400 align-middle" aria-hidden />
+            ) : null}
           </div>
         ) : (
           <div className="whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{message.text}</div>
@@ -116,13 +131,14 @@ function AssistantMessageComponent({
           <button
             type="button"
             onClick={() => onCopy(message.id, formattedAssistantText)}
+            disabled={formattedAssistantText.trim().length === 0}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             title={copyState === "copied" ? "Copied" : "Copy response"}
             aria-label={copyState === "copied" ? "Copied" : "Copy response"}
           >
             {copyState === "copied" ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Clipboard className="h-3.5 w-3.5" aria-hidden />}
           </button>
-          {isLastAssistant ? (
+          {isLastAssistant && !isStreaming ? (
             <button
               type="button"
               onClick={onRegenerate}

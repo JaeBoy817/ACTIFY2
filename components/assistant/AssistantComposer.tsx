@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUp, CalendarDays, ChevronDown, ScrollText, SlidersHorizontal, UsersRound } from "lucide-react";
+import { ArrowUp, CalendarDays, ChevronDown, ScrollText, SlidersHorizontal, Square, UsersRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,8 @@ type AssistantComposerProps = {
   className?: string;
   hideHint?: boolean;
   disabled?: boolean;
+  isStreaming?: boolean;
+  onStop?: () => void;
 };
 
 const TOOL_PRESETS = [
@@ -30,7 +32,9 @@ export function AssistantComposer({
   centered = false,
   className,
   hideHint = false,
-  disabled = false
+  disabled = false,
+  isStreaming = false,
+  onStop
 }: AssistantComposerProps) {
   const canSend = value.trim().length > 0 && !disabled;
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -73,14 +77,26 @@ export function AssistantComposer({
           ) : null}
         </div>
 
-        <button
-          type="submit"
-          disabled={!canSend}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.05rem] border border-sky-300/60 bg-[linear-gradient(145deg,#0f172a_0%,#0f766e_100%)] text-white shadow-[0_14px_28px_-18px_rgba(14,116,144,0.75)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-18px_rgba(14,116,144,0.85)] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-          aria-label="Send prompt"
-        >
-          <ArrowUp className="h-4 w-4" />
-        </button>
+        {isStreaming ? (
+          <button
+            type="button"
+            onClick={onStop}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.05rem] border border-rose-300/70 bg-[linear-gradient(145deg,#7f1d1d_0%,#be123c_100%)] text-white shadow-[0_14px_28px_-18px_rgba(190,24,93,0.7)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-18px_rgba(190,24,93,0.78)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+            aria-label="Stop response"
+            title="Stop response"
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!canSend}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.05rem] border border-sky-300/60 bg-[linear-gradient(145deg,#0f172a_0%,#0f766e_100%)] text-white shadow-[0_14px_28px_-18px_rgba(14,116,144,0.75)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-18px_rgba(14,116,144,0.85)] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            aria-label="Send prompt"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+        )}
       </label>
 
       <div className="mt-3 flex items-center gap-2 px-1">
