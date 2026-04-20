@@ -2228,7 +2228,7 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
   height: 24rem;
   top: -8rem;
   left: -6rem;
-  background: radial-gradient(circle at 50% 50%, rgba(196, 181, 253, 0.65) 0%, rgba(196, 181, 253, 0) 70%);
+  background: radial-gradient(circle at 50% 50%, rgba(34, 211, 238, 0.44) 0%, rgba(34, 211, 238, 0) 72%);
   animation: assistant-blob-drift-a 21s ease-in-out infinite;
 }
 
@@ -2237,7 +2237,7 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
   height: 22rem;
   top: -6rem;
   right: -6rem;
-  background: radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.58) 0%, rgba(147, 197, 253, 0) 70%);
+  background: radial-gradient(circle at 50% 50%, rgba(192, 132, 252, 0.38) 0%, rgba(192, 132, 252, 0) 72%);
   animation: assistant-blob-drift-b 25s ease-in-out infinite;
 }
 
@@ -2246,7 +2246,7 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
   height: 20rem;
   bottom: -9rem;
   left: 28%;
-  background: radial-gradient(circle at 50% 50%, rgba(244, 208, 255, 0.55) 0%, rgba(244, 208, 255, 0) 72%);
+  background: radial-gradient(circle at 50% 50%, rgba(251, 146, 60, 0.28) 0%, rgba(236, 72, 153, 0.14) 36%, rgba(251, 146, 60, 0) 74%);
   animation: assistant-blob-drift-c 27s ease-in-out infinite;
 }
 
@@ -2265,8 +2265,8 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
     inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   background:
     radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 18%, rgba(255, 255, 255, 0) 45%),
-    radial-gradient(circle at 70% 78%, rgba(129, 140, 248, 0.64) 0%, rgba(129, 140, 248, 0.08) 36%, rgba(129, 140, 248, 0) 64%),
-    linear-gradient(145deg, #f0abfc 0%, #a78bfa 50%, #60a5fa 100%);
+    radial-gradient(circle at 74% 76%, rgba(249, 115, 22, 0.36) 0%, rgba(249, 115, 22, 0) 52%),
+    linear-gradient(145deg, #22d3ee 0%, #3b82f6 26%, #6366f1 50%, #a855f7 72%, #ec4899 88%, #fb923c 100%);
 }
 
 .assistant-orb-core {

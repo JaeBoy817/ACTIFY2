@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Clipboard, RefreshCcw, Sparkles } from "lucide-react";
+import { Check, Clipboard, RefreshCcw, Sparkles } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -112,24 +112,26 @@ function AssistantMessageComponent({
       </div>
 
       {isAssistant ? (
-        <div className="flex flex-wrap gap-1.5 border-t border-slate-200/90 bg-white/70 px-4 py-2.5 sm:px-5">
+        <div className="flex flex-wrap justify-end gap-1.5 border-t border-slate-200/90 bg-white/70 px-4 py-2.5 sm:px-5">
           <button
             type="button"
             onClick={() => onCopy(message.id, formattedAssistantText)}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            title={copyState === "copied" ? "Copied" : "Copy response"}
+            aria-label={copyState === "copied" ? "Copied" : "Copy response"}
           >
-            <Clipboard className="h-3.5 w-3.5" aria-hidden />
-            {copyState === "copied" ? "Copied" : "Copy"}
+            {copyState === "copied" ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Clipboard className="h-3.5 w-3.5" aria-hidden />}
           </button>
           {isLastAssistant ? (
             <button
               type="button"
               onClick={onRegenerate}
               disabled={isLoading}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 disabled:cursor-not-allowed disabled:opacity-60"
+              title="Try another response"
+              aria-label="Try another response"
             >
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
-              Try Another Response
             </button>
           ) : null}
         </div>

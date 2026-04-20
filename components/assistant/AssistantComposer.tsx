@@ -1,4 +1,5 @@
-import { ArrowUp, CalendarDays, Paperclip, ScrollText, UsersRound } from "lucide-react";
+import { useState } from "react";
+import { ArrowUp, CalendarDays, ChevronDown, ScrollText, SlidersHorizontal, UsersRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function AssistantComposer({
   disabled = false
 }: AssistantComposerProps) {
   const canSend = value.trim().length > 0 && !disabled;
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   return (
     <form
@@ -81,17 +83,20 @@ export function AssistantComposer({
         </button>
       </label>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onQuickInsert?.("Add context: ")}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
-          >
-            <Paperclip className="h-3.5 w-3.5" aria-hidden />
-            Attach
-          </button>
+      <div className="mt-3 flex items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setToolsOpen((current) => !current)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          More tools
+          <ChevronDown className={`h-3.5 w-3.5 transition ${toolsOpen ? "rotate-180" : ""}`} aria-hidden />
+        </button>
+      </div>
 
+      {toolsOpen ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
           {TOOL_PRESETS.map((tool) => {
             const Icon = tool.icon;
             return (
@@ -107,11 +112,7 @@ export function AssistantComposer({
             );
           })}
         </div>
-
-        <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">
-          Smart Mode
-        </span>
-      </div>
+      ) : null}
     </form>
   );
 }

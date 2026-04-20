@@ -81,12 +81,6 @@ const QUICK_PROMPTS: AssistantExampleCard[] = [
     kind: "calendar"
   },
   {
-    id: "afternoon-group",
-    title: "Suggest a low-energy afternoon group activity",
-    prompt: "Suggest a low-energy afternoon group activity for mixed mobility residents.",
-    kind: "ideas"
-  },
-  {
     id: "draft-note",
     title: "Draft a 1:1 note for a room visit",
     prompt: "Draft a 1:1 note for a room visit with a resident who was initially withdrawn but became conversational.",
