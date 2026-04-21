@@ -166,6 +166,11 @@ export async function getAccessStateForUser(user: AppAccessUserRecord): Promise<
   const sessionEmail = await getPrimarySessionEmail();
   const email = sessionEmail.email ?? user.email ?? null;
   const normalizedEmail = sessionEmail.normalizedEmail ?? normalizeEmail(user.email);
+  const normalizedSessionEmail = sessionEmail.normalizedEmail;
+  const hasVerifiedBypassSession =
+    Boolean(normalizedSessionEmail) &&
+    sessionEmail.isPrimaryEmailVerified &&
+    isCreatorBypassEmail(normalizedSessionEmail);
 
   await syncUserEmailIfNeeded(user, sessionEmail.email);
 
@@ -181,13 +186,13 @@ export async function getAccessStateForUser(user: AppAccessUserRecord): Promise<
     });
   }
 
-  if (isCreatorBypassEmail(normalizedEmail)) {
+  if (hasVerifiedBypassSession) {
     return {
       isAuthenticated: true,
       clerkUserId: user.clerkUserId,
       user,
       email,
-      normalizedEmail,
+      normalizedEmail: normalizedSessionEmail,
       isPrimaryEmailVerified: sessionEmail.isPrimaryEmailVerified,
       creatorBypassEmail,
       isCreatorBypass: true,
@@ -221,8 +226,7 @@ export async function getAccessStateForUser(user: AppAccessUserRecord): Promise<
     });
   }
 
-  const hasActiveSubscription =
-    billing.hasActiveSubscription || isActiveSubscriptionStatus(billing.subscriptionStatus);
+  const hasActiveSubscription = isActiveSubscriptionStatus(billing.subscriptionStatus);
 
   return {
     isAuthenticated: true,

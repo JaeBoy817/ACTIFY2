@@ -115,9 +115,8 @@ export function toBillingSnapshotFromSubscription(input: {
     stripePriceId: input.stripePriceId ?? null,
     subscriptionStatus: normalizedStatus,
     subscriptionCurrentPeriodEnd: input.currentPeriodEnd ?? null,
-    // Keep status-driven access resilient for legacy rows where the new boolean
-    // field may not have been backfilled yet.
-    hasActiveSubscription: activeByStatus || Boolean(input.hasActiveSubscription)
+    // Access should be status-driven so stale boolean flags cannot grant access.
+    hasActiveSubscription: activeByStatus
   };
 }
 
