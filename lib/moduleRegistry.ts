@@ -80,7 +80,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     accentGradientClasses: MODULE_VISUAL_TOKENS.attendance.accentGradientClasses,
     description: "Track participation percentages, 1:1 visits, and state-ready summaries.",
     sidebarGroup: "daily-workflow",
-    moduleFlagKey: "calendar"
+    moduleFlagKey: "attendanceTracking"
   },
   {
     key: "notes",

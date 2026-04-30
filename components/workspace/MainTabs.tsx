@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Sparkles, UserRound } from "lucide-react";
+import { CalendarDays, ClipboardCheck, Sparkles, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,12 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
     label: "Calendar",
     helpText: "Plan activities by month, week, and day.",
     icon: CalendarDays
+  },
+  {
+    href: "/app/attendance",
+    label: "Attendance",
+    helpText: "Track group and 1:1 participation statistics.",
+    icon: ClipboardCheck
   }
 ];
 
