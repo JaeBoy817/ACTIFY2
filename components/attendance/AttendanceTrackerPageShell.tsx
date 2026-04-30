@@ -582,8 +582,9 @@ export function AttendanceTrackerPageShell({
               />
               <MetricCard
                 label="This Week"
-                value={formatPercent(summary.weekly.participationPercent)}
-                helpText={`${summary.weekly.participatedResidentCount} residents participated this week`}
+                value={`${summary.weekly.participatedResidentCount} / ${summary.activeResidentCount} residents`}
+                secondaryValue={formatPercent(summary.weekly.participationPercent)}
+                valueClassName="text-2xl"
                 icon={BarChart3}
                 tone="bg-gradient-to-br from-indigo-500 to-violet-500"
               />
