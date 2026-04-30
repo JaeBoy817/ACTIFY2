@@ -598,8 +598,8 @@ export function AttendanceTrackerPageShell({
               />
               <MetricCard
                 label="Group Attendance"
-                value={String(summary.daily.groupAttendanceCount)}
-                helpText="Present marks saved for the selected date"
+                value={`${summary.monthly.groupAttendanceCount} group check-ins this month`}
+                valueClassName="text-2xl"
                 icon={Users}
                 tone="bg-gradient-to-br from-emerald-500 to-teal-500"
               />
