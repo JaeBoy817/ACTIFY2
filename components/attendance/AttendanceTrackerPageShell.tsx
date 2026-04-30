@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   BarChart3,
   CalendarCheck2,
@@ -255,6 +255,11 @@ export function AttendanceTrackerPageShell({
   const [oneToOneSearch, setOneToOneSearch] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
   const [loggingResidentId, setLoggingResidentId] = useState<string | null>(null);
+  const groupAttendanceRef = useRef<HTMLDivElement>(null);
+  const oneToOneRef = useRef<HTMLDivElement>(null);
+  const exportSectionRef = useRef<HTMLDivElement>(null);
+  const groupSearchInputRef = useRef<HTMLInputElement>(null);
+  const oneToOneSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDateKey(initialData.dateKey);
@@ -311,6 +316,20 @@ export function AttendanceTrackerPageShell({
   function updateSelectedSession(nextSessionId: string) {
     setSelectedSessionId(nextSessionId);
     router.push(`/app/attendance?date=${encodeURIComponent(dateKey)}&sessionId=${encodeURIComponent(nextSessionId)}`);
+  }
+
+  function openSection(section: "group" | "oneToOne" | "export") {
+    const sectionRef = section === "group" ? groupAttendanceRef : section === "oneToOne" ? oneToOneRef : exportSectionRef;
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    window.setTimeout(() => {
+      if (section === "group") {
+        groupSearchInputRef.current?.focus();
+      }
+      if (section === "oneToOne") {
+        oneToOneSearchInputRef.current?.focus();
+      }
+    }, 260);
   }
 
   function setResidentPresent(residentId: string, checked: boolean) {
@@ -476,16 +495,14 @@ export function AttendanceTrackerPageShell({
             <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
                 <Badge variant="outline" className="border-cyan-200 bg-cyan-50/80 text-cyan-800">
-                  Attendance Tracker
+                  Attendance
                 </Badge>
-                <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-slate-950 sm:text-5xl">
-                  Simple participation stats, ready when state asks.
-                </h1>
+                <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-slate-950 sm:text-5xl">Attendance Tracker</h1>
                 <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                  Track group attendance, log quick 1:1 visits, and see daily, weekly, and monthly participation without turning Actify into an EHR.
+                  Track daily group and 1:1 participation with simple state-ready statistics.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,180px)_auto_auto] lg:min-w-[520px]">
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,180px)_auto] lg:min-w-[580px]">
                 <label className="text-sm font-semibold text-slate-600">
                   Selected date
                   <Input
@@ -495,14 +512,20 @@ export function AttendanceTrackerPageShell({
                     className="mt-2 bg-white"
                   />
                 </label>
-                <Button type="button" variant="outline" className="self-end bg-white/90" onClick={printSummary}>
-                  <Printer className="h-4 w-4" />
-                  Print
-                </Button>
-                <Button type="button" variant="outline" className="self-end bg-white/90" onClick={exportCsv}>
-                  <Download className="h-4 w-4" />
-                  Export CSV
-                </Button>
+                <div className="grid gap-2 self-end sm:grid-cols-3">
+                  <Button type="button" className="bg-blue-600 text-white hover:bg-blue-500" onClick={() => openSection("group")}>
+                    <ClipboardCheck className="h-4 w-4" />
+                    Take Attendance
+                  </Button>
+                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("oneToOne")}>
+                    <UserRoundCheck className="h-4 w-4" />
+                    Log 1:1 Visit
+                  </Button>
+                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("export")}>
+                    <Download className="h-4 w-4" />
+                    Export Report
+                  </Button>
+                </div>
               </div>
             </div>
             <nav className="relative mt-7 flex flex-wrap gap-2 text-sm" aria-label="Attendance secondary pages">
@@ -565,7 +588,7 @@ export function AttendanceTrackerPageShell({
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card className="border-white/80 bg-white/90 shadow-sm">
+          <Card ref={groupAttendanceRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
             <CardHeader className="border-b border-slate-100">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -604,6 +627,7 @@ export function AttendanceTrackerPageShell({
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
+                  ref={groupSearchInputRef}
                   value={residentSearch}
                   onChange={(event) => setResidentSearch(event.target.value)}
                   placeholder="Search resident by name, room, or unit..."
@@ -674,7 +698,7 @@ export function AttendanceTrackerPageShell({
           </Card>
 
           <div className="flex flex-col gap-6">
-            <Card className="border-white/80 bg-white/90 shadow-sm">
+            <Card ref={oneToOneRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl">
                   <UserCheck className="h-6 w-6 text-fuchsia-600" />
@@ -686,6 +710,7 @@ export function AttendanceTrackerPageShell({
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
+                    ref={oneToOneSearchInputRef}
                     value={oneToOneSearch}
                     onChange={(event) => setOneToOneSearch(event.target.value)}
                     placeholder="Search resident..."
@@ -755,7 +780,7 @@ export function AttendanceTrackerPageShell({
           </div>
         </section>
 
-        <Card className="border-white/80 bg-white/90 shadow-sm">
+        <Card ref={exportSectionRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
           <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle className="text-2xl">State-ready summary</CardTitle>
