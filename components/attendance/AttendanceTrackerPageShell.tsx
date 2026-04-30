@@ -570,42 +570,42 @@ export function AttendanceTrackerPageShell({
           <>
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" aria-label="Participation statistics">
               <MetricCard
-                label="Daily participation"
+                label="Today’s Participation"
                 value={formatPercent(summary.daily.participationPercent)}
                 helpText={`${summary.daily.participatedResidentCount} of ${summary.activeResidentCount} active residents on ${summary.dateKey}`}
                 icon={CalendarCheck2}
                 tone="bg-gradient-to-br from-cyan-500 to-blue-500"
               />
               <MetricCard
-                label="Weekly participation"
+                label="This Week"
                 value={formatPercent(summary.weekly.participationPercent)}
                 helpText={`${summary.weekly.participatedResidentCount} residents participated this week`}
                 icon={BarChart3}
                 tone="bg-gradient-to-br from-indigo-500 to-violet-500"
               />
               <MetricCard
-                label="Monthly participation"
+                label="This Month"
                 value={formatPercent(summary.monthly.participationPercent)}
                 helpText={`${summary.monthly.participatedResidentCount} residents participated in ${summary.monthLabel}`}
                 icon={FileText}
                 tone="bg-gradient-to-br from-fuchsia-500 to-rose-500"
               />
               <MetricCard
-                label="Group attendance"
+                label="Group Attendance"
                 value={String(summary.daily.groupAttendanceCount)}
                 helpText="Present marks saved for the selected date"
                 icon={Users}
                 tone="bg-gradient-to-br from-emerald-500 to-teal-500"
               />
               <MetricCard
-                label="1:1 visits"
+                label="1:1 Visits"
                 value={String(summary.daily.oneToOneVisitCount)}
                 helpText="Simple 1:1 participation records today"
                 icon={UserRoundCheck}
                 tone="bg-gradient-to-br from-orange-400 to-pink-500"
               />
               <MetricCard
-                label="Not seen this week"
+                label="Not Seen This Week"
                 value={String(summary.residentsNotSeenThisWeek.length)}
                 helpText="Active residents without participation this week"
                 icon={UserX}
