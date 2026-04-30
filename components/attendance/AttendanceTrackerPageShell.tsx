@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarCheck2,
   CheckCircle2,
+  Clock3,
   ClipboardCheck,
   Copy,
   Download,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Printer,
   Search,
+  Sparkles,
   UserCheck,
   UserRoundCheck,
   Users,
@@ -52,6 +54,7 @@ type MetricCardProps = {
   valueClassName?: string;
   icon: ComponentType<{ className?: string }>;
   tone: string;
+  progressValue?: number;
   onClick?: () => void;
 };
 
@@ -60,11 +63,16 @@ type SimpleAttendanceStatus = "Attended" | "Declined" | "Unavailable" | "Not Rec
 type StatusFilter = "all" | SimpleAttendanceStatus;
 type ReportType = "daily" | "weekly" | "monthly";
 
-const ATTENDANCE_SECTIONS: Array<{ id: AttendanceSection; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "take", label: "Take Attendance" },
-  { id: "oneToOne", label: "1:1 Visits" },
-  { id: "reports", label: "Reports" }
+const ATTENDANCE_SECTIONS: Array<{
+  id: AttendanceSection;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { id: "overview", label: "Overview", description: "Stats and follow-up list", icon: BarChart3 },
+  { id: "take", label: "Take Attendance", description: "Group activity sheet", icon: ClipboardCheck },
+  { id: "oneToOne", label: "1:1 Visits", description: "Quick room visits", icon: UserRoundCheck },
+  { id: "reports", label: "Reports", description: "Print and export", icon: FileText }
 ];
 
 function cloneEntries(entries: AttendanceEntriesMap): AttendanceEntriesMap {
@@ -296,28 +304,35 @@ function buildPrintHtml(params: {
 </html>`;
 }
 
-function MetricCard({ label, value, helpText, secondaryValue, valueClassName, icon: Icon, tone, onClick }: MetricCardProps) {
+function MetricCard({ label, value, helpText, secondaryValue, valueClassName, icon: Icon, tone, progressValue, onClick }: MetricCardProps) {
+  const normalizedProgress = Math.max(0, Math.min(100, progressValue ?? 0));
   const content = (
-    <CardContent className="p-5">
+    <CardContent className="relative p-5">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 opacity-70" />
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className={cn("mt-2 text-3xl font-bold tracking-tight text-slate-950", valueClassName)}>{value}</p>
-          {secondaryValue ? <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{secondaryValue}</p> : null}
-          {helpText ? <p className="mt-2 text-sm leading-5 text-slate-500">{helpText}</p> : null}
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+          <p className={cn("mt-3 text-3xl font-black tracking-[-0.04em] text-slate-950", valueClassName)}>{value}</p>
+          {secondaryValue ? <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950">{secondaryValue}</p> : null}
+          {helpText ? <p className="mt-3 text-sm leading-5 text-slate-500">{helpText}</p> : null}
         </div>
-        <div className={cn("rounded-2xl p-3 text-white shadow-sm", tone)}>
+        <div className={cn("shrink-0 rounded-2xl p-3 text-white shadow-lg shadow-slate-200/70", tone)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
+      {typeof progressValue === "number" ? (
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className={cn("h-full rounded-full", tone)} style={{ width: `${normalizedProgress}%` }} />
+        </div>
+      ) : null}
     </CardContent>
   );
 
   return (
     <Card
       className={cn(
-        "overflow-hidden border-white/70 bg-white/85 shadow-sm",
-        onClick ? "cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md" : ""
+        "group overflow-hidden border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)] backdrop-blur",
+        onClick ? "cursor-pointer transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_55px_rgba(15,23,42,0.1)]" : ""
       )}
       onClick={onClick}
       role={onClick ? "button" : undefined}
@@ -766,77 +781,138 @@ export function AttendanceTrackerPageShell({
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(77,208,225,0.14),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/85 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur">
-          <div className="relative p-6 sm:p-8 lg:p-10">
-            <div className="absolute right-8 top-6 h-24 w-24 rounded-full bg-gradient-to-br from-cyan-300 via-indigo-300 to-fuchsia-300 opacity-25 blur-2xl" />
-            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <main className="relative min-h-screen overflow-hidden bg-[#f6f8fb] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+      <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-cyan-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-20 h-80 w-80 rounded-full bg-fuchsia-200/25 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-orange-100/40 blur-3xl" />
+
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-6">
+        <section className="overflow-hidden rounded-[2.25rem] border border-white/80 bg-white/80 shadow-[0_28px_90px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+          <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[1fr_390px] lg:p-8">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.18),transparent_34%),radial-gradient(circle_at_78%_20%,rgba(217,70,239,0.16),transparent_28%)]" />
+            <div className="relative flex flex-col justify-between gap-8">
               <div className="max-w-3xl">
-                <Badge variant="outline" className="border-cyan-200 bg-cyan-50/80 text-cyan-800">
-                  Attendance
+                <Badge variant="outline" className="border-cyan-200 bg-white/70 text-cyan-800 shadow-sm">
+                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  State-ready participation
                 </Badge>
-                <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-slate-950 sm:text-5xl">Attendance Tracker</h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                <h1 className="mt-5 text-4xl font-black tracking-[-0.055em] text-slate-950 sm:text-5xl lg:text-6xl">
+                  Attendance Tracker
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
                   Track daily group and 1:1 participation with simple state-ready statistics.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,180px)_auto] lg:min-w-[580px]">
-                <label className="text-sm font-semibold text-slate-600">
-                  Selected date
-                  <Input
-                    type="date"
-                    value={dateKey}
-                    onChange={(event) => updateDate(event.target.value)}
-                    className="mt-2 bg-white"
-                  />
-                </label>
-                <div className="grid gap-2 self-end sm:grid-cols-3">
-                  <Button type="button" className="bg-blue-600 text-white hover:bg-blue-500" onClick={() => openSection("take")}>
-                    <ClipboardCheck className="h-4 w-4" />
-                    Take Attendance
-                  </Button>
-                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("oneToOne")}>
-                    <UserRoundCheck className="h-4 w-4" />
-                    Log 1:1 Visit
-                  </Button>
-                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("reports")}>
-                    <Download className="h-4 w-4" />
-                    Export Report
-                  </Button>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  className="h-12 rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-300/70 hover:bg-slate-800"
+                  onClick={() => openSection("take")}
+                >
+                  <ClipboardCheck className="h-4 w-4" />
+                  Take Attendance
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-2xl border-white/80 bg-white/80 shadow-sm"
+                  onClick={() => openSection("oneToOne")}
+                >
+                  <UserRoundCheck className="h-4 w-4" />
+                  Log 1:1 Visit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-2xl border-white/80 bg-white/80 shadow-sm"
+                  onClick={() => openSection("reports")}
+                >
+                  <Download className="h-4 w-4" />
+                  Export Report
+                </Button>
+              </div>
+            </div>
+
+            <div className="relative rounded-[1.75rem] border border-white/80 bg-white/75 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] backdrop-blur">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Selected day</p>
+                  <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">{summary.dayLabel}</p>
+                </div>
+                <div className="rounded-2xl bg-gradient-to-br from-cyan-400 via-indigo-500 to-fuchsia-500 p-3 text-white shadow-lg shadow-indigo-200">
+                  <CalendarCheck2 className="h-5 w-5" />
+                </div>
+              </div>
+              <label className="mt-5 block text-sm font-semibold text-slate-600">
+                Change date
+                <Input
+                  type="date"
+                  value={dateKey}
+                  onChange={(event) => updateDate(event.target.value)}
+                  className="mt-2 h-11 rounded-2xl border-slate-200 bg-white"
+                />
+              </label>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-950 p-4 text-white">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">Today</p>
+                  <p className="mt-2 text-3xl font-black tracking-[-0.04em]">{formatPercent(summary.daily.participationPercent)}</p>
+                  <p className="mt-1 text-xs text-white/65">
+                    {summary.daily.participatedResidentCount} of {summary.activeResidentCount} residents
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">This week</p>
+                  <p className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">{formatPercent(summary.weekly.participationPercent)}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {summary.residentsNotSeenThisWeek.length} not seen
+                  </p>
                 </div>
               </div>
             </div>
-            <nav className="relative mt-7 rounded-2xl border border-slate-200 bg-slate-100/70 p-1" aria-label="Attendance sections" role="tablist">
-              <div className="grid gap-1 sm:grid-cols-4">
-                {ATTENDANCE_SECTIONS.map((section) => {
-                  const selected = activeSection === section.id;
-                  return (
-                    <button
-                      key={section.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      className={cn(
-                        "rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                        selected
-                          ? "bg-white text-slate-950 shadow-sm"
-                          : "text-slate-600 hover:bg-white/60 hover:text-slate-950"
-                      )}
-                      onClick={() => setActiveSection(section.id)}
-                    >
-                      {section.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
           </div>
+
+          <nav className="relative border-t border-white/80 bg-white/55 p-3" aria-label="Attendance sections" role="tablist">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {ATTENDANCE_SECTIONS.map((section) => {
+                const selected = activeSection === section.id;
+                const Icon = section.icon;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-200",
+                      selected
+                        ? "border-white bg-white text-slate-950 shadow-[0_14px_32px_rgba(15,23,42,0.08)]"
+                        : "border-transparent text-slate-600 hover:border-white/80 hover:bg-white/70 hover:text-slate-950"
+                    )}
+                    onClick={() => setActiveSection(section.id)}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                        selected ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-bold">{section.label}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">{section.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
         </section>
 
         {activeSection === "overview" ? (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" aria-label="Participation statistics">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Participation statistics">
               <MetricCard
                 label="Today’s Participation"
                 value={`${summary.daily.participatedResidentCount} / ${summary.activeResidentCount} residents`}
@@ -844,6 +920,7 @@ export function AttendanceTrackerPageShell({
                 valueClassName="text-2xl"
                 icon={CalendarCheck2}
                 tone="bg-gradient-to-br from-cyan-500 to-blue-500"
+                progressValue={summary.daily.participationPercent}
               />
               <MetricCard
                 label="This Week"
@@ -852,6 +929,7 @@ export function AttendanceTrackerPageShell({
                 valueClassName="text-2xl"
                 icon={BarChart3}
                 tone="bg-gradient-to-br from-indigo-500 to-violet-500"
+                progressValue={summary.weekly.participationPercent}
               />
               <MetricCard
                 label="This Month"
@@ -860,18 +938,22 @@ export function AttendanceTrackerPageShell({
                 valueClassName="text-2xl"
                 icon={FileText}
                 tone="bg-gradient-to-br from-fuchsia-500 to-rose-500"
+                progressValue={summary.monthly.participationPercent}
               />
               <MetricCard
                 label="Group Attendance"
-                value={`${summary.monthly.groupAttendanceCount} group check-ins this month`}
-                valueClassName="text-2xl"
+                value={`${summary.monthly.groupAttendanceCount}`}
+                secondaryValue="group check-ins"
+                helpText="Total resident check-ins for group activities this month."
+                valueClassName="text-4xl"
                 icon={Users}
                 tone="bg-gradient-to-br from-emerald-500 to-teal-500"
               />
               <MetricCard
                 label="1:1 Visits"
-                value={`${summary.monthly.oneToOneVisitCount} completed this month`}
-                valueClassName="text-2xl"
+                value={`${summary.monthly.oneToOneVisitCount}`}
+                secondaryValue="completed this month"
+                valueClassName="text-4xl"
                 icon={UserRoundCheck}
                 tone="bg-gradient-to-br from-orange-400 to-pink-500"
               />
@@ -888,26 +970,31 @@ export function AttendanceTrackerPageShell({
               />
             </section>
 
-            <Card className="border-white/80 bg-white/90 shadow-sm">
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
+              <div className="space-y-5">
+            <Card className="overflow-hidden border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)]">
               <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <CardTitle className="text-2xl">State-Ready Summary</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-2xl">
+                    <FileText className="h-5 w-5 text-indigo-600" />
+                    State-Ready Summary
+                  </CardTitle>
                   <CardDescription>Auto-generated from saved attendance statistics. No AI involved.</CardDescription>
                 </div>
-                <Button type="button" variant="outline" className="bg-white" onClick={copyStateReadySummary}>
+                <Button type="button" variant="outline" className="rounded-2xl bg-white" onClick={copyStateReadySummary}>
                   <Copy className="h-4 w-4" />
                   Copy Summary
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="rounded-3xl border border-slate-100 bg-slate-50/80 p-5 text-base leading-8 text-slate-700">
+                <div className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-cyan-50 p-5 text-base leading-8 text-slate-700">
                   {summary.stateReadySummary}
                 </div>
               </CardContent>
             </Card>
 
             {summary.activeResidentCount > 0 && summary.daily.totalParticipationMarks === 0 ? (
-              <Card className="border-white/80 bg-white/90 shadow-sm">
+              <Card className="border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.05)]">
                 <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-base font-bold text-slate-950">No attendance recorded today yet.</p>
@@ -926,8 +1013,9 @@ export function AttendanceTrackerPageShell({
                 </CardContent>
               </Card>
             ) : null}
+              </div>
 
-            <Card ref={notSeenRef} className="border-white/80 bg-white/90 shadow-sm">
+            <Card ref={notSeenRef} className="overflow-hidden border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl">
                   <UserX className="h-6 w-6 text-slate-700" />
@@ -970,16 +1058,22 @@ export function AttendanceTrackerPageShell({
                 )}
               </CardContent>
             </Card>
+            </section>
           </>
         ) : null}
 
         {activeSection === "take" ? (
-          <Card className="border-white/80 bg-white/90 shadow-sm">
-            <CardHeader className="border-b border-slate-100">
+          <Card className="overflow-hidden rounded-[2rem] border-white/80 bg-white/90 shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
+            <CardHeader className="border-b border-white/80 bg-gradient-to-br from-white via-cyan-50/50 to-indigo-50/60">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <ClipboardCheck className="h-6 w-6 text-cyan-600" />
+                  <Badge variant="outline" className="mb-3 border-cyan-200 bg-white/70 text-cyan-800">
+                    Step 1
+                  </Badge>
+                  <CardTitle className="flex items-center gap-3 text-3xl tracking-[-0.04em]">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500 text-white shadow-lg shadow-cyan-200">
+                      <ClipboardCheck className="h-5 w-5" />
+                    </span>
                     Take Attendance
                   </CardTitle>
                   <CardDescription className="mt-2">
@@ -988,7 +1082,7 @@ export function AttendanceTrackerPageShell({
                 </div>
                 <div className="min-w-[260px]">
                   <Select value={selectedSession?.id ?? "manual"} onValueChange={updateSelectedSession}>
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="h-11 rounded-2xl bg-white">
                       <SelectValue placeholder="Select or create activity" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1006,29 +1100,29 @@ export function AttendanceTrackerPageShell({
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-5 p-5 sm:p-6">
-              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-5">
+            <CardContent className="space-y-6 p-5 sm:p-6">
+              <div className="grid gap-4 rounded-[1.75rem] border border-white bg-slate-50/80 p-5 shadow-inner shadow-white md:grid-cols-5">
                 <label className="text-sm font-semibold text-slate-600 md:col-span-2">
                   Activity Name
                   <Input
                     value={activityName}
                     onChange={(event) => setActivityName(event.target.value)}
                     placeholder="Bingo"
-                    className="mt-2 bg-white"
+                    className="mt-2 h-11 rounded-2xl bg-white"
                   />
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Date
-                  <Input type="date" value={activityDate} onChange={(event) => setActivityDate(event.target.value)} className="mt-2 bg-white" />
+                  <Input type="date" value={activityDate} onChange={(event) => setActivityDate(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Time
-                  <Input type="time" value={activityTime} onChange={(event) => setActivityTime(event.target.value)} className="mt-2 bg-white" />
+                  <Input type="time" value={activityTime} onChange={(event) => setActivityTime(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Activity Type
                   <Select value={activityType} onValueChange={(value) => setActivityType(value as "Group" | "1:1")}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1043,12 +1137,18 @@ export function AttendanceTrackerPageShell({
                     value={activityLocation}
                     onChange={(event) => setActivityLocation(event.target.value)}
                     placeholder="Activity room"
-                    className="mt-2 bg-white"
+                    className="mt-2 h-11 rounded-2xl bg-white"
                   />
                 </label>
               </div>
 
-              <div className="space-y-3 rounded-3xl border border-slate-100 bg-white p-4">
+              <div className="space-y-4 rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className="w-fit border-indigo-200 bg-indigo-50 text-indigo-700">
+                    Step 2
+                  </Badge>
+                  <h3 className="text-lg font-black tracking-[-0.03em] text-slate-950">Mark residents</h3>
+                </div>
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                   <div className="relative max-w-xl flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1057,7 +1157,7 @@ export function AttendanceTrackerPageShell({
                       value={residentSearch}
                       onChange={(event) => setResidentSearch(event.target.value)}
                       placeholder="Search resident by name, room, or unit..."
-                      className="bg-white pl-9"
+                      className="h-11 rounded-2xl bg-white pl-9"
                     />
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1067,7 +1167,7 @@ export function AttendanceTrackerPageShell({
                         type="button"
                         size="sm"
                         variant={statusFilter === filter ? "default" : "outline"}
-                        className={statusFilter === filter ? "" : "bg-white"}
+                        className={cn("rounded-full", statusFilter === filter ? "" : "bg-white")}
                         onClick={() => setStatusFilter(filter)}
                       >
                         {filter === "all" ? "All" : filter}
@@ -1077,22 +1177,22 @@ export function AttendanceTrackerPageShell({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={selectAllVisibleResidents}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={selectAllVisibleResidents}>
                     Select visible
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Attended")} disabled={selectedResidentIds.size === 0}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={() => setSelectedStatus("Attended")} disabled={selectedResidentIds.size === 0}>
                     Mark Selected as Attended
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Declined")} disabled={selectedResidentIds.size === 0}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={() => setSelectedStatus("Declined")} disabled={selectedResidentIds.size === 0}>
                     Mark Selected as Declined
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Unavailable")} disabled={selectedResidentIds.size === 0}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={() => setSelectedStatus("Unavailable")} disabled={selectedResidentIds.size === 0}>
                     Mark Selected as Unavailable
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Not Recorded")} disabled={selectedResidentIds.size === 0}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={() => setSelectedStatus("Not Recorded")} disabled={selectedResidentIds.size === 0}>
                     Clear Selected
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={clearAllStatuses}>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full bg-white" onClick={clearAllStatuses}>
                     Clear All
                   </Button>
                 </div>
@@ -1104,8 +1204,8 @@ export function AttendanceTrackerPageShell({
                   <p className="mt-1">Add residents in the Residents tab before taking attendance.</p>
                 </div>
               ) : (
-                <div className="max-h-[560px] overflow-auto rounded-2xl border border-slate-100 bg-slate-50/70">
-                  <div className="hidden grid-cols-[44px_1.2fr_0.4fr_1fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 md:grid">
+                <div className="max-h-[560px] overflow-auto rounded-[1.75rem] border border-white bg-white shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
+                  <div className="sticky top-0 z-10 hidden grid-cols-[44px_1.2fr_0.4fr_1fr] gap-3 border-b border-slate-100 bg-slate-50/95 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 backdrop-blur md:grid">
                     <span />
                     <span>Resident Name</span>
                     <span>Room</span>
@@ -1116,7 +1216,7 @@ export function AttendanceTrackerPageShell({
                       const status = statusLabelFromEntries(entriesByResidentId, resident.id);
                       const selected = selectedResidentIds.has(resident.id);
                       return (
-                        <div key={resident.id} className="grid gap-3 bg-white/80 px-4 py-4 md:grid-cols-[44px_1.2fr_0.4fr_1fr] md:items-center">
+                        <div key={resident.id} className="grid gap-3 bg-white px-4 py-4 transition hover:bg-cyan-50/35 md:grid-cols-[44px_1.2fr_0.4fr_1fr] md:items-center">
                           <Checkbox
                             checked={selected}
                             onCheckedChange={(checked) => toggleResidentSelection(resident.id, checked === true)}
@@ -1133,7 +1233,7 @@ export function AttendanceTrackerPageShell({
                               type="button"
                               size="sm"
                               variant={status === "Attended" ? "default" : "outline"}
-                              className={status === "Attended" ? "" : "bg-white"}
+                              className={cn("rounded-full", status === "Attended" ? "" : "bg-white")}
                               onClick={() => setResidentPresent(resident.id, status !== "Attended")}
                               disabled={!canEdit || savingGroup}
                             >
@@ -1144,7 +1244,7 @@ export function AttendanceTrackerPageShell({
                               onValueChange={(value) => setResidentStatus(resident.id, value as SimpleAttendanceStatus)}
                               disabled={!canEdit || savingGroup}
                             >
-                              <SelectTrigger className="h-9 bg-white sm:w-[170px]">
+                              <SelectTrigger className="h-9 rounded-full bg-white sm:w-[170px]">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1168,11 +1268,11 @@ export function AttendanceTrackerPageShell({
                 </div>
               )}
 
-              <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+              <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-[1.75rem] border border-white/80 bg-white/95 p-4 shadow-[0_18px_55px_rgba(15,23,42,0.14)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-slate-500">
                   {statusCounts.Attended} attended · {statusCounts.Declined} declined · {statusCounts.Unavailable} unavailable · {statusCounts["Not Recorded"]} not recorded
                 </p>
-                <Button type="button" onClick={saveGroupAttendance} disabled={savingGroup || !canEdit || initialData.residents.length === 0}>
+                <Button type="button" className="h-11 rounded-2xl bg-slate-950 text-white hover:bg-slate-800" onClick={saveGroupAttendance} disabled={savingGroup || !canEdit || initialData.residents.length === 0}>
                   {savingGroup ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Save Attendance
                 </Button>
@@ -1187,20 +1287,25 @@ export function AttendanceTrackerPageShell({
         ) : null}
 
         {activeSection === "oneToOne" ? (
-          <Card className="border-white/80 bg-white/90 shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <UserCheck className="h-6 w-6 text-fuchsia-600" />
+          <Card className="overflow-hidden rounded-[2rem] border-white/80 bg-white/90 shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
+            <CardHeader className="border-b border-white/80 bg-gradient-to-br from-white via-fuchsia-50/45 to-orange-50/60">
+              <Badge variant="outline" className="mb-3 w-fit border-fuchsia-200 bg-white/70 text-fuchsia-800">
+                Quick log
+              </Badge>
+              <CardTitle className="flex items-center gap-3 text-3xl tracking-[-0.04em]">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-200">
+                  <UserCheck className="h-5 w-5" />
+                </span>
                 1:1 Visits
               </CardTitle>
               <CardDescription>Quickly log a simple resident room visit. No clinical note required.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 lg:grid-cols-6">
+            <CardContent className="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)]">
+              <div className="grid gap-4 rounded-[1.75rem] border border-white bg-slate-50/80 p-5 shadow-inner shadow-white lg:grid-cols-6">
                 <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
                   Resident
                   <Select value={oneToOneResidentId} onValueChange={setOneToOneResidentId}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue placeholder="Select resident" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1214,16 +1319,16 @@ export function AttendanceTrackerPageShell({
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Date
-                  <Input type="date" value={oneToOneDate} onChange={(event) => setOneToOneDate(event.target.value)} className="mt-2 bg-white" />
+                  <Input type="date" value={oneToOneDate} onChange={(event) => setOneToOneDate(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Time
-                  <Input type="time" value={oneToOneTime} onChange={(event) => setOneToOneTime(event.target.value)} className="mt-2 bg-white" />
+                  <Input type="time" value={oneToOneTime} onChange={(event) => setOneToOneTime(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
                 </label>
                 <label className="text-sm font-semibold text-slate-600">
                   Duration
                   <Select value={oneToOneDuration} onValueChange={setOneToOneDuration}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1244,14 +1349,14 @@ export function AttendanceTrackerPageShell({
                       max={240}
                       value={oneToOneCustomDuration}
                       onChange={(event) => setOneToOneCustomDuration(event.target.value)}
-                      className="mt-2 bg-white"
+                      className="mt-2 h-11 rounded-2xl bg-white"
                     />
                   </label>
                 ) : null}
                 <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
                   Activity Provided
                   <Select value={oneToOneActivity} onValueChange={setOneToOneActivity}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1266,7 +1371,7 @@ export function AttendanceTrackerPageShell({
                 <label className="text-sm font-semibold text-slate-600">
                   Completed
                   <Select value={oneToOneCompleted} onValueChange={setOneToOneCompleted}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1279,7 +1384,7 @@ export function AttendanceTrackerPageShell({
                   <label className="text-sm font-semibold text-slate-600">
                     Status
                     <Select value={oneToOneIncompleteStatus} onValueChange={(value) => setOneToOneIncompleteStatus(value as "Declined" | "Unavailable")}>
-                      <SelectTrigger className="mt-2 bg-white">
+                      <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1295,21 +1400,24 @@ export function AttendanceTrackerPageShell({
                     value={oneToOneShortNote}
                     onChange={(event) => setOneToOneShortNote(event.target.value)}
                     placeholder="Visited resident in room for crossword puzzle."
-                    className="mt-2 min-h-[88px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    className="mt-2 min-h-[108px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   />
                 </label>
                 <div className="lg:col-span-6">
-                  <Button type="button" onClick={saveOneToOneVisit} disabled={!canEdit || loggingOneToOne || initialData.residents.length === 0}>
+                  <Button type="button" className="h-11 rounded-2xl bg-slate-950 text-white hover:bg-slate-800" onClick={saveOneToOneVisit} disabled={!canEdit || loggingOneToOne || initialData.residents.length === 0}>
                     {loggingOneToOne ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
                     Save 1:1 Visit
                   </Button>
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-100 bg-white p-4">
+              <div className="rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
                 <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-950">Recent 1:1 Visits</h3>
+                    <h3 className="flex items-center gap-2 text-lg font-black tracking-[-0.03em] text-slate-950">
+                      <Clock3 className="h-5 w-5 text-fuchsia-500" />
+                      Recent 1:1 Visits
+                    </h3>
                     <p className="text-sm text-slate-500">Simple completed and attempted 1:1 records for this month.</p>
                   </div>
                   <div className="relative md:w-72">
@@ -1319,7 +1427,7 @@ export function AttendanceTrackerPageShell({
                       value={oneToOneSearch}
                       onChange={(event) => setOneToOneSearch(event.target.value)}
                       placeholder="Search resident..."
-                      className="bg-white pl-9"
+                      className="h-11 rounded-2xl bg-white pl-9"
                     />
                   </div>
                 </div>
@@ -1359,31 +1467,39 @@ export function AttendanceTrackerPageShell({
         ) : null}
 
         {activeSection === "reports" ? (
-          <Card className="border-white/80 bg-white/90 shadow-sm">
-            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <Card className="overflow-hidden rounded-[2rem] border-white/80 bg-white/90 shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
+            <CardHeader className="flex flex-col gap-4 border-b border-white/80 bg-gradient-to-br from-white via-indigo-50/50 to-cyan-50/60 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-2xl">Reports</CardTitle>
+                <Badge variant="outline" className="mb-3 w-fit border-indigo-200 bg-white/70 text-indigo-800">
+                  State-ready output
+                </Badge>
+                <CardTitle className="flex items-center gap-3 text-3xl tracking-[-0.04em]">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500 text-white shadow-lg shadow-indigo-200">
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  Reports
+                </CardTitle>
                 <CardDescription>
                   View, print, or export simple daily, weekly, and monthly attendance summaries.
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" className="bg-white" onClick={printSummary}>
+                <Button type="button" variant="outline" className="h-11 rounded-2xl bg-white" onClick={printSummary}>
                   <Printer className="h-4 w-4" />
                   Print
                 </Button>
-                <Button type="button" variant="outline" className="bg-white" onClick={exportCsv}>
+                <Button type="button" className="h-11 rounded-2xl bg-slate-950 text-white hover:bg-slate-800" onClick={exportCsv}>
                   <Download className="h-4 w-4" />
                   CSV
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-[220px_1fr] md:items-end">
+            <CardContent className="space-y-6 p-5 sm:p-6">
+              <div className="grid gap-4 rounded-[1.75rem] border border-white bg-slate-50/80 p-5 shadow-inner shadow-white md:grid-cols-[260px_1fr] md:items-end">
                 <label className="text-sm font-semibold text-slate-600">
                   Report Type
                   <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
-                    <SelectTrigger className="mt-2 bg-white">
+                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1398,27 +1514,27 @@ export function AttendanceTrackerPageShell({
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-100 bg-white p-5">
+              <div className="rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
                 <div className="flex flex-col gap-1 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-bold text-slate-950">{summary.reports[reportType].summary.title}</h3>
+                  <h3 className="text-2xl font-black tracking-[-0.04em] text-slate-950">{summary.reports[reportType].summary.title}</h3>
                   <p className="text-sm text-slate-500">
                     {facilityName} · {summary.reports[reportType].summary.dateRangeLabel} · Generated {summary.reports[reportType].summary.generatedLabel}
                   </p>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-white p-4 shadow-inner shadow-white">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Active Residents</p>
                     <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.totalActiveResidents}</p>
                   </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-white p-4 shadow-inner shadow-white">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participated</p>
                     <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.participatedResidentCount}</p>
                   </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-4 shadow-inner shadow-white">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participation Rate</p>
                     <p className="mt-2 text-2xl font-bold">{formatPercent(summary.reports[reportType].summary.participationPercent)}</p>
                   </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-4 shadow-inner shadow-white">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Not Seen</p>
                     <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.notSeenResidentCount}</p>
                   </div>
