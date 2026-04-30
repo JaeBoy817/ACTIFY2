@@ -48,9 +48,9 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
     console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
   }
 
-  // Actify app is intentionally simplified to an assistant-only experience.
-  // Redirect any legacy /app/* module route to /app.
-  if (pathname.startsWith("/app/")) {
+  // Keep legacy /app/* modules collapsed to the assistant, but allow the
+  // active Attendance Tracker workspace to render at /app/attendance.
+  if (pathname.startsWith("/app/") && !pathname.startsWith("/app/attendance")) {
     const assistantUrl = new URL("/app", req.url);
     assistantUrl.search = req.nextUrl.search;
     return NextResponse.redirect(assistantUrl);
