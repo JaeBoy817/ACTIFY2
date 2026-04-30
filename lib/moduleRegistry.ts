@@ -78,7 +78,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
     href: "/app/attendance",
     icon: ClipboardCheck,
     accentGradientClasses: MODULE_VISUAL_TOKENS.attendance.accentGradientClasses,
-    description: "Track who attended and why residents missed.",
+    description: "Track participation percentages, 1:1 visits, and state-ready summaries.",
     sidebarGroup: "daily-workflow",
     moduleFlagKey: "calendar"
   },

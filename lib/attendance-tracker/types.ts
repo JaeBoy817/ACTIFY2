@@ -90,3 +90,34 @@ export type MonthlyAttendanceReportPayload = {
     oneToOne: number;
   }>;
 };
+
+export type AttendanceTrackerResidentSummary = {
+  id: string;
+  name: string;
+  room: string;
+  unitName: string | null;
+};
+
+export type AttendanceTrackerRangeSummary = {
+  startDateKey: string;
+  endDateKey: string;
+  participationPercent: number;
+  participatedResidentCount: number;
+  activeResidentCount: number;
+  groupAttendanceCount: number;
+  oneToOneVisitCount: number;
+  totalParticipationMarks: number;
+};
+
+export type AttendanceTrackerSummary = {
+  dateKey: string;
+  dayLabel: string;
+  weekLabel: string;
+  monthLabel: string;
+  generatedAt: string;
+  activeResidentCount: number;
+  daily: AttendanceTrackerRangeSummary;
+  weekly: AttendanceTrackerRangeSummary;
+  monthly: AttendanceTrackerRangeSummary;
+  residentsNotSeenThisWeek: AttendanceTrackerResidentSummary[];
+};

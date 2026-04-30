@@ -3,9 +3,21 @@ import { unstable_cache } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { compareResidentsByRoom } from "@/lib/resident-status";
-import { endOfZonedDay, formatInTimeZone, startOfZonedDay, zonedDateKey, zonedDateStringToUtcStart } from "@/lib/timezone";
+import {
+  endOfZonedDay,
+  endOfZonedWeek,
+  formatInTimeZone,
+  startOfZonedDay,
+  startOfZonedMonth,
+  startOfZonedMonthShift,
+  startOfZonedWeek,
+  zonedDateKey,
+  zonedDateStringToUtcStart
+} from "@/lib/timezone";
 import { fromAttendanceRecord, type QuickAttendanceStatus, toAttendanceRecord } from "@/lib/attendance-tracker/status";
 import type {
+  AttendanceTrackerRangeSummary,
+  AttendanceTrackerSummary,
   AttendanceQuickResident,
   AttendanceQuickTakePayload,
   AttendanceSessionDetail,
@@ -13,6 +25,31 @@ import type {
   MonthlyAttendanceReportPayload,
   SessionSummaryCounts
 } from "@/lib/attendance-tracker/types";
+
+const INACTIVE_RESIDENT_STATUSES = ["DISCHARGED", "TRANSFERRED", "DECEASED"] as const;
+const PARTICIPATION_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.ACTIVE, AttendanceStatus.LEADING] as const;
+const PARTICIPATION_STATUS_SET = new Set<AttendanceStatus>(PARTICIPATION_STATUSES);
+const ONE_TO_ONE_ACTIVITY_TITLE = "1:1 Visits";
+const ONE_TO_ONE_ACTIVITY_LOCATION = "Resident rooms";
+const ONE_TO_ONE_START_MINUTES = 12 * 60;
+const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+
+type AttendanceTrackerRow = {
+  residentId: string;
+  status: AttendanceStatus;
+  activityInstance: {
+    startAt: Date;
+  };
+};
+
+function activeResidentWhere(facilityId: string): Prisma.ResidentWhereInput {
+  return {
+    facilityId,
+    NOT: {
+      status: { in: [...INACTIVE_RESIDENT_STATUSES] }
+    }
+  };
+}
 
 function parseDateKey(input: string | null | undefined, timeZone: string) {
   if (!input) {
@@ -32,6 +69,73 @@ function defaultCounts(): SessionSummaryCounts {
     notApplicable: 0,
     totalEntries: 0
   };
+}
+
+function percent(participatedResidentCount: number, activeResidentCount: number) {
+  if (activeResidentCount <= 0) return 0;
+  return Number(((participatedResidentCount / activeResidentCount) * 100).toFixed(1));
+}
+
+function isWithinRange(date: Date, start: Date, end: Date) {
+  const time = date.getTime();
+  return time >= start.getTime() && time <= end.getTime();
+}
+
+function summarizeTrackerRange(params: {
+  rows: AttendanceTrackerRow[];
+  activeResidentIds: Set<string>;
+  start: Date;
+  end: Date;
+  timeZone: string;
+}): AttendanceTrackerRangeSummary {
+  const participatedResidentIds = new Set<string>();
+  let groupAttendanceCount = 0;
+  let oneToOneVisitCount = 0;
+  let totalParticipationMarks = 0;
+
+  for (const row of params.rows) {
+    if (!params.activeResidentIds.has(row.residentId)) continue;
+    if (!isWithinRange(row.activityInstance.startAt, params.start, params.end)) continue;
+    if (!PARTICIPATION_STATUS_SET.has(row.status)) continue;
+
+    participatedResidentIds.add(row.residentId);
+    totalParticipationMarks += 1;
+
+    if (row.status === AttendanceStatus.PRESENT) {
+      groupAttendanceCount += 1;
+    }
+
+    if (row.status === AttendanceStatus.ACTIVE) {
+      oneToOneVisitCount += 1;
+    }
+  }
+
+  return {
+    startDateKey: zonedDateKey(params.start, params.timeZone),
+    endDateKey: zonedDateKey(params.end, params.timeZone),
+    participationPercent: percent(participatedResidentIds.size, params.activeResidentIds.size),
+    participatedResidentCount: participatedResidentIds.size,
+    activeResidentCount: params.activeResidentIds.size,
+    groupAttendanceCount,
+    oneToOneVisitCount,
+    totalParticipationMarks
+  };
+}
+
+function participationResidentIdsForRange(params: {
+  rows: AttendanceTrackerRow[];
+  activeResidentIds: Set<string>;
+  start: Date;
+  end: Date;
+}) {
+  const residentIds = new Set<string>();
+  for (const row of params.rows) {
+    if (!params.activeResidentIds.has(row.residentId)) continue;
+    if (!isWithinRange(row.activityInstance.startAt, params.start, params.end)) continue;
+    if (!PARTICIPATION_STATUS_SET.has(row.status)) continue;
+    residentIds.add(row.residentId);
+  }
+  return residentIds;
 }
 
 function countFromAttendanceRows(
@@ -71,12 +175,7 @@ function countFromAttendanceRows(
 
 export async function getAttendanceResidents(facilityId: string): Promise<AttendanceQuickResident[]> {
   const rows = await prisma.resident.findMany({
-    where: {
-      facilityId,
-      NOT: {
-        status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
-      }
-    },
+    where: activeResidentWhere(facilityId),
     select: {
       id: true,
       firstName: true,
@@ -140,12 +239,7 @@ export async function getAttendanceSessionsForDay(params: {
   });
 
   const activeResidentCount = await prisma.resident.count({
-    where: {
-      facilityId: params.facilityId,
-      NOT: {
-        status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
-      }
-    }
+    where: activeResidentWhere(params.facilityId)
   });
 
   const summaries: AttendanceSessionSummary[] = sessions.map((session) => {
@@ -256,7 +350,7 @@ export async function getAttendanceQuickTakePayload(params: {
   const sessions = sessionsPayload.sessions;
   const selectedSessionId = params.sessionId && sessions.some((session) => session.id === params.sessionId)
     ? params.sessionId
-    : sessions[0]?.id ?? null;
+    : sessions.find((session) => session.title !== ONE_TO_ONE_ACTIVITY_TITLE)?.id ?? sessions[0]?.id ?? null;
 
   const detail = selectedSessionId
     ? await getAttendanceSessionDetail({
@@ -463,6 +557,210 @@ export async function saveAttendanceBatch(params: {
   };
 }
 
+export async function getAttendanceTrackerSummary(params: {
+  facilityId: string;
+  timeZone: string;
+  dateKey?: string | null;
+}): Promise<AttendanceTrackerSummary> {
+  const dayStart = parseDateKey(params.dateKey, params.timeZone);
+  const dayEnd = endOfZonedDay(dayStart, params.timeZone);
+  const weekStart = startOfZonedWeek(dayStart, params.timeZone, 0);
+  const weekEnd = endOfZonedWeek(dayStart, params.timeZone, 0);
+  const monthStart = startOfZonedMonth(dayStart, params.timeZone);
+  const monthEnd = new Date(startOfZonedMonthShift(dayStart, params.timeZone, 1).getTime() - 1);
+  const queryStart = new Date(Math.min(dayStart.getTime(), weekStart.getTime(), monthStart.getTime()));
+  const queryEnd = new Date(Math.max(dayEnd.getTime(), weekEnd.getTime(), monthEnd.getTime()));
+
+  const [residents, rows] = await Promise.all([
+    getAttendanceResidents(params.facilityId),
+    prisma.attendance.findMany({
+      where: {
+        status: { in: [...PARTICIPATION_STATUSES] },
+        activityInstance: {
+          facilityId: params.facilityId,
+          startAt: {
+            gte: queryStart,
+            lte: queryEnd
+          }
+        }
+      },
+      select: {
+        residentId: true,
+        status: true,
+        activityInstance: {
+          select: {
+            startAt: true
+          }
+        }
+      }
+    })
+  ]);
+
+  const activeResidentIds = new Set(residents.map((resident) => resident.id));
+  const weeklyParticipantIds = participationResidentIdsForRange({
+    rows,
+    activeResidentIds,
+    start: weekStart,
+    end: weekEnd
+  });
+
+  const residentsNotSeenThisWeek = residents
+    .filter((resident) => !weeklyParticipantIds.has(resident.id))
+    .map((resident) => ({
+      id: resident.id,
+      name: `${resident.firstName} ${resident.lastName}`.trim(),
+      room: resident.room,
+      unitName: resident.unitName
+    }));
+
+  return {
+    dateKey: zonedDateKey(dayStart, params.timeZone),
+    dayLabel: formatInTimeZone(dayStart, params.timeZone, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    }),
+    weekLabel: `${formatInTimeZone(weekStart, params.timeZone, { month: "short", day: "numeric" })} - ${formatInTimeZone(
+      weekEnd,
+      params.timeZone,
+      { month: "short", day: "numeric", year: "numeric" }
+    )}`,
+    monthLabel: formatInTimeZone(monthStart, params.timeZone, {
+      month: "long",
+      year: "numeric"
+    }),
+    generatedAt: new Date().toISOString(),
+    activeResidentCount: activeResidentIds.size,
+    daily: summarizeTrackerRange({
+      rows,
+      activeResidentIds,
+      start: dayStart,
+      end: dayEnd,
+      timeZone: params.timeZone
+    }),
+    weekly: summarizeTrackerRange({
+      rows,
+      activeResidentIds,
+      start: weekStart,
+      end: weekEnd,
+      timeZone: params.timeZone
+    }),
+    monthly: summarizeTrackerRange({
+      rows,
+      activeResidentIds,
+      start: monthStart,
+      end: monthEnd,
+      timeZone: params.timeZone
+    }),
+    residentsNotSeenThisWeek
+  };
+}
+
+export async function logOneToOneVisit(params: {
+  facilityId: string;
+  residentId: string;
+  timeZone: string;
+  dateKey?: string | null;
+}) {
+  const dayStart = parseDateKey(params.dateKey, params.timeZone);
+  const dayEnd = endOfZonedDay(dayStart, params.timeZone);
+  const startAt = new Date(dayStart.getTime() + ONE_TO_ONE_START_MINUTES * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + THIRTY_MINUTES_MS);
+
+  return prisma.$transaction(async (tx) => {
+    const resident = await tx.resident.findFirst({
+      where: {
+        id: params.residentId,
+        ...activeResidentWhere(params.facilityId)
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        room: true
+      }
+    });
+
+    if (!resident) {
+      throw new Error("Resident not found or no longer active.");
+    }
+
+    const existingActivity = await tx.activityInstance.findFirst({
+      where: {
+        facilityId: params.facilityId,
+        title: ONE_TO_ONE_ACTIVITY_TITLE,
+        startAt: {
+          gte: dayStart,
+          lte: dayEnd
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    const activity =
+      existingActivity ??
+      (await tx.activityInstance.create({
+        data: {
+          facilityId: params.facilityId,
+          title: ONE_TO_ONE_ACTIVITY_TITLE,
+          startAt,
+          endAt,
+          location: ONE_TO_ONE_ACTIVITY_LOCATION,
+          adaptationsEnabled: {
+            source: "attendance-tracker",
+            type: "one-to-one"
+          },
+          checklist: [],
+          isOverride: true
+        },
+        select: {
+          id: true
+        }
+      }));
+
+    const attendance = await tx.attendance.upsert({
+      where: {
+        activityInstanceId_residentId: {
+          activityInstanceId: activity.id,
+          residentId: resident.id
+        }
+      },
+      update: {
+        status: AttendanceStatus.ACTIVE,
+        barrierReason: null,
+        notes: null
+      },
+      create: {
+        activityInstanceId: activity.id,
+        residentId: resident.id,
+        status: AttendanceStatus.ACTIVE,
+        barrierReason: null,
+        notes: null
+      },
+      select: {
+        id: true,
+        activityInstanceId: true,
+        residentId: true,
+        status: true
+      }
+    });
+
+    return {
+      dateKey: zonedDateKey(dayStart, params.timeZone),
+      activityInstanceId: activity.id,
+      attendance,
+      resident: {
+        id: resident.id,
+        name: `${resident.firstName} ${resident.lastName}`.trim(),
+        room: resident.room
+      }
+    };
+  });
+}
+
 export async function getAttendanceSessionsHistory(params: {
   facilityId: string;
   timeZone: string;
@@ -523,12 +821,7 @@ export async function getAttendanceSessionsHistory(params: {
   });
 
   const residentCount = await prisma.resident.count({
-    where: {
-      facilityId: params.facilityId,
-      NOT: {
-        status: { in: ["DISCHARGED", "TRANSFERRED", "DECEASED"] }
-      }
-    }
+    where: activeResidentWhere(params.facilityId)
   });
 
   const mapped = sessions
