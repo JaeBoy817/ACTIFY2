@@ -96,6 +96,8 @@ export type AttendanceTrackerResidentSummary = {
   name: string;
   room: string;
   unitName: string | null;
+  lastParticipatedLabel?: string | null;
+  recommendedAction?: string;
 };
 
 export type AttendanceTrackerRangeSummary = {
@@ -120,4 +122,74 @@ export type AttendanceTrackerSummary = {
   weekly: AttendanceTrackerRangeSummary;
   monthly: AttendanceTrackerRangeSummary;
   residentsNotSeenThisWeek: AttendanceTrackerResidentSummary[];
+  stateReadySummary: string;
+  recentOneToOneVisits: AttendanceTrackerRecentOneToOneVisit[];
+  reports: AttendanceTrackerReports;
+};
+
+export type AttendanceTrackerRecentOneToOneVisit = {
+  id: string;
+  dateLabel: string;
+  residentName: string;
+  room: string;
+  activityProvided: string;
+  durationLabel: string;
+  completed: boolean;
+};
+
+export type AttendanceTrackerReportRow = {
+  id: string;
+  residentName: string;
+  room: string;
+  activityName: string;
+  activityType: "Group" | "1:1";
+  status: "Attended" | "Declined" | "Unavailable";
+  dateLabel: string;
+};
+
+export type AttendanceTrackerReportSummary = {
+  title: string;
+  dateRangeLabel: string;
+  generatedLabel: string;
+  totalActiveResidents: number;
+  participatedResidentCount: number;
+  notSeenResidentCount: number;
+  participationPercent: number;
+  groupCheckIns: number;
+  oneToOneVisits: number;
+  declined: number;
+  unavailable: number;
+  groupSessionCount: number;
+};
+
+export type AttendanceTrackerResidentParticipationRow = {
+  residentId: string;
+  residentName: string;
+  room: string;
+  participatedThisMonth: boolean;
+  groupCheckIns: number;
+  oneToOneVisits: number;
+  lastParticipatedLabel: string | null;
+};
+
+export type AttendanceTrackerActivityCount = {
+  activityName: string;
+  count: number;
+};
+
+export type AttendanceTrackerReports = {
+  daily: {
+    summary: AttendanceTrackerReportSummary;
+    rows: AttendanceTrackerReportRow[];
+  };
+  weekly: {
+    summary: AttendanceTrackerReportSummary;
+    residentsNotSeen: AttendanceTrackerResidentSummary[];
+  };
+  monthly: {
+    summary: AttendanceTrackerReportSummary;
+    residentsNotSeen: AttendanceTrackerResidentSummary[];
+    residentParticipation: AttendanceTrackerResidentParticipationRow[];
+    mostAttendedActivities: AttendanceTrackerActivityCount[];
+  };
 };

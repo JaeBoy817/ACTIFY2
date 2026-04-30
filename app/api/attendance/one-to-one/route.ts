@@ -10,7 +10,13 @@ import { getAttendanceQuickTakeCacheTag, logOneToOneVisit } from "@/lib/attendan
 
 const logOneToOneSchema = z.object({
   residentId: z.string().trim().min(1),
-  dateKey: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable()
+  dateKey: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  time: z.string().trim().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  durationMinutes: z.number().int().min(1).max(240).optional().nullable(),
+  activityProvided: z.string().trim().max(120).optional().nullable(),
+  completed: z.boolean().optional().nullable(),
+  incompleteStatus: z.enum(["Declined", "Unavailable"]).optional().nullable(),
+  shortNote: z.string().trim().max(800).optional().nullable()
 });
 
 export async function POST(request: Request) {
@@ -29,7 +35,13 @@ export async function POST(request: Request) {
       facilityId: context.facilityId,
       residentId: parsed.data.residentId,
       timeZone: context.timeZone,
-      dateKey: parsed.data.dateKey
+      dateKey: parsed.data.dateKey,
+      time: parsed.data.time,
+      durationMinutes: parsed.data.durationMinutes,
+      activityProvided: parsed.data.activityProvided,
+      completed: parsed.data.completed,
+      incompleteStatus: parsed.data.incompleteStatus,
+      shortNote: parsed.data.shortNote
     });
 
     revalidatePath("/app/attendance");

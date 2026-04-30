@@ -8,6 +8,7 @@ import {
   CalendarCheck2,
   CheckCircle2,
   ClipboardCheck,
+  Copy,
   Download,
   FileText,
   Loader2,
@@ -30,7 +31,6 @@ import type {
   AttendanceEntriesMap,
   AttendanceQuickResident,
   AttendanceQuickTakePayload,
-  AttendanceTrackerRangeSummary,
   AttendanceTrackerSummary
 } from "@/lib/attendance-tracker/types";
 import { useToast } from "@/lib/use-toast";
@@ -52,9 +52,13 @@ type MetricCardProps = {
   valueClassName?: string;
   icon: ComponentType<{ className?: string }>;
   tone: string;
+  onClick?: () => void;
 };
 
 type AttendanceSection = "overview" | "take" | "oneToOne" | "reports";
+type SimpleAttendanceStatus = "Attended" | "Declined" | "Unavailable" | "Not Recorded";
+type StatusFilter = "all" | SimpleAttendanceStatus;
+type ReportType = "daily" | "weekly" | "monthly";
 
 const ATTENDANCE_SECTIONS: Array<{ id: AttendanceSection; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -100,18 +104,58 @@ function formatTime(value: string, timeZone: string) {
   }).format(new Date(value));
 }
 
-function formatPercent(value: number) {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
+function formatTimeInput(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    hourCycle: "h23"
+  }).formatToParts(new Date(value));
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "10";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
 }
 
-function formatRangeSummary(range: AttendanceTrackerRangeSummary) {
-  return `${formatPercent(range.participationPercent)} (${range.participatedResidentCount}/${range.activeResidentCount} residents)`;
+function defaultLocalTime() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`;
 }
 
 function matchesResidentSearch(resident: AttendanceQuickResident, query: string) {
   if (!query) return true;
   const haystack = `${resident.firstName} ${resident.lastName} ${resident.room} ${resident.unitName ?? ""}`.toLowerCase();
   return haystack.includes(query);
+}
+
+function simpleStatusFromQuick(status: QuickAttendanceStatus): SimpleAttendanceStatus {
+  if (status === "PRESENT" || status === "ONE_TO_ONE") return "Attended";
+  if (status === "REFUSED") return "Declined";
+  if (status === "ASLEEP" || status === "OUT_OF_ROOM" || status === "NOT_APPLICABLE") return "Unavailable";
+  return "Not Recorded";
+}
+
+function quickStatusFromSimple(status: SimpleAttendanceStatus): QuickAttendanceStatus {
+  if (status === "Attended") return "PRESENT";
+  if (status === "Declined") return "REFUSED";
+  if (status === "Unavailable") return "OUT_OF_ROOM";
+  return "CLEAR";
+}
+
+function statusLabelFromEntries(entriesByResidentId: AttendanceEntriesMap, residentId: string): SimpleAttendanceStatus {
+  return simpleStatusFromQuick(statusFromEntries(entriesByResidentId, residentId));
+}
+
+function statusBadgeClass(status: SimpleAttendanceStatus) {
+  if (status === "Attended") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "Declined") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "Unavailable") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-slate-200 bg-white text-slate-500";
 }
 
 function buildTrackerCsv(params: {
@@ -167,18 +211,36 @@ function buildTrackerCsv(params: {
 function buildPrintHtml(params: {
   summary: AttendanceTrackerSummary;
   facilityName: string;
+  reportType: ReportType;
 }) {
   const { summary, facilityName } = params;
-  const notSeenRows = summary.residentsNotSeenThisWeek.length
-    ? summary.residentsNotSeenThisWeek
+  const report = summary.reports[params.reportType];
+  const notSeenRows = "residentsNotSeen" in report && report.residentsNotSeen.length
+    ? report.residentsNotSeen
         .map(
           (resident) =>
             `<tr><td>${escapeHtml(resident.name)}</td><td>${escapeHtml(resident.room)}</td><td>${escapeHtml(
-              resident.unitName ?? ""
-            )}</td></tr>`
+              resident.lastParticipatedLabel ?? "No recent record"
+            )}</td><td>${escapeHtml(resident.recommendedAction ?? "Follow up this week")}</td></tr>`
         )
         .join("")
-    : `<tr><td colspan="3">Every active resident has a participation mark this week.</td></tr>`;
+    : `<tr><td colspan="4">No residents in this follow-up list.</td></tr>`;
+  const dailyRows = params.reportType === "daily" && summary.reports.daily.rows.length
+    ? summary.reports.daily.rows
+        .map(
+          (row) =>
+            `<tr><td>${escapeHtml(row.residentName)}</td><td>${escapeHtml(row.room)}</td><td>${escapeHtml(row.activityName)}</td><td>${escapeHtml(row.activityType)}</td><td>${escapeHtml(row.status)}</td></tr>`
+        )
+        .join("")
+    : "";
+  const monthlyRows = params.reportType === "monthly"
+    ? summary.reports.monthly.residentParticipation
+        .map(
+          (resident) =>
+            `<tr><td>${escapeHtml(resident.residentName)}</td><td>${escapeHtml(resident.room)}</td><td>${resident.participatedThisMonth ? "Yes" : "No"}</td><td>${resident.groupCheckIns}</td><td>${resident.oneToOneVisits}</td><td>${escapeHtml(resident.lastParticipatedLabel ?? "No recent record")}</td></tr>`
+        )
+        .join("")
+    : "";
 
   return `<!doctype html>
 <html>
@@ -201,47 +263,74 @@ function buildPrintHtml(params: {
   </head>
   <body>
     <p class="muted">Actify Attendance Tracker</p>
-    <h1>${escapeHtml(facilityName)} Attendance Summary</h1>
-    <p>${escapeHtml(summary.dayLabel)} · Week of ${escapeHtml(summary.weekLabel)} · ${escapeHtml(summary.monthLabel)}</p>
+    <h1>${escapeHtml(report.summary.title)}</h1>
+    <p>${escapeHtml(facilityName)} · ${escapeHtml(report.summary.dateRangeLabel)} · Generated ${escapeHtml(report.summary.generatedLabel)}</p>
     <div class="grid">
-      <div class="card"><div class="muted">Daily Participation</div><div class="value">${escapeHtml(formatRangeSummary(summary.daily))}</div></div>
-      <div class="card"><div class="muted">Weekly Participation</div><div class="value">${escapeHtml(formatRangeSummary(summary.weekly))}</div></div>
-      <div class="card"><div class="muted">Monthly Participation</div><div class="value">${escapeHtml(formatRangeSummary(summary.monthly))}</div></div>
+      <div class="card"><div class="muted">Active Residents</div><div class="value">${report.summary.totalActiveResidents}</div></div>
+      <div class="card"><div class="muted">Participated</div><div class="value">${report.summary.participatedResidentCount}</div></div>
+      <div class="card"><div class="muted">Participation Rate</div><div class="value">${escapeHtml(formatPercent(report.summary.participationPercent))}</div></div>
     </div>
     <h2>State-ready counts</h2>
     <table>
-      <thead><tr><th>Range</th><th>Group attendance</th><th>1:1 visits</th><th>Total participation marks</th></tr></thead>
+      <thead><tr><th>Group check-ins</th><th>Completed 1:1 visits</th><th>Declined</th><th>Unavailable</th><th>Not seen</th></tr></thead>
       <tbody>
-        <tr><td>Daily</td><td>${summary.daily.groupAttendanceCount}</td><td>${summary.daily.oneToOneVisitCount}</td><td>${summary.daily.totalParticipationMarks}</td></tr>
-        <tr><td>Weekly</td><td>${summary.weekly.groupAttendanceCount}</td><td>${summary.weekly.oneToOneVisitCount}</td><td>${summary.weekly.totalParticipationMarks}</td></tr>
-        <tr><td>Monthly</td><td>${summary.monthly.groupAttendanceCount}</td><td>${summary.monthly.oneToOneVisitCount}</td><td>${summary.monthly.totalParticipationMarks}</td></tr>
+        <tr><td>${report.summary.groupCheckIns}</td><td>${report.summary.oneToOneVisits}</td><td>${report.summary.declined}</td><td>${report.summary.unavailable}</td><td>${report.summary.notSeenResidentCount}</td></tr>
       </tbody>
     </table>
-    <h2>Residents not participated this week</h2>
-    <table>
-      <thead><tr><th>Name</th><th>Room</th><th>Unit</th></tr></thead>
-      <tbody>${notSeenRows}</tbody>
-    </table>
+    ${
+      params.reportType === "daily"
+        ? `<h2>Resident Attendance</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Activity</th><th>Type</th><th>Status</th></tr></thead><tbody>${dailyRows || `<tr><td colspan="5">No attendance data found for this date range.</td></tr>`}</tbody></table>`
+        : ""
+    }
+    ${
+      params.reportType === "weekly"
+        ? `<h2>Residents Not Seen This Week</h2><table><thead><tr><th>Name</th><th>Room</th><th>Last Participated</th><th>Recommended Action</th></tr></thead><tbody>${notSeenRows}</tbody></table>`
+        : ""
+    }
+    ${
+      params.reportType === "monthly"
+        ? `<h2>Resident Participation</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Participated This Month</th><th>Group Check-ins</th><th>1:1 Visits</th><th>Last Participated</th></tr></thead><tbody>${monthlyRows}</tbody></table>`
+        : ""
+    }
   </body>
 </html>`;
 }
 
-function MetricCard({ label, value, helpText, secondaryValue, valueClassName, icon: Icon, tone }: MetricCardProps) {
-  return (
-    <Card className="overflow-hidden border-white/70 bg-white/85 shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className={cn("mt-2 text-3xl font-bold tracking-tight text-slate-950", valueClassName)}>{value}</p>
-            {secondaryValue ? <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{secondaryValue}</p> : null}
-            {helpText ? <p className="mt-2 text-sm leading-5 text-slate-500">{helpText}</p> : null}
-          </div>
-          <div className={cn("rounded-2xl p-3 text-white shadow-sm", tone)}>
-            <Icon className="h-5 w-5" />
-          </div>
+function MetricCard({ label, value, helpText, secondaryValue, valueClassName, icon: Icon, tone, onClick }: MetricCardProps) {
+  const content = (
+    <CardContent className="p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className={cn("mt-2 text-3xl font-bold tracking-tight text-slate-950", valueClassName)}>{value}</p>
+          {secondaryValue ? <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{secondaryValue}</p> : null}
+          {helpText ? <p className="mt-2 text-sm leading-5 text-slate-500">{helpText}</p> : null}
         </div>
-      </CardContent>
+        <div className={cn("rounded-2xl p-3 text-white shadow-sm", tone)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </CardContent>
+  );
+
+  return (
+    <Card
+      className={cn(
+        "overflow-hidden border-white/70 bg-white/85 shadow-sm",
+        onClick ? "cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md" : ""
+      )}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(event) => {
+        if (!onClick) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      {content}
     </Card>
   );
 }
@@ -263,12 +352,31 @@ export function AttendanceTrackerPageShell({
   const [entriesByResidentId, setEntriesByResidentId] = useState<AttendanceEntriesMap>(cloneEntries(initialData.entriesByResidentId));
   const [baselineEntriesByResidentId, setBaselineEntriesByResidentId] = useState<AttendanceEntriesMap>(cloneEntries(initialData.entriesByResidentId));
   const [residentSearch, setResidentSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedResidentIds, setSelectedResidentIds] = useState<Set<string>>(new Set());
+  const [activityName, setActivityName] = useState("");
+  const [activityDate, setActivityDate] = useState(initialData.dateKey);
+  const [activityTime, setActivityTime] = useState(defaultLocalTime());
+  const [activityType, setActivityType] = useState<"Group" | "1:1">("Group");
+  const [activityLocation, setActivityLocation] = useState("");
+  const [savedGroupSummary, setSavedGroupSummary] = useState<string | null>(null);
   const [oneToOneSearch, setOneToOneSearch] = useState("");
+  const [oneToOneResidentId, setOneToOneResidentId] = useState("");
+  const [oneToOneDate, setOneToOneDate] = useState(initialData.dateKey);
+  const [oneToOneTime, setOneToOneTime] = useState(defaultLocalTime());
+  const [oneToOneDuration, setOneToOneDuration] = useState("15");
+  const [oneToOneCustomDuration, setOneToOneCustomDuration] = useState("");
+  const [oneToOneActivity, setOneToOneActivity] = useState("Conversation");
+  const [oneToOneCompleted, setOneToOneCompleted] = useState("Yes");
+  const [oneToOneIncompleteStatus, setOneToOneIncompleteStatus] = useState<"Declined" | "Unavailable">("Declined");
+  const [oneToOneShortNote, setOneToOneShortNote] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
-  const [loggingResidentId, setLoggingResidentId] = useState<string | null>(null);
+  const [loggingOneToOne, setLoggingOneToOne] = useState(false);
   const [activeSection, setActiveSection] = useState<AttendanceSection>("overview");
+  const [reportType, setReportType] = useState<ReportType>("daily");
   const groupSearchInputRef = useRef<HTMLInputElement>(null);
   const oneToOneSearchInputRef = useRef<HTMLInputElement>(null);
+  const notSeenRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDateKey(initialData.dateKey);
@@ -276,6 +384,9 @@ export function AttendanceTrackerPageShell({
     setSelectedSessionId(initialData.selectedSessionId);
     setEntriesByResidentId(cloneEntries(initialData.entriesByResidentId));
     setBaselineEntriesByResidentId(cloneEntries(initialData.entriesByResidentId));
+    setActivityDate(initialData.dateKey);
+    setOneToOneDate(initialData.dateKey);
+    setSelectedResidentIds(new Set());
   }, [initialData.dateKey, initialData.entriesByResidentId, initialData.selectedSessionId, initialData.sessions]);
 
   useEffect(() => {
@@ -298,24 +409,49 @@ export function AttendanceTrackerPageShell({
   }, [sessions]);
 
   const selectedSession = useMemo(() => {
-    return groupSessions.find((session) => session.id === selectedSessionId) ?? groupSessions[0] ?? null;
+    return selectedSessionId ? groupSessions.find((session) => session.id === selectedSessionId) ?? null : null;
   }, [groupSessions, selectedSessionId]);
+
+  useEffect(() => {
+    if (!selectedSession) {
+      setActivityName("");
+      setActivityLocation("");
+      setActivityTime(defaultLocalTime());
+      return;
+    }
+
+    setActivityName(selectedSession.title);
+    setActivityDate(selectedSession.dateKey);
+    setActivityTime(formatTimeInput(selectedSession.startAt, timeZone));
+    setActivityLocation(selectedSession.location || "");
+    setActivityType("Group");
+  }, [selectedSession, timeZone]);
 
   const groupSearchQuery = residentSearch.trim().toLowerCase();
   const oneToOneSearchQuery = oneToOneSearch.trim().toLowerCase();
 
   const visibleGroupResidents = useMemo(() => {
-    return initialData.residents.filter((resident) => matchesResidentSearch(resident, groupSearchQuery));
-  }, [groupSearchQuery, initialData.residents]);
+    return initialData.residents.filter((resident) => {
+      if (!matchesResidentSearch(resident, groupSearchQuery)) return false;
+      if (statusFilter === "all") return true;
+      return statusLabelFromEntries(entriesByResidentId, resident.id) === statusFilter;
+    });
+  }, [entriesByResidentId, groupSearchQuery, initialData.residents, statusFilter]);
 
-  const visibleOneToOneResidents = useMemo(() => {
-    return initialData.residents.filter((resident) => matchesResidentSearch(resident, oneToOneSearchQuery)).slice(0, 10);
-  }, [oneToOneSearchQuery, initialData.residents]);
-
-  const presentCount = useMemo(() => {
-    return initialData.residents.reduce((count, resident) => {
-      return statusFromEntries(entriesByResidentId, resident.id) === "PRESENT" ? count + 1 : count;
-    }, 0);
+  const statusCounts = useMemo(() => {
+    return initialData.residents.reduce(
+      (counts, resident) => {
+        const status = statusLabelFromEntries(entriesByResidentId, resident.id);
+        counts[status] += 1;
+        return counts;
+      },
+      {
+        Attended: 0,
+        Declined: 0,
+        Unavailable: 0,
+        "Not Recorded": 0
+      } as Record<SimpleAttendanceStatus, number>
+    );
   }, [entriesByResidentId, initialData.residents]);
 
   async function authorizedFetch(input: string, init: RequestInit = {}) {
@@ -338,6 +474,17 @@ export function AttendanceTrackerPageShell({
   }
 
   function updateSelectedSession(nextSessionId: string) {
+    if (nextSessionId === "manual") {
+      setSelectedSessionId(null);
+      setActivityName("");
+      setActivityLocation("");
+      setActivityTime(defaultLocalTime());
+      setEntriesByResidentId({});
+      setBaselineEntriesByResidentId({});
+      router.push(`/app/attendance?date=${encodeURIComponent(dateKey)}`);
+      return;
+    }
+
     setSelectedSessionId(nextSessionId);
     router.push(`/app/attendance?date=${encodeURIComponent(dateKey)}&sessionId=${encodeURIComponent(nextSessionId)}`);
   }
@@ -356,11 +503,63 @@ export function AttendanceTrackerPageShell({
     }));
   }
 
+  function setResidentStatus(residentId: string, status: SimpleAttendanceStatus) {
+    const quickStatus = quickStatusFromSimple(status);
+    setEntriesByResidentId((previous) => ({
+      ...previous,
+      [residentId]: {
+        status: quickStatus,
+        notes: previous[residentId]?.notes ?? null
+      }
+    }));
+  }
+
+  function toggleResidentSelection(residentId: string, checked: boolean) {
+    setSelectedResidentIds((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        next.add(residentId);
+      } else {
+        next.delete(residentId);
+      }
+      return next;
+    });
+  }
+
+  function setSelectedStatus(status: SimpleAttendanceStatus) {
+    setEntriesByResidentId((previous) => {
+      const next = { ...previous };
+      for (const residentId of selectedResidentIds) {
+        next[residentId] = {
+          status: quickStatusFromSimple(status),
+          notes: next[residentId]?.notes ?? null
+        };
+      }
+      return next;
+    });
+  }
+
+  function clearAllStatuses() {
+    setEntriesByResidentId({});
+    setSelectedResidentIds(new Set());
+  }
+
+  function selectAllVisibleResidents() {
+    setSelectedResidentIds(new Set(visibleGroupResidents.map((resident) => resident.id)));
+  }
+
   async function saveGroupAttendance() {
-    if (!selectedSession) {
+    if (!activityName.trim()) {
       toast({
-        title: "Select a group activity",
-        description: "Choose a scheduled activity before saving attendance.",
+        title: "Please enter an activity name.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!activityDate) {
+      toast({
+        title: "Please choose a date.",
         variant: "destructive"
       });
       return;
@@ -377,30 +576,45 @@ export function AttendanceTrackerPageShell({
 
     setSavingGroup(true);
     try {
+      const changedEntries = initialData.residents.flatMap((resident) => {
+        const currentStatus = statusFromEntries(entriesByResidentId, resident.id);
+        const baselineStatus = statusFromEntries(baselineEntriesByResidentId, resident.id);
+        const shouldPersist = currentStatus !== "CLEAR" || currentStatus !== baselineStatus;
+
+        if (!shouldPersist) {
+          return [];
+        }
+
+        return [
+          {
+            residentId: resident.id,
+            status: currentStatus,
+            notes: entriesByResidentId[resident.id]?.notes ?? null
+          }
+        ];
+      });
+
+      if (changedEntries.length === 0) {
+        toast({
+          title: "Please mark at least one resident before saving attendance.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const response = await authorizedFetch("/api/attendance/quick-take", {
         method: "POST",
         headers: {
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          sessionId: selectedSession.id,
-          entries: initialData.residents.flatMap((resident) => {
-            const currentStatus = statusFromEntries(entriesByResidentId, resident.id);
-            const baselineStatus = statusFromEntries(baselineEntriesByResidentId, resident.id);
-            const shouldPersist = currentStatus === "PRESENT" || currentStatus !== baselineStatus;
-
-            if (!shouldPersist) {
-              return [];
-            }
-
-            return [
-              {
-                residentId: resident.id,
-                status: currentStatus,
-                notes: entriesByResidentId[resident.id]?.notes ?? null
-              }
-            ];
-          })
+          sessionId: selectedSession?.id ?? null,
+          activityName: activityName.trim(),
+          dateKey: activityDate,
+          time: activityTime,
+          activityType,
+          location: activityLocation.trim() || null,
+          entries: changedEntries
         })
       });
 
@@ -411,14 +625,17 @@ export function AttendanceTrackerPageShell({
 
       toast({
         title: "Attendance saved",
-        description: "Group participation was saved for this activity."
+        description: "Attendance saved."
       });
+      setSavedGroupSummary(
+        `${activityName.trim()} saved for ${summary.dayLabel}.\n${statusCounts.Attended} attended.\n${statusCounts.Declined} declined.\n${statusCounts.Unavailable} unavailable.`
+      );
       setBaselineEntriesByResidentId(cloneEntries(entriesByResidentId));
       router.refresh();
     } catch (error) {
       toast({
-        title: "Save failed",
-        description: error instanceof Error ? error.message : "Try again.",
+        title: "Something didn’t save correctly. Please try again.",
+        description: error instanceof Error ? error.message : undefined,
         variant: "destructive"
       });
     } finally {
@@ -426,7 +643,15 @@ export function AttendanceTrackerPageShell({
     }
   }
 
-  async function logOneToOne(residentId: string) {
+  async function saveOneToOneVisit() {
+    if (!oneToOneResidentId) {
+      toast({
+        title: "Please select a resident.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!canEdit) {
       toast({
         title: "Read-only access",
@@ -436,7 +661,16 @@ export function AttendanceTrackerPageShell({
       return;
     }
 
-    setLoggingResidentId(residentId);
+    const durationMinutes = oneToOneDuration === "custom" ? Number(oneToOneCustomDuration) : Number(oneToOneDuration);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      toast({
+        title: "Please choose a duration.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLoggingOneToOne(true);
     try {
       const response = await authorizedFetch("/api/attendance/one-to-one", {
         method: "POST",
@@ -444,8 +678,14 @@ export function AttendanceTrackerPageShell({
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          residentId,
-          dateKey
+          residentId: oneToOneResidentId,
+          dateKey: oneToOneDate,
+          time: oneToOneTime,
+          durationMinutes,
+          activityProvided: oneToOneActivity,
+          completed: oneToOneCompleted === "Yes",
+          incompleteStatus: oneToOneIncompleteStatus,
+          shortNote: oneToOneShortNote
         })
       });
 
@@ -455,18 +695,18 @@ export function AttendanceTrackerPageShell({
       }
 
       toast({
-        title: "1:1 visit logged",
-        description: `${body?.result?.resident?.name ?? "Resident"} now counts toward participation for ${summary.dayLabel}.`
+        title: "1:1 visit saved."
       });
+      setOneToOneShortNote("");
       router.refresh();
     } catch (error) {
       toast({
-        title: "Could not log 1:1",
-        description: error instanceof Error ? error.message : "Try again.",
+        title: "Something didn’t save correctly. Please try again.",
+        description: error instanceof Error ? error.message : undefined,
         variant: "destructive"
       });
     } finally {
-      setLoggingResidentId(null);
+      setLoggingOneToOne(false);
     }
   }
 
@@ -481,6 +721,9 @@ export function AttendanceTrackerPageShell({
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+    toast({
+      title: "Report exported."
+    });
   }
 
   function printSummary() {
@@ -494,10 +737,32 @@ export function AttendanceTrackerPageShell({
       return;
     }
 
-    printWindow.document.write(buildPrintHtml({ summary, facilityName }));
+    printWindow.document.write(buildPrintHtml({ summary, facilityName, reportType }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+  }
+
+  async function copyStateReadySummary() {
+    try {
+      await navigator.clipboard.writeText(summary.stateReadySummary);
+      toast({
+        title: "Summary copied."
+      });
+    } catch {
+      toast({
+        title: "Unable to copy summary.",
+        description: "Select the text and copy it manually.",
+        variant: "destructive"
+      });
+    }
+  }
+
+  function scrollToNotSeenList() {
+    setActiveSection("overview");
+    window.setTimeout(() => {
+      notSeenRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }
 
   return (
@@ -605,56 +870,104 @@ export function AttendanceTrackerPageShell({
               />
               <MetricCard
                 label="1:1 Visits"
-                value={String(summary.daily.oneToOneVisitCount)}
-                helpText="Simple 1:1 participation records today"
+                value={`${summary.monthly.oneToOneVisitCount} completed this month`}
+                valueClassName="text-2xl"
                 icon={UserRoundCheck}
                 tone="bg-gradient-to-br from-orange-400 to-pink-500"
               />
               <MetricCard
                 label="Not Seen This Week"
-                value={String(summary.residentsNotSeenThisWeek.length)}
-                helpText="Active residents without participation this week"
+                value={`${summary.residentsNotSeenThisWeek.length} ${
+                  summary.residentsNotSeenThisWeek.length === 1 ? "resident" : "residents"
+                }`}
+                valueClassName="text-2xl"
+                helpText="Click to review the follow-up list"
                 icon={UserX}
                 tone="bg-gradient-to-br from-slate-600 to-slate-900"
+                onClick={scrollToNotSeenList}
               />
             </section>
 
             <Card className="border-white/80 bg-white/90 shadow-sm">
+              <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl">State-Ready Summary</CardTitle>
+                  <CardDescription>Auto-generated from saved attendance statistics. No AI involved.</CardDescription>
+                </div>
+                <Button type="button" variant="outline" className="bg-white" onClick={copyStateReadySummary}>
+                  <Copy className="h-4 w-4" />
+                  Copy Summary
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-3xl border border-slate-100 bg-slate-50/80 p-5 text-base leading-8 text-slate-700">
+                  {summary.stateReadySummary}
+                </div>
+              </CardContent>
+            </Card>
+
+            {summary.activeResidentCount > 0 && summary.daily.totalParticipationMarks === 0 ? (
+              <Card className="border-white/80 bg-white/90 shadow-sm">
+                <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-base font-bold text-slate-950">No attendance recorded today yet.</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Start by taking attendance for a group activity or logging a 1:1 visit.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => openSection("take")}>
+                      Take Attendance
+                    </Button>
+                    <Button type="button" variant="outline" className="bg-white" onClick={() => openSection("oneToOne")}>
+                      Log 1:1 Visit
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <Card ref={notSeenRef} className="border-white/80 bg-white/90 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl">
                   <UserX className="h-6 w-6 text-slate-700" />
-                  Not participated this week
+                  Residents Not Seen This Week
                 </CardTitle>
                 <CardDescription>{summary.weekLabel}</CardDescription>
               </CardHeader>
               <CardContent>
-                {summary.residentsNotSeenThisWeek.length > 0 ? (
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {summary.residentsNotSeenThisWeek.slice(0, 12).map((resident) => (
-                      <div key={resident.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-950">{resident.name}</p>
-                          <p className="text-xs text-slate-500">
-                            Room {resident.room}
-                            {resident.unitName ? ` · ${resident.unitName}` : ""}
-                          </p>
+                {summary.activeResidentCount === 0 ? (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 text-sm text-amber-800">
+                    <p className="font-semibold">No active residents found.</p>
+                    <p className="mt-1">Add residents in the Residents tab before taking attendance.</p>
+                  </div>
+                ) : summary.residentsNotSeenThisWeek.length > 0 ? (
+                  <div className="overflow-hidden rounded-2xl border border-slate-100">
+                    <div className="hidden grid-cols-[1.3fr_0.5fr_0.8fr_1fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 md:grid">
+                      <span>Resident Name</span>
+                      <span>Room</span>
+                      <span>Last Participated</span>
+                      <span>Recommended Action</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {summary.residentsNotSeenThisWeek.map((resident) => (
+                        <div key={resident.id} className="grid gap-2 bg-white px-4 py-4 text-sm md:grid-cols-[1.3fr_0.5fr_0.8fr_1fr] md:items-center">
+                          <div>
+                            <p className="font-semibold text-slate-950">{resident.name}</p>
+                            <p className="text-xs text-slate-500 md:hidden">Room {resident.room}</p>
+                          </div>
+                          <p className="hidden text-slate-600 md:block">{resident.room}</p>
+                          <p className="text-slate-600">{resident.lastParticipatedLabel ?? "No recent record"}</p>
+                          <p className="font-medium text-slate-700">{resident.recommendedAction ?? "Follow up this week"}</p>
                         </div>
-                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                          Not seen
-                        </Badge>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-                    Every active resident has a participation mark this week.
+                    All active residents have participated this week.
                   </div>
                 )}
-                {summary.residentsNotSeenThisWeek.length > 12 ? (
-                  <p className="mt-4 text-sm text-slate-500">
-                    Showing 12 of {summary.residentsNotSeenThisWeek.length}. Open Reports to export the full list.
-                  </p>
-                ) : null}
               </CardContent>
             </Card>
           </>
@@ -667,18 +980,19 @@ export function AttendanceTrackerPageShell({
                 <div>
                   <CardTitle className="flex items-center gap-2 text-2xl">
                     <ClipboardCheck className="h-6 w-6 text-cyan-600" />
-                    Group attendance
+                    Take Attendance
                   </CardTitle>
                   <CardDescription className="mt-2">
-                    Select a calendar activity, mark residents present, then save. Only present marks are shown here.
+                    Select or create a group activity, mark residents, then save simple state-ready attendance.
                   </CardDescription>
                 </div>
                 <div className="min-w-[260px]">
-                  <Select value={selectedSession?.id ?? ""} onValueChange={updateSelectedSession} disabled={groupSessions.length === 0}>
+                  <Select value={selectedSession?.id ?? "manual"} onValueChange={updateSelectedSession}>
                     <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="Select activity" />
+                      <SelectValue placeholder="Select or create activity" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="manual">Manual quick activity</SelectItem>
                       {groupSessions.map((session) => (
                         <SelectItem key={session.id} value={session.id}>
                           {formatTime(session.startAt, timeZone)} · {session.title}
@@ -686,87 +1000,188 @@ export function AttendanceTrackerPageShell({
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedSession ? (
-                    <p className="mt-2 text-xs text-slate-500">
-                      {selectedSession.location || "Activity room"} · {presentCount} present
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-xs text-slate-500">No group activities are scheduled for this date.</p>
-                  )}
+                  <p className="mt-2 text-xs text-slate-500">
+                    {groupSessions.length > 0 ? "Today’s scheduled activities are available above." : "No scheduled activities today. Manual entry is ready."}
+                  </p>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4 p-5 sm:p-6">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  ref={groupSearchInputRef}
-                  value={residentSearch}
-                  onChange={(event) => setResidentSearch(event.target.value)}
-                  placeholder="Search resident by name, room, or unit..."
-                  className="bg-white pl-9"
-                />
+            <CardContent className="space-y-5 p-5 sm:p-6">
+              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-5">
+                <label className="text-sm font-semibold text-slate-600 md:col-span-2">
+                  Activity Name
+                  <Input
+                    value={activityName}
+                    onChange={(event) => setActivityName(event.target.value)}
+                    placeholder="Bingo"
+                    className="mt-2 bg-white"
+                  />
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Date
+                  <Input type="date" value={activityDate} onChange={(event) => setActivityDate(event.target.value)} className="mt-2 bg-white" />
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Time
+                  <Input type="time" value={activityTime} onChange={(event) => setActivityTime(event.target.value)} className="mt-2 bg-white" />
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Activity Type
+                  <Select value={activityType} onValueChange={(value) => setActivityType(value as "Group" | "1:1")}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Group">Group</SelectItem>
+                      <SelectItem value="1:1">1:1</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="text-sm font-semibold text-slate-600 md:col-span-5">
+                  Location <span className="font-normal text-slate-400">(optional)</span>
+                  <Input
+                    value={activityLocation}
+                    onChange={(event) => setActivityLocation(event.target.value)}
+                    placeholder="Activity room"
+                    className="mt-2 bg-white"
+                  />
+                </label>
               </div>
 
-              <div className="max-h-[520px] overflow-auto rounded-2xl border border-slate-100 bg-slate-50/70">
-                {selectedSession ? (
+              <div className="space-y-3 rounded-3xl border border-slate-100 bg-white p-4">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="relative max-w-xl flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      ref={groupSearchInputRef}
+                      value={residentSearch}
+                      onChange={(event) => setResidentSearch(event.target.value)}
+                      placeholder="Search resident by name, room, or unit..."
+                      className="bg-white pl-9"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["all", "Not Recorded", "Attended", "Declined", "Unavailable"] as StatusFilter[]).map((filter) => (
+                      <Button
+                        key={filter}
+                        type="button"
+                        size="sm"
+                        variant={statusFilter === filter ? "default" : "outline"}
+                        className={statusFilter === filter ? "" : "bg-white"}
+                        onClick={() => setStatusFilter(filter)}
+                      >
+                        {filter === "all" ? "All" : filter}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={selectAllVisibleResidents}>
+                    Select visible
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Attended")} disabled={selectedResidentIds.size === 0}>
+                    Mark Selected as Attended
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Declined")} disabled={selectedResidentIds.size === 0}>
+                    Mark Selected as Declined
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Unavailable")} disabled={selectedResidentIds.size === 0}>
+                    Mark Selected as Unavailable
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => setSelectedStatus("Not Recorded")} disabled={selectedResidentIds.size === 0}>
+                    Clear Selected
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white" onClick={clearAllStatuses}>
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+
+              {initialData.residents.length === 0 ? (
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 text-sm text-amber-800">
+                  <p className="font-semibold">No active residents found.</p>
+                  <p className="mt-1">Add residents in the Residents tab before taking attendance.</p>
+                </div>
+              ) : (
+                <div className="max-h-[560px] overflow-auto rounded-2xl border border-slate-100 bg-slate-50/70">
+                  <div className="hidden grid-cols-[44px_1.2fr_0.4fr_1fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 md:grid">
+                    <span />
+                    <span>Resident Name</span>
+                    <span>Room</span>
+                    <span>Attendance Status</span>
+                  </div>
                   <div className="divide-y divide-slate-100">
                     {visibleGroupResidents.map((resident) => {
-                      const status = statusFromEntries(entriesByResidentId, resident.id);
-                      const checked = status === "PRESENT";
-                      const hasOtherStatus = status !== "CLEAR" && status !== "PRESENT";
+                      const status = statusLabelFromEntries(entriesByResidentId, resident.id);
+                      const selected = selectedResidentIds.has(resident.id);
                       return (
-                        <label
-                          key={resident.id}
-                          className="flex cursor-pointer items-center gap-4 bg-white/75 px-4 py-3 transition hover:bg-white"
-                        >
+                        <div key={resident.id} className="grid gap-3 bg-white/80 px-4 py-4 md:grid-cols-[44px_1.2fr_0.4fr_1fr] md:items-center">
                           <Checkbox
-                            checked={checked}
-                            onCheckedChange={(nextChecked) => setResidentPresent(resident.id, nextChecked === true)}
-                            disabled={!canEdit || savingGroup}
-                            aria-label={`Mark ${residentName(resident)} present`}
+                            checked={selected}
+                            onCheckedChange={(checked) => toggleResidentSelection(resident.id, checked === true)}
+                            aria-label={`Select ${residentName(resident)}`}
+                            disabled={savingGroup}
                           />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-950">{residentName(resident)}</span>
-                            <span className="block text-xs text-slate-500">
-                              Room {resident.room}
-                              {resident.unitName ? ` · ${resident.unitName}` : ""}
-                            </span>
-                          </span>
-                          {checked ? (
-                            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">
-                              Present
+                          <div>
+                            <p className="text-sm font-semibold text-slate-950">{residentName(resident)}</p>
+                            <p className="text-xs text-slate-500 md:hidden">Room {resident.room}</p>
+                          </div>
+                          <p className="hidden text-sm text-slate-600 md:block">{resident.room}</p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={status === "Attended" ? "default" : "outline"}
+                              className={status === "Attended" ? "" : "bg-white"}
+                              onClick={() => setResidentPresent(resident.id, status !== "Attended")}
+                              disabled={!canEdit || savingGroup}
+                            >
+                              Attended
+                            </Button>
+                            <Select
+                              value={status}
+                              onValueChange={(value) => setResidentStatus(resident.id, value as SimpleAttendanceStatus)}
+                              disabled={!canEdit || savingGroup}
+                            >
+                              <SelectTrigger className="h-9 bg-white sm:w-[170px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Not Recorded">Not Recorded</SelectItem>
+                                <SelectItem value="Attended">Attended</SelectItem>
+                                <SelectItem value="Declined">Declined</SelectItem>
+                                <SelectItem value="Unavailable">Unavailable</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Badge variant="outline" className={statusBadgeClass(status)}>
+                              {status}
                             </Badge>
-                          ) : hasOtherStatus ? (
-                            <Badge className="border-slate-200 bg-slate-100 text-slate-600" variant="outline">
-                              Already marked
-                            </Badge>
-                          ) : null}
-                        </label>
+                          </div>
+                        </div>
                       );
                     })}
                     {visibleGroupResidents.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-slate-500">No residents match that search.</div>
+                      <div className="p-8 text-center text-sm text-slate-500">No residents match that search or filter.</div>
                     ) : null}
                   </div>
-                ) : (
-                  <div className="p-8 text-center">
-                    <CalendarCheck2 className="mx-auto h-10 w-10 text-slate-300" />
-                    <p className="mt-3 text-sm font-semibold text-slate-700">No group activity selected</p>
-                    <p className="mt-1 text-sm text-slate-500">Add an activity to the calendar for this date, then attendance can be saved here.</p>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-slate-500">
-                  {presentCount} marked present · {initialData.residents.length} active residents in roster
+                  {statusCounts.Attended} attended · {statusCounts.Declined} declined · {statusCounts.Unavailable} unavailable · {statusCounts["Not Recorded"]} not recorded
                 </p>
-                <Button type="button" onClick={saveGroupAttendance} disabled={!selectedSession || savingGroup || !canEdit}>
+                <Button type="button" onClick={saveGroupAttendance} disabled={savingGroup || !canEdit || initialData.residents.length === 0}>
                   {savingGroup ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Save Attendance
                 </Button>
               </div>
+              {savedGroupSummary ? (
+                <div className="whitespace-pre-line rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+                  {savedGroupSummary}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
@@ -776,44 +1191,168 @@ export function AttendanceTrackerPageShell({
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <UserCheck className="h-6 w-6 text-fuchsia-600" />
-                Log simple 1:1 visits
+                1:1 Visits
               </CardTitle>
-              <CardDescription>Search a resident and click Log 1:1. This saves an ACTIVE participation record for the selected date.</CardDescription>
+              <CardDescription>Quickly log a simple resident room visit. No clinical note required.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  ref={oneToOneSearchInputRef}
-                  value={oneToOneSearch}
-                  onChange={(event) => setOneToOneSearch(event.target.value)}
-                  placeholder="Search resident..."
-                  className="bg-white pl-9"
-                />
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 lg:grid-cols-6">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
+                  Resident
+                  <Select value={oneToOneResidentId} onValueChange={setOneToOneResidentId}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue placeholder="Select resident" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {initialData.residents.map((resident) => (
+                        <SelectItem key={resident.id} value={resident.id}>
+                          {residentName(resident)} · Room {resident.room}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Date
+                  <Input type="date" value={oneToOneDate} onChange={(event) => setOneToOneDate(event.target.value)} className="mt-2 bg-white" />
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Time
+                  <Input type="time" value={oneToOneTime} onChange={(event) => setOneToOneTime(event.target.value)} className="mt-2 bg-white" />
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Duration
+                  <Select value={oneToOneDuration} onValueChange={setOneToOneDuration}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 minutes</SelectItem>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+                {oneToOneDuration === "custom" ? (
+                  <label className="text-sm font-semibold text-slate-600">
+                    Custom Minutes
+                    <Input
+                      type="number"
+                      min={1}
+                      max={240}
+                      value={oneToOneCustomDuration}
+                      onChange={(event) => setOneToOneCustomDuration(event.target.value)}
+                      className="mt-2 bg-white"
+                    />
+                  </label>
+                ) : null}
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
+                  Activity Provided
+                  <Select value={oneToOneActivity} onValueChange={setOneToOneActivity}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["Conversation", "Music", "Crossword", "Reading", "Sensory", "TV discussion", "Spiritual", "Cards", "Other"].map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="text-sm font-semibold text-slate-600">
+                  Completed
+                  <Select value={oneToOneCompleted} onValueChange={setOneToOneCompleted}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Yes">Yes</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+                {oneToOneCompleted === "No" ? (
+                  <label className="text-sm font-semibold text-slate-600">
+                    Status
+                    <Select value={oneToOneIncompleteStatus} onValueChange={(value) => setOneToOneIncompleteStatus(value as "Declined" | "Unavailable")}>
+                      <SelectTrigger className="mt-2 bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Declined">Declined</SelectItem>
+                        <SelectItem value="Unavailable">Unavailable</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                ) : null}
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-6">
+                  Short Note <span className="font-normal text-slate-400">(optional)</span>
+                  <textarea
+                    value={oneToOneShortNote}
+                    onChange={(event) => setOneToOneShortNote(event.target.value)}
+                    placeholder="Visited resident in room for crossword puzzle."
+                    className="mt-2 min-h-[88px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+                <div className="lg:col-span-6">
+                  <Button type="button" onClick={saveOneToOneVisit} disabled={!canEdit || loggingOneToOne || initialData.residents.length === 0}>
+                    {loggingOneToOne ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
+                    Save 1:1 Visit
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-2">
-                {visibleOneToOneResidents.map((resident) => (
-                  <div key={resident.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-950">{residentName(resident)}</p>
-                      <p className="text-xs text-slate-500">
-                        Room {resident.room}
-                        {resident.unitName ? ` · ${resident.unitName}` : ""}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="bg-white"
-                      disabled={!canEdit || loggingResidentId === resident.id}
-                      onClick={() => logOneToOne(resident.id)}
-                    >
-                      {loggingResidentId === resident.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
-                      Log 1:1
-                    </Button>
+
+              <div className="rounded-3xl border border-slate-100 bg-white p-4">
+                <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-950">Recent 1:1 Visits</h3>
+                    <p className="text-sm text-slate-500">Simple completed and attempted 1:1 records for this month.</p>
                   </div>
-                ))}
+                  <div className="relative md:w-72">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      ref={oneToOneSearchInputRef}
+                      value={oneToOneSearch}
+                      onChange={(event) => setOneToOneSearch(event.target.value)}
+                      placeholder="Search resident..."
+                      className="bg-white pl-9"
+                    />
+                  </div>
+                </div>
+                {summary.recentOneToOneVisits.length > 0 ? (
+                  <div className="overflow-hidden rounded-2xl border border-slate-100">
+                    <div className="hidden grid-cols-[0.8fr_1fr_0.4fr_1fr_0.6fr_0.6fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 lg:grid">
+                      <span>Date</span>
+                      <span>Resident</span>
+                      <span>Room</span>
+                      <span>Activity Provided</span>
+                      <span>Duration</span>
+                      <span>Completed</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {summary.recentOneToOneVisits
+                        .filter((visit) => visit.residentName.toLowerCase().includes(oneToOneSearchQuery) || visit.room.toLowerCase().includes(oneToOneSearchQuery))
+                        .map((visit) => (
+                          <div key={visit.id} className="grid gap-2 bg-white px-4 py-4 text-sm lg:grid-cols-[0.8fr_1fr_0.4fr_1fr_0.6fr_0.6fr] lg:items-center">
+                            <p className="text-slate-600">{visit.dateLabel}</p>
+                            <p className="font-semibold text-slate-950">{visit.residentName}</p>
+                            <p className="text-slate-600">Room {visit.room}</p>
+                            <p className="text-slate-700">{visit.activityProvided}</p>
+                            <p className="text-slate-600">{visit.durationLabel}</p>
+                            <Badge variant="outline" className={visit.completed ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}>
+                              {visit.completed ? "Yes" : "No"}
+                            </Badge>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">No 1:1 visits recorded yet.</div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -823,9 +1362,9 @@ export function AttendanceTrackerPageShell({
           <Card className="border-white/80 bg-white/90 shadow-sm">
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-2xl">State-ready summary</CardTitle>
+                <CardTitle className="text-2xl">Reports</CardTitle>
                 <CardDescription>
-                  Basic statistics only: date range, counts, percentages, and residents without participation. No clinical detail.
+                  View, print, or export simple daily, weekly, and monthly attendance summaries.
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -839,29 +1378,150 @@ export function AttendanceTrackerPageShell({
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-500">Today</p>
-                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.daily)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {summary.daily.groupAttendanceCount} group · {summary.daily.oneToOneVisitCount} 1:1
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-[220px_1fr] md:items-end">
+                <label className="text-sm font-semibold text-slate-600">
+                  Report Type
+                  <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
+                    <SelectTrigger className="mt-2 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily Attendance Report</SelectItem>
+                      <SelectItem value="weekly">Weekly Participation Report</SelectItem>
+                      <SelectItem value="monthly">Monthly Participation Report</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+                <div className="text-sm text-slate-500">
+                  Date range: <span className="font-semibold text-slate-700">{summary.reports[reportType].summary.dateRangeLabel}</span>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-100 bg-white p-5">
+                <div className="flex flex-col gap-1 border-b border-slate-100 pb-4">
+                  <h3 className="text-2xl font-bold text-slate-950">{summary.reports[reportType].summary.title}</h3>
+                  <p className="text-sm text-slate-500">
+                    {facilityName} · {summary.reports[reportType].summary.dateRangeLabel} · Generated {summary.reports[reportType].summary.generatedLabel}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-500">This week</p>
-                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.weekly)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {summary.weekly.groupAttendanceCount} group · {summary.weekly.oneToOneVisitCount} 1:1
-                  </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Active Residents</p>
+                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.totalActiveResidents}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participated</p>
+                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.participatedResidentCount}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participation Rate</p>
+                    <p className="mt-2 text-2xl font-bold">{formatPercent(summary.reports[reportType].summary.participationPercent)}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Not Seen</p>
+                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.notSeenResidentCount}</p>
+                  </div>
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-500">This month</p>
-                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.monthly)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {summary.monthly.groupAttendanceCount} group · {summary.monthly.oneToOneVisitCount} 1:1
-                  </p>
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-sm text-slate-500">Group check-ins</p>
+                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.groupCheckIns}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-sm text-slate-500">Completed 1:1 visits</p>
+                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.oneToOneVisits}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-sm text-slate-500">Declined</p>
+                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.declined}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-sm text-slate-500">Unavailable</p>
+                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.unavailable}</p>
+                  </div>
                 </div>
+
+                {reportType === "daily" ? (
+                  <div className="mt-6">
+                    <h4 className="text-lg font-bold text-slate-950">Resident Attendance List</h4>
+                    {summary.reports.daily.rows.length > 0 ? (
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100">
+                        {summary.reports.daily.rows.map((row) => (
+                          <div key={row.id} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-0 md:grid-cols-[1fr_0.4fr_1fr_0.5fr_0.6fr]">
+                            <span className="font-semibold">{row.residentName}</span>
+                            <span>Room {row.room}</span>
+                            <span>{row.activityName}</span>
+                            <span>{row.activityType}</span>
+                            <Badge variant="outline" className={statusBadgeClass(row.status)}>
+                              {row.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">
+                        No attendance data found for this date range.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {reportType === "weekly" ? (
+                  <div className="mt-6">
+                    <h4 className="text-lg font-bold text-slate-950">Residents Not Seen This Week</h4>
+                    {summary.reports.weekly.residentsNotSeen.length > 0 ? (
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {summary.reports.weekly.residentsNotSeen.map((resident) => (
+                          <div key={resident.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                            <p className="font-semibold text-slate-950">{resident.name}</p>
+                            <p className="text-slate-500">Room {resident.room} · {resident.lastParticipatedLabel ?? "No recent record"}</p>
+                            <p className="mt-2 font-medium text-slate-700">{resident.recommendedAction ?? "Follow up this week"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+                        All active residents have participated this week.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {reportType === "monthly" ? (
+                  <div className="mt-6 space-y-5">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Most Attended Activities</h4>
+                      {summary.reports.monthly.mostAttendedActivities.length > 0 ? (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {summary.reports.monthly.mostAttendedActivities.map((activity) => (
+                            <div key={activity.activityName} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <p className="font-semibold text-slate-950">{activity.activityName}</p>
+                              <p className="text-slate-500">{activity.count} group check-ins</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">No attendance data found for this date range.</p>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Resident Participation</h4>
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100">
+                        {summary.reports.monthly.residentParticipation.map((resident) => (
+                          <div key={resident.residentId} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-0 md:grid-cols-[1fr_0.4fr_0.7fr_0.6fr_0.6fr_0.8fr]">
+                            <span className="font-semibold">{resident.residentName}</span>
+                            <span>Room {resident.room}</span>
+                            <span>{resident.participatedThisMonth ? "Yes" : "No"}</span>
+                            <span>{resident.groupCheckIns} group</span>
+                            <span>{resident.oneToOneVisits} 1:1</span>
+                            <span>{resident.lastParticipatedLabel ?? "No recent record"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>

@@ -15,11 +15,17 @@ import {
   zonedDateStringToUtcStart
 } from "@/lib/timezone";
 import { fromAttendanceRecord, type QuickAttendanceStatus, toAttendanceRecord } from "@/lib/attendance-tracker/status";
+import { formatStateReadySummary } from "@/lib/attendance-tracker/calculations";
 import type {
   AttendanceTrackerRangeSummary,
   AttendanceTrackerSummary,
   AttendanceQuickResident,
   AttendanceQuickTakePayload,
+  AttendanceTrackerActivityCount,
+  AttendanceTrackerRecentOneToOneVisit,
+  AttendanceTrackerReportRow,
+  AttendanceTrackerReportSummary,
+  AttendanceTrackerResidentParticipationRow,
   AttendanceSessionDetail,
   AttendanceSessionSummary,
   MonthlyAttendanceReportPayload,
@@ -30,15 +36,29 @@ const INACTIVE_RESIDENT_STATUSES = ["DISCHARGED", "TRANSFERRED", "DECEASED"] as 
 const PARTICIPATION_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.ACTIVE, AttendanceStatus.LEADING] as const;
 const PARTICIPATION_STATUS_SET = new Set<AttendanceStatus>(PARTICIPATION_STATUSES);
 const ONE_TO_ONE_ACTIVITY_TITLE = "1:1 Visits";
-const ONE_TO_ONE_ACTIVITY_LOCATION = "Resident rooms";
 const ONE_TO_ONE_START_MINUTES = 12 * 60;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
 type AttendanceTrackerRow = {
+  id: string;
   residentId: string;
   status: AttendanceStatus;
+  barrierReason: BarrierReason | null;
+  notes: string | null;
+  createdAt: Date;
   activityInstance: {
+    id: string;
+    title: string;
     startAt: Date;
+    endAt: Date;
+    location: string;
+    adaptationsEnabled: Prisma.JsonValue;
+  };
+  resident: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    room: string;
   };
 };
 
@@ -57,6 +77,17 @@ function parseDateKey(input: string | null | undefined, timeZone: string) {
   }
   const parsed = zonedDateStringToUtcStart(input, timeZone);
   return parsed ?? startOfZonedDay(new Date(), timeZone);
+}
+
+function timeToMinutes(input: string | null | undefined, fallbackMinutes: number) {
+  const match = input?.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return fallbackMinutes;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return fallbackMinutes;
+  }
+  return hours * 60 + minutes;
 }
 
 function defaultCounts(): SessionSummaryCounts {
@@ -79,6 +110,53 @@ function percent(participatedResidentCount: number, activeResidentCount: number)
 function isWithinRange(date: Date, start: Date, end: Date) {
   const time = date.getTime();
   return time >= start.getTime() && time <= end.getTime();
+}
+
+function isOneToOneRow(row: AttendanceTrackerRow) {
+  return row.status === AttendanceStatus.ACTIVE || row.activityInstance.title.toLowerCase().includes("1:1");
+}
+
+function rowActivityType(row: AttendanceTrackerRow): "Group" | "1:1" {
+  return isOneToOneRow(row) ? "1:1" : "Group";
+}
+
+function rowSimpleStatus(row: Pick<AttendanceTrackerRow, "status">): "Attended" | "Declined" | "Unavailable" {
+  if (row.status === AttendanceStatus.REFUSED) return "Declined";
+  if (row.status === AttendanceStatus.NO_SHOW) return "Unavailable";
+  return "Attended";
+}
+
+function isParticipationStatus(status: AttendanceStatus) {
+  return PARTICIPATION_STATUS_SET.has(status);
+}
+
+function activityProvidedFromRow(row: AttendanceTrackerRow) {
+  const metadata = row.activityInstance.adaptationsEnabled;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata) && "activityProvided" in metadata) {
+    const value = (metadata as { activityProvided?: unknown }).activityProvided;
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  return row.activityInstance.title.replace(/^1:1\s*[-:]\s*/i, "").trim() || "1:1 Visit";
+}
+
+function durationLabelFromRow(row: AttendanceTrackerRow) {
+  const metadata = row.activityInstance.adaptationsEnabled;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata) && "durationMinutes" in metadata) {
+    const value = Number((metadata as { durationMinutes?: unknown }).durationMinutes);
+    if (Number.isFinite(value) && value > 0) return `${value} min`;
+  }
+
+  const minutes = Math.max(1, Math.round((row.activityInstance.endAt.getTime() - row.activityInstance.startAt.getTime()) / 60000));
+  return `${minutes} min`;
+}
+
+function formatReportDate(date: Date, timeZone: string) {
+  return formatInTimeZone(date, timeZone, {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
 function summarizeTrackerRange(params: {
@@ -136,6 +214,112 @@ function participationResidentIdsForRange(params: {
     residentIds.add(row.residentId);
   }
   return residentIds;
+}
+
+function countDeclined(rows: AttendanceTrackerRow[], start: Date, end: Date) {
+  return rows.filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && row.status === AttendanceStatus.REFUSED).length;
+}
+
+function countUnavailable(rows: AttendanceTrackerRow[], start: Date, end: Date) {
+  return rows.filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && row.status === AttendanceStatus.NO_SHOW).length;
+}
+
+function groupSessionCount(rows: AttendanceTrackerRow[], start: Date, end: Date) {
+  return new Set(
+    rows
+      .filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && rowActivityType(row) === "Group")
+      .map((row) => row.activityInstance.id)
+  ).size;
+}
+
+function buildReportSummary(params: {
+  title: string;
+  dateRangeLabel: string;
+  generatedLabel: string;
+  range: AttendanceTrackerRangeSummary;
+  rows: AttendanceTrackerRow[];
+  start: Date;
+  end: Date;
+  notSeenResidentCount: number;
+}): AttendanceTrackerReportSummary {
+  return {
+    title: params.title,
+    dateRangeLabel: params.dateRangeLabel,
+    generatedLabel: params.generatedLabel,
+    totalActiveResidents: params.range.activeResidentCount,
+    participatedResidentCount: params.range.participatedResidentCount,
+    notSeenResidentCount: params.notSeenResidentCount,
+    participationPercent: params.range.participationPercent,
+    groupCheckIns: params.range.groupAttendanceCount,
+    oneToOneVisits: params.range.oneToOneVisitCount,
+    declined: countDeclined(params.rows, params.start, params.end),
+    unavailable: countUnavailable(params.rows, params.start, params.end),
+    groupSessionCount: groupSessionCount(params.rows, params.start, params.end)
+  };
+}
+
+function buildReportRows(rows: AttendanceTrackerRow[], start: Date, end: Date, timeZone: string): AttendanceTrackerReportRow[] {
+  return rows
+    .filter((row) => isWithinRange(row.activityInstance.startAt, start, end))
+    .map((row) => ({
+      id: row.id,
+      residentName: `${row.resident.firstName} ${row.resident.lastName}`.trim(),
+      room: row.resident.room,
+      activityName: row.activityInstance.title,
+      activityType: rowActivityType(row),
+      status: rowSimpleStatus(row),
+      dateLabel: formatInTimeZone(row.activityInstance.startAt, timeZone, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      })
+    }))
+    .sort((a, b) => a.residentName.localeCompare(b.residentName));
+}
+
+function buildResidentParticipationRows(params: {
+  residents: AttendanceQuickResident[];
+  rows: AttendanceTrackerRow[];
+  monthStart: Date;
+  monthEnd: Date;
+  timeZone: string;
+}): AttendanceTrackerResidentParticipationRow[] {
+  return params.residents.map((resident) => {
+    const residentRows = params.rows.filter(
+      (row) =>
+        row.residentId === resident.id &&
+        isWithinRange(row.activityInstance.startAt, params.monthStart, params.monthEnd) &&
+        isParticipationStatus(row.status)
+    );
+
+    const groupCheckIns = residentRows.filter((row) => rowActivityType(row) === "Group" && row.status === AttendanceStatus.PRESENT).length;
+    const oneToOneVisits = residentRows.filter((row) => rowActivityType(row) === "1:1" && row.status === AttendanceStatus.ACTIVE).length;
+    const lastParticipated = residentRows.sort((a, b) => b.activityInstance.startAt.getTime() - a.activityInstance.startAt.getTime())[0];
+
+    return {
+      residentId: resident.id,
+      residentName: `${resident.firstName} ${resident.lastName}`.trim(),
+      room: resident.room,
+      participatedThisMonth: residentRows.length > 0,
+      groupCheckIns,
+      oneToOneVisits,
+      lastParticipatedLabel: lastParticipated ? formatReportDate(lastParticipated.activityInstance.startAt, params.timeZone) : null
+    };
+  });
+}
+
+function buildMostAttendedActivities(rows: AttendanceTrackerRow[]): AttendanceTrackerActivityCount[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (rowActivityType(row) !== "Group" || row.status !== AttendanceStatus.PRESENT) continue;
+    counts.set(row.activityInstance.title, (counts.get(row.activityInstance.title) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .map(([activityName, count]) => ({ activityName, count }))
+    .sort((a, b) => b.count - a.count || a.activityName.localeCompare(b.activityName))
+    .slice(0, 5);
 }
 
 function countFromAttendanceRows(
@@ -557,6 +741,88 @@ export async function saveAttendanceBatch(params: {
   };
 }
 
+export async function saveSimpleGroupAttendance(params: {
+  facilityId: string;
+  actorUserId: string;
+  timeZone: string;
+  sessionId?: string | null;
+  activityName: string;
+  dateKey: string;
+  time?: string | null;
+  activityType: "Group" | "1:1";
+  location?: string | null;
+  entries: Array<{
+    residentId: string;
+    status: QuickAttendanceStatus;
+    notes?: string | null;
+  }>;
+}) {
+  const title = params.activityName.trim();
+  if (!title) {
+    throw new Error("Please enter an activity name.");
+  }
+
+  const dayStart = parseDateKey(params.dateKey, params.timeZone);
+  const startMinutes = timeToMinutes(params.time, 10 * 60);
+  const startAt = new Date(dayStart.getTime() + startMinutes * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + THIRTY_MINUTES_MS);
+
+  const sessionId =
+    params.sessionId ??
+    (
+      await prisma.activityInstance.create({
+        data: {
+          facilityId: params.facilityId,
+          title,
+          startAt,
+          endAt,
+          location: params.location?.trim() || "Activity room",
+          adaptationsEnabled: {
+            source: "attendance-tracker",
+            type: params.activityType
+          },
+          checklist: [],
+          isOverride: true
+        },
+        select: {
+          id: true
+        }
+      })
+    ).id;
+
+  if (params.sessionId) {
+    await prisma.activityInstance.updateMany({
+      where: {
+        id: params.sessionId,
+        facilityId: params.facilityId
+      },
+      data: {
+        title,
+        startAt,
+        endAt,
+        location: params.location?.trim() || "Activity room",
+        adaptationsEnabled: {
+          source: "attendance-tracker",
+          type: params.activityType
+        },
+        isOverride: true
+      }
+    });
+  }
+
+  const result = await saveAttendanceBatch({
+    facilityId: params.facilityId,
+    sessionId,
+    actorUserId: params.actorUserId,
+    entries: params.entries
+  });
+
+  return {
+    sessionId,
+    result
+  };
+}
+
 export async function getAttendanceTrackerSummary(params: {
   facilityId: string;
   timeZone: string;
@@ -575,7 +841,6 @@ export async function getAttendanceTrackerSummary(params: {
     getAttendanceResidents(params.facilityId),
     prisma.attendance.findMany({
       where: {
-        status: { in: [...PARTICIPATION_STATUSES] },
         activityInstance: {
           facilityId: params.facilityId,
           startAt: {
@@ -585,11 +850,28 @@ export async function getAttendanceTrackerSummary(params: {
         }
       },
       select: {
+        id: true,
         residentId: true,
         status: true,
+        barrierReason: true,
+        notes: true,
+        createdAt: true,
         activityInstance: {
           select: {
-            startAt: true
+            id: true,
+            title: true,
+            startAt: true,
+            endAt: true,
+            location: true,
+            adaptationsEnabled: true
+          }
+        },
+        resident: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            room: true
           }
         }
       }
@@ -603,6 +885,49 @@ export async function getAttendanceTrackerSummary(params: {
     start: weekStart,
     end: weekEnd
   });
+  const monthlyParticipantIds = participationResidentIdsForRange({
+    rows,
+    activeResidentIds,
+    start: monthStart,
+    end: monthEnd
+  });
+  const notSeenResidentIds = residents.filter((resident) => !weeklyParticipantIds.has(resident.id)).map((resident) => resident.id);
+
+  const lastParticipationRows = notSeenResidentIds.length
+    ? await prisma.attendance.findMany({
+        where: {
+          residentId: { in: notSeenResidentIds },
+          status: { in: [...PARTICIPATION_STATUSES] },
+          activityInstance: {
+            facilityId: params.facilityId,
+            startAt: {
+              lt: weekStart
+            }
+          }
+        },
+        orderBy: {
+          activityInstance: {
+            startAt: "desc"
+          }
+        },
+        take: Math.max(50, notSeenResidentIds.length * 3),
+        select: {
+          residentId: true,
+          activityInstance: {
+            select: {
+              startAt: true
+            }
+          }
+        }
+      })
+    : [];
+
+  const lastParticipationByResidentId = new Map<string, Date>();
+  for (const row of lastParticipationRows) {
+    if (!lastParticipationByResidentId.has(row.residentId)) {
+      lastParticipationByResidentId.set(row.residentId, row.activityInstance.startAt);
+    }
+  }
 
   const residentsNotSeenThisWeek = residents
     .filter((resident) => !weeklyParticipantIds.has(resident.id))
@@ -610,50 +935,161 @@ export async function getAttendanceTrackerSummary(params: {
       id: resident.id,
       name: `${resident.firstName} ${resident.lastName}`.trim(),
       room: resident.room,
-      unitName: resident.unitName
+      unitName: resident.unitName,
+      lastParticipatedLabel: lastParticipationByResidentId.has(resident.id)
+        ? formatReportDate(lastParticipationByResidentId.get(resident.id) as Date, params.timeZone)
+        : null,
+      recommendedAction: "Offer 1:1 visit"
     }));
+
+  const residentsNotSeenThisMonth = residents
+    .filter((resident) => !monthlyParticipantIds.has(resident.id))
+    .map((resident) => ({
+      id: resident.id,
+      name: `${resident.firstName} ${resident.lastName}`.trim(),
+      room: resident.room,
+      unitName: resident.unitName,
+      lastParticipatedLabel: null,
+      recommendedAction: "Follow up this month"
+    }));
+
+  const daily = summarizeTrackerRange({
+    rows,
+    activeResidentIds,
+    start: dayStart,
+    end: dayEnd,
+    timeZone: params.timeZone
+  });
+  const weekly = summarizeTrackerRange({
+    rows,
+    activeResidentIds,
+    start: weekStart,
+    end: weekEnd,
+    timeZone: params.timeZone
+  });
+  const monthly = summarizeTrackerRange({
+    rows,
+    activeResidentIds,
+    start: monthStart,
+    end: monthEnd,
+    timeZone: params.timeZone
+  });
+
+  const dayLabel = formatInTimeZone(dayStart, params.timeZone, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+  const weekLabel = `${formatInTimeZone(weekStart, params.timeZone, { month: "short", day: "numeric" })} - ${formatInTimeZone(
+    weekEnd,
+    params.timeZone,
+    { month: "short", day: "numeric", year: "numeric" }
+  )}`;
+  const monthLabel = formatInTimeZone(monthStart, params.timeZone, {
+    month: "long",
+    year: "numeric"
+  });
+  const generatedLabel = formatInTimeZone(new Date(), params.timeZone, {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+
+  const recentOneToOneVisits: AttendanceTrackerRecentOneToOneVisit[] = rows
+    .filter((row) => rowActivityType(row) === "1:1")
+    .sort((a, b) => b.activityInstance.startAt.getTime() - a.activityInstance.startAt.getTime())
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id,
+      dateLabel: formatInTimeZone(row.activityInstance.startAt, params.timeZone, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }),
+      residentName: `${row.resident.firstName} ${row.resident.lastName}`.trim(),
+      room: row.resident.room,
+      activityProvided: activityProvidedFromRow(row),
+      durationLabel: durationLabelFromRow(row),
+      completed: row.status === AttendanceStatus.ACTIVE
+    }));
+
+  const monthlyRows = rows.filter((row) => isWithinRange(row.activityInstance.startAt, monthStart, monthEnd));
+  const reports = {
+    daily: {
+      summary: buildReportSummary({
+        title: "Daily Attendance Report",
+        dateRangeLabel: dayLabel,
+        generatedLabel,
+        range: daily,
+        rows,
+        start: dayStart,
+        end: dayEnd,
+        notSeenResidentCount: activeResidentIds.size - daily.participatedResidentCount
+      }),
+      rows: buildReportRows(rows, dayStart, dayEnd, params.timeZone)
+    },
+    weekly: {
+      summary: buildReportSummary({
+        title: "Weekly Participation Report",
+        dateRangeLabel: weekLabel,
+        generatedLabel,
+        range: weekly,
+        rows,
+        start: weekStart,
+        end: weekEnd,
+        notSeenResidentCount: residentsNotSeenThisWeek.length
+      }),
+      residentsNotSeen: residentsNotSeenThisWeek
+    },
+    monthly: {
+      summary: buildReportSummary({
+        title: "Monthly Participation Report",
+        dateRangeLabel: monthLabel,
+        generatedLabel,
+        range: monthly,
+        rows,
+        start: monthStart,
+        end: monthEnd,
+        notSeenResidentCount: residentsNotSeenThisMonth.length
+      }),
+      residentsNotSeen: residentsNotSeenThisMonth,
+      residentParticipation: buildResidentParticipationRows({
+        residents,
+        rows,
+        monthStart,
+        monthEnd,
+        timeZone: params.timeZone
+      }),
+      mostAttendedActivities: buildMostAttendedActivities(monthlyRows)
+    }
+  };
 
   return {
     dateKey: zonedDateKey(dayStart, params.timeZone),
-    dayLabel: formatInTimeZone(dayStart, params.timeZone, {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric"
-    }),
-    weekLabel: `${formatInTimeZone(weekStart, params.timeZone, { month: "short", day: "numeric" })} - ${formatInTimeZone(
-      weekEnd,
-      params.timeZone,
-      { month: "short", day: "numeric", year: "numeric" }
-    )}`,
-    monthLabel: formatInTimeZone(monthStart, params.timeZone, {
-      month: "long",
-      year: "numeric"
-    }),
+    dayLabel,
+    weekLabel,
+    monthLabel,
     generatedAt: new Date().toISOString(),
     activeResidentCount: activeResidentIds.size,
-    daily: summarizeTrackerRange({
-      rows,
-      activeResidentIds,
-      start: dayStart,
-      end: dayEnd,
-      timeZone: params.timeZone
-    }),
-    weekly: summarizeTrackerRange({
-      rows,
-      activeResidentIds,
-      start: weekStart,
-      end: weekEnd,
-      timeZone: params.timeZone
-    }),
-    monthly: summarizeTrackerRange({
-      rows,
-      activeResidentIds,
-      start: monthStart,
-      end: monthEnd,
-      timeZone: params.timeZone
-    }),
-    residentsNotSeenThisWeek
+    daily,
+    weekly,
+    monthly,
+    residentsNotSeenThisWeek,
+    stateReadySummary: formatStateReadySummary(
+      {
+        totalActiveResidents: activeResidentIds.size,
+        weeklyParticipants: weekly.participatedResidentCount,
+        weeklyParticipationPercentage: weekly.participationPercent,
+        monthlyGroupCheckIns: monthly.groupAttendanceCount,
+        monthlyOneToOneVisits: monthly.oneToOneVisitCount,
+        notSeenThisWeek: residentsNotSeenThisWeek.length
+      },
+      dayLabel
+    ),
+    recentOneToOneVisits,
+    reports
   };
 }
 
@@ -662,11 +1098,27 @@ export async function logOneToOneVisit(params: {
   residentId: string;
   timeZone: string;
   dateKey?: string | null;
+  time?: string | null;
+  durationMinutes?: number | null;
+  activityProvided?: string | null;
+  completed?: boolean | null;
+  incompleteStatus?: "Declined" | "Unavailable" | null;
+  shortNote?: string | null;
 }) {
   const dayStart = parseDateKey(params.dateKey, params.timeZone);
-  const dayEnd = endOfZonedDay(dayStart, params.timeZone);
-  const startAt = new Date(dayStart.getTime() + ONE_TO_ONE_START_MINUTES * 60 * 1000);
-  const endAt = new Date(startAt.getTime() + THIRTY_MINUTES_MS);
+  const nowMinutes = timeToMinutes(params.time, ONE_TO_ONE_START_MINUTES);
+  const durationMinutes = Math.max(5, Math.min(240, Number(params.durationMinutes ?? 15) || 15));
+  const activityProvided = params.activityProvided?.trim() || "Conversation";
+  const completed = params.completed !== false;
+  const startAt = new Date(dayStart.getTime() + nowMinutes * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + durationMinutes * 60 * 1000);
+  const nextStatus = completed
+    ? AttendanceStatus.ACTIVE
+    : params.incompleteStatus === "Unavailable"
+      ? AttendanceStatus.NO_SHOW
+      : AttendanceStatus.REFUSED;
+  const nextBarrier = completed ? null : params.incompleteStatus === "Unavailable" ? BarrierReason.OTHER : BarrierReason.REFUSED;
+  const shortNote = params.shortNote?.trim() ? params.shortNote.trim() : null;
 
   return prisma.$transaction(async (tx) => {
     const resident = await tx.resident.findFirst({
@@ -686,59 +1138,36 @@ export async function logOneToOneVisit(params: {
       throw new Error("Resident not found or no longer active.");
     }
 
-    const existingActivity = await tx.activityInstance.findFirst({
-      where: {
+    const activity = await tx.activityInstance.create({
+      data: {
         facilityId: params.facilityId,
-        title: ONE_TO_ONE_ACTIVITY_TITLE,
-        startAt: {
-          gte: dayStart,
-          lte: dayEnd
-        }
+        title: `1:1 - ${activityProvided}`,
+        startAt,
+        endAt,
+        location: `Room ${resident.room}`,
+        adaptationsEnabled: {
+          source: "attendance-tracker",
+          type: "one-to-one",
+          activityProvided,
+          durationMinutes,
+          completed,
+          shortNote
+        },
+        checklist: [],
+        isOverride: true
       },
       select: {
         id: true
       }
     });
 
-    const activity =
-      existingActivity ??
-      (await tx.activityInstance.create({
-        data: {
-          facilityId: params.facilityId,
-          title: ONE_TO_ONE_ACTIVITY_TITLE,
-          startAt,
-          endAt,
-          location: ONE_TO_ONE_ACTIVITY_LOCATION,
-          adaptationsEnabled: {
-            source: "attendance-tracker",
-            type: "one-to-one"
-          },
-          checklist: [],
-          isOverride: true
-        },
-        select: {
-          id: true
-        }
-      }));
-
-    const attendance = await tx.attendance.upsert({
-      where: {
-        activityInstanceId_residentId: {
-          activityInstanceId: activity.id,
-          residentId: resident.id
-        }
-      },
-      update: {
-        status: AttendanceStatus.ACTIVE,
-        barrierReason: null,
-        notes: null
-      },
-      create: {
+    const attendance = await tx.attendance.create({
+      data: {
         activityInstanceId: activity.id,
         residentId: resident.id,
-        status: AttendanceStatus.ACTIVE,
-        barrierReason: null,
-        notes: null
+        status: nextStatus,
+        barrierReason: nextBarrier,
+        notes: shortNote
       },
       select: {
         id: true,
