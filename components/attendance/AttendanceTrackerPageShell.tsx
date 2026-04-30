@@ -590,8 +590,9 @@ export function AttendanceTrackerPageShell({
               />
               <MetricCard
                 label="This Month"
-                value={formatPercent(summary.monthly.participationPercent)}
-                helpText={`${summary.monthly.participatedResidentCount} residents participated in ${summary.monthLabel}`}
+                value={`${summary.monthly.participatedResidentCount} / ${summary.activeResidentCount} residents`}
+                secondaryValue={formatPercent(summary.monthly.participationPercent)}
+                valueClassName="text-2xl"
                 icon={FileText}
                 tone="bg-gradient-to-br from-fuchsia-500 to-rose-500"
               />
