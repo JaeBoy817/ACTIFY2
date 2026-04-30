@@ -47,7 +47,9 @@ type AttendanceTrackerPageShellProps = {
 type MetricCardProps = {
   label: string;
   value: string;
-  helpText: string;
+  helpText?: string;
+  secondaryValue?: string;
+  valueClassName?: string;
   icon: ComponentType<{ className?: string }>;
   tone: string;
 };
@@ -224,15 +226,16 @@ function buildPrintHtml(params: {
 </html>`;
 }
 
-function MetricCard({ label, value, helpText, icon: Icon, tone }: MetricCardProps) {
+function MetricCard({ label, value, helpText, secondaryValue, valueClassName, icon: Icon, tone }: MetricCardProps) {
   return (
     <Card className="overflow-hidden border-white/70 bg-white/85 shadow-sm">
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{value}</p>
-            <p className="mt-2 text-sm leading-5 text-slate-500">{helpText}</p>
+            <p className={cn("mt-2 text-3xl font-bold tracking-tight text-slate-950", valueClassName)}>{value}</p>
+            {secondaryValue ? <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{secondaryValue}</p> : null}
+            {helpText ? <p className="mt-2 text-sm leading-5 text-slate-500">{helpText}</p> : null}
           </div>
           <div className={cn("rounded-2xl p-3 text-white shadow-sm", tone)}>
             <Icon className="h-5 w-5" />
@@ -571,8 +574,9 @@ export function AttendanceTrackerPageShell({
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" aria-label="Participation statistics">
               <MetricCard
                 label="Today’s Participation"
-                value={formatPercent(summary.daily.participationPercent)}
-                helpText={`${summary.daily.participatedResidentCount} of ${summary.activeResidentCount} active residents on ${summary.dateKey}`}
+                value={`${summary.daily.participatedResidentCount} / ${summary.activeResidentCount} residents`}
+                secondaryValue={formatPercent(summary.daily.participationPercent)}
+                valueClassName="text-2xl"
                 icon={CalendarCheck2}
                 tone="bg-gradient-to-br from-cyan-500 to-blue-500"
               />
