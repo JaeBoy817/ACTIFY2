@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
@@ -52,6 +51,15 @@ type MetricCardProps = {
   icon: ComponentType<{ className?: string }>;
   tone: string;
 };
+
+type AttendanceSection = "overview" | "take" | "oneToOne" | "reports";
+
+const ATTENDANCE_SECTIONS: Array<{ id: AttendanceSection; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "take", label: "Take Attendance" },
+  { id: "oneToOne", label: "1:1 Visits" },
+  { id: "reports", label: "Reports" }
+];
 
 function cloneEntries(entries: AttendanceEntriesMap): AttendanceEntriesMap {
   return JSON.parse(JSON.stringify(entries)) as AttendanceEntriesMap;
@@ -255,9 +263,7 @@ export function AttendanceTrackerPageShell({
   const [oneToOneSearch, setOneToOneSearch] = useState("");
   const [savingGroup, setSavingGroup] = useState(false);
   const [loggingResidentId, setLoggingResidentId] = useState<string | null>(null);
-  const groupAttendanceRef = useRef<HTMLDivElement>(null);
-  const oneToOneRef = useRef<HTMLDivElement>(null);
-  const exportSectionRef = useRef<HTMLDivElement>(null);
+  const [activeSection, setActiveSection] = useState<AttendanceSection>("overview");
   const groupSearchInputRef = useRef<HTMLInputElement>(null);
   const oneToOneSearchInputRef = useRef<HTMLInputElement>(null);
 
@@ -268,6 +274,21 @@ export function AttendanceTrackerPageShell({
     setEntriesByResidentId(cloneEntries(initialData.entriesByResidentId));
     setBaselineEntriesByResidentId(cloneEntries(initialData.entriesByResidentId));
   }, [initialData.dateKey, initialData.entriesByResidentId, initialData.selectedSessionId, initialData.sessions]);
+
+  useEffect(() => {
+    if (activeSection !== "take" && activeSection !== "oneToOne") return undefined;
+
+    const focusTimer = window.setTimeout(() => {
+      if (activeSection === "take") {
+        groupSearchInputRef.current?.focus();
+      }
+      if (activeSection === "oneToOne") {
+        oneToOneSearchInputRef.current?.focus();
+      }
+    }, 120);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [activeSection]);
 
   const groupSessions = useMemo(() => {
     return sessions.filter((session) => session.title !== "1:1 Visits");
@@ -318,18 +339,8 @@ export function AttendanceTrackerPageShell({
     router.push(`/app/attendance?date=${encodeURIComponent(dateKey)}&sessionId=${encodeURIComponent(nextSessionId)}`);
   }
 
-  function openSection(section: "group" | "oneToOne" | "export") {
-    const sectionRef = section === "group" ? groupAttendanceRef : section === "oneToOne" ? oneToOneRef : exportSectionRef;
-    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-
-    window.setTimeout(() => {
-      if (section === "group") {
-        groupSearchInputRef.current?.focus();
-      }
-      if (section === "oneToOne") {
-        oneToOneSearchInputRef.current?.focus();
-      }
-    }, 260);
+  function openSection(section: Exclude<AttendanceSection, "overview">) {
+    setActiveSection(section);
   }
 
   function setResidentPresent(residentId: string, checked: boolean) {
@@ -513,7 +524,7 @@ export function AttendanceTrackerPageShell({
                   />
                 </label>
                 <div className="grid gap-2 self-end sm:grid-cols-3">
-                  <Button type="button" className="bg-blue-600 text-white hover:bg-blue-500" onClick={() => openSection("group")}>
+                  <Button type="button" className="bg-blue-600 text-white hover:bg-blue-500" onClick={() => openSection("take")}>
                     <ClipboardCheck className="h-4 w-4" />
                     Take Attendance
                   </Button>
@@ -521,74 +532,130 @@ export function AttendanceTrackerPageShell({
                     <UserRoundCheck className="h-4 w-4" />
                     Log 1:1 Visit
                   </Button>
-                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("export")}>
+                  <Button type="button" variant="outline" className="bg-white/90" onClick={() => openSection("reports")}>
                     <Download className="h-4 w-4" />
                     Export Report
                   </Button>
                 </div>
               </div>
             </div>
-            <nav className="relative mt-7 flex flex-wrap gap-2 text-sm" aria-label="Attendance secondary pages">
-              <Link className="rounded-full border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50" href="/app/attendance/sessions">
-                Sessions
-              </Link>
-              <Link className="rounded-full border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50" href="/app/attendance/residents">
-                Resident history
-              </Link>
-              <Link className="rounded-full border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50" href="/app/attendance/reports">
-                Monthly reports
-              </Link>
+            <nav className="relative mt-7 rounded-2xl border border-slate-200 bg-slate-100/70 p-1" aria-label="Attendance sections" role="tablist">
+              <div className="grid gap-1 sm:grid-cols-4">
+                {ATTENDANCE_SECTIONS.map((section) => {
+                  const selected = activeSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      className={cn(
+                        "rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+                        selected
+                          ? "bg-white text-slate-950 shadow-sm"
+                          : "text-slate-600 hover:bg-white/60 hover:text-slate-950"
+                      )}
+                      onClick={() => setActiveSection(section.id)}
+                    >
+                      {section.label}
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" aria-label="Participation statistics">
-          <MetricCard
-            label="Daily participation"
-            value={formatPercent(summary.daily.participationPercent)}
-            helpText={`${summary.daily.participatedResidentCount} of ${summary.activeResidentCount} active residents on ${summary.dateKey}`}
-            icon={CalendarCheck2}
-            tone="bg-gradient-to-br from-cyan-500 to-blue-500"
-          />
-          <MetricCard
-            label="Weekly participation"
-            value={formatPercent(summary.weekly.participationPercent)}
-            helpText={`${summary.weekly.participatedResidentCount} residents participated this week`}
-            icon={BarChart3}
-            tone="bg-gradient-to-br from-indigo-500 to-violet-500"
-          />
-          <MetricCard
-            label="Monthly participation"
-            value={formatPercent(summary.monthly.participationPercent)}
-            helpText={`${summary.monthly.participatedResidentCount} residents participated in ${summary.monthLabel}`}
-            icon={FileText}
-            tone="bg-gradient-to-br from-fuchsia-500 to-rose-500"
-          />
-          <MetricCard
-            label="Group attendance"
-            value={String(summary.daily.groupAttendanceCount)}
-            helpText="Present marks saved for the selected date"
-            icon={Users}
-            tone="bg-gradient-to-br from-emerald-500 to-teal-500"
-          />
-          <MetricCard
-            label="1:1 visits"
-            value={String(summary.daily.oneToOneVisitCount)}
-            helpText="Simple 1:1 participation records today"
-            icon={UserRoundCheck}
-            tone="bg-gradient-to-br from-orange-400 to-pink-500"
-          />
-          <MetricCard
-            label="Not seen this week"
-            value={String(summary.residentsNotSeenThisWeek.length)}
-            helpText="Active residents without participation this week"
-            icon={UserX}
-            tone="bg-gradient-to-br from-slate-600 to-slate-900"
-          />
-        </section>
+        {activeSection === "overview" ? (
+          <>
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6" aria-label="Participation statistics">
+              <MetricCard
+                label="Daily participation"
+                value={formatPercent(summary.daily.participationPercent)}
+                helpText={`${summary.daily.participatedResidentCount} of ${summary.activeResidentCount} active residents on ${summary.dateKey}`}
+                icon={CalendarCheck2}
+                tone="bg-gradient-to-br from-cyan-500 to-blue-500"
+              />
+              <MetricCard
+                label="Weekly participation"
+                value={formatPercent(summary.weekly.participationPercent)}
+                helpText={`${summary.weekly.participatedResidentCount} residents participated this week`}
+                icon={BarChart3}
+                tone="bg-gradient-to-br from-indigo-500 to-violet-500"
+              />
+              <MetricCard
+                label="Monthly participation"
+                value={formatPercent(summary.monthly.participationPercent)}
+                helpText={`${summary.monthly.participatedResidentCount} residents participated in ${summary.monthLabel}`}
+                icon={FileText}
+                tone="bg-gradient-to-br from-fuchsia-500 to-rose-500"
+              />
+              <MetricCard
+                label="Group attendance"
+                value={String(summary.daily.groupAttendanceCount)}
+                helpText="Present marks saved for the selected date"
+                icon={Users}
+                tone="bg-gradient-to-br from-emerald-500 to-teal-500"
+              />
+              <MetricCard
+                label="1:1 visits"
+                value={String(summary.daily.oneToOneVisitCount)}
+                helpText="Simple 1:1 participation records today"
+                icon={UserRoundCheck}
+                tone="bg-gradient-to-br from-orange-400 to-pink-500"
+              />
+              <MetricCard
+                label="Not seen this week"
+                value={String(summary.residentsNotSeenThisWeek.length)}
+                helpText="Active residents without participation this week"
+                icon={UserX}
+                tone="bg-gradient-to-br from-slate-600 to-slate-900"
+              />
+            </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card ref={groupAttendanceRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
+            <Card className="border-white/80 bg-white/90 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <UserX className="h-6 w-6 text-slate-700" />
+                  Not participated this week
+                </CardTitle>
+                <CardDescription>{summary.weekLabel}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {summary.residentsNotSeenThisWeek.length > 0 ? (
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {summary.residentsNotSeenThisWeek.slice(0, 12).map((resident) => (
+                      <div key={resident.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-950">{resident.name}</p>
+                          <p className="text-xs text-slate-500">
+                            Room {resident.room}
+                            {resident.unitName ? ` · ${resident.unitName}` : ""}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                          Not seen
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+                    Every active resident has a participation mark this week.
+                  </div>
+                )}
+                {summary.residentsNotSeenThisWeek.length > 12 ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Showing 12 of {summary.residentsNotSeenThisWeek.length}. Open Reports to export the full list.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </>
+        ) : null}
+
+        {activeSection === "take" ? (
+          <Card className="border-white/80 bg-white/90 shadow-sm">
             <CardHeader className="border-b border-slate-100">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -696,135 +763,103 @@ export function AttendanceTrackerPageShell({
               </div>
             </CardContent>
           </Card>
+        ) : null}
 
-          <div className="flex flex-col gap-6">
-            <Card ref={oneToOneRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-2xl">
-                  <UserCheck className="h-6 w-6 text-fuchsia-600" />
-                  Log simple 1:1 visits
-                </CardTitle>
-                <CardDescription>Search a resident and click Log 1:1. This saves an ACTIVE participation record for the selected date.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    ref={oneToOneSearchInputRef}
-                    value={oneToOneSearch}
-                    onChange={(event) => setOneToOneSearch(event.target.value)}
-                    placeholder="Search resident..."
-                    className="bg-white pl-9"
-                  />
-                </div>
-                <div className="space-y-2">
-                  {visibleOneToOneResidents.map((resident) => (
-                    <div key={resident.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-950">{residentName(resident)}</p>
-                        <p className="text-xs text-slate-500">
-                          Room {resident.room}
-                          {resident.unitName ? ` · ${resident.unitName}` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="bg-white"
-                        disabled={!canEdit || loggingResidentId === resident.id}
-                        onClick={() => logOneToOne(resident.id)}
-                      >
-                        {loggingResidentId === resident.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
-                        Log 1:1
-                      </Button>
+        {activeSection === "oneToOne" ? (
+          <Card className="border-white/80 bg-white/90 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-2xl">
+                <UserCheck className="h-6 w-6 text-fuchsia-600" />
+                Log simple 1:1 visits
+              </CardTitle>
+              <CardDescription>Search a resident and click Log 1:1. This saves an ACTIVE participation record for the selected date.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  ref={oneToOneSearchInputRef}
+                  value={oneToOneSearch}
+                  onChange={(event) => setOneToOneSearch(event.target.value)}
+                  placeholder="Search resident..."
+                  className="bg-white pl-9"
+                />
+              </div>
+              <div className="space-y-2">
+                {visibleOneToOneResidents.map((resident) => (
+                  <div key={resident.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-950">{residentName(resident)}</p>
+                      <p className="text-xs text-slate-500">
+                        Room {resident.room}
+                        {resident.unitName ? ` · ${resident.unitName}` : ""}
+                      </p>
                     </div>
-                  ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="bg-white"
+                      disabled={!canEdit || loggingResidentId === resident.id}
+                      onClick={() => logOneToOne(resident.id)}
+                    >
+                      {loggingResidentId === resident.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
+                      Log 1:1
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {activeSection === "reports" ? (
+          <Card className="border-white/80 bg-white/90 shadow-sm">
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle className="text-2xl">State-ready summary</CardTitle>
+                <CardDescription>
+                  Basic statistics only: date range, counts, percentages, and residents without participation. No clinical detail.
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="bg-white" onClick={printSummary}>
+                  <Printer className="h-4 w-4" />
+                  Print
+                </Button>
+                <Button type="button" variant="outline" className="bg-white" onClick={exportCsv}>
+                  <Download className="h-4 w-4" />
+                  CSV
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-500">Today</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.daily)}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {summary.daily.groupAttendanceCount} group · {summary.daily.oneToOneVisitCount} 1:1
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-white/80 bg-white/90 shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-2xl">
-                  <UserX className="h-6 w-6 text-slate-700" />
-                  Not participated this week
-                </CardTitle>
-                <CardDescription>{summary.weekLabel}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {summary.residentsNotSeenThisWeek.length > 0 ? (
-                  <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
-                    {summary.residentsNotSeenThisWeek.map((resident) => (
-                      <div key={resident.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-950">{resident.name}</p>
-                          <p className="text-xs text-slate-500">
-                            Room {resident.room}
-                            {resident.unitName ? ` · ${resident.unitName}` : ""}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                          Not seen
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-                    Every active resident has a participation mark this week.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        <Card ref={exportSectionRef} className="scroll-mt-6 border-white/80 bg-white/90 shadow-sm">
-          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="text-2xl">State-ready summary</CardTitle>
-              <CardDescription>
-                Basic statistics only: date range, counts, percentages, and residents without participation. No clinical detail.
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" className="bg-white" onClick={printSummary}>
-                <Printer className="h-4 w-4" />
-                Print
-              </Button>
-              <Button type="button" variant="outline" className="bg-white" onClick={exportCsv}>
-                <Download className="h-4 w-4" />
-                CSV
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-500">Today</p>
-                <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.daily)}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {summary.daily.groupAttendanceCount} group · {summary.daily.oneToOneVisitCount} 1:1
-                </p>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-500">This week</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.weekly)}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {summary.weekly.groupAttendanceCount} group · {summary.weekly.oneToOneVisitCount} 1:1
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-500">This month</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.monthly)}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {summary.monthly.groupAttendanceCount} group · {summary.monthly.oneToOneVisitCount} 1:1
+                  </p>
+                </div>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-500">This week</p>
-                <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.weekly)}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {summary.weekly.groupAttendanceCount} group · {summary.weekly.oneToOneVisitCount} 1:1
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-500">This month</p>
-                <p className="mt-2 text-xl font-bold text-slate-950">{formatRangeSummary(summary.monthly)}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {summary.monthly.groupAttendanceCount} group · {summary.monthly.oneToOneVisitCount} 1:1
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </main>
   );
