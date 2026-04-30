@@ -45,7 +45,7 @@ const DASHBOARD_THEME = buildTheme("dashboard", "Dashboard", ["/dashboard", "/ap
 export const ACTIFY_THEMES: ActifyTheme[] = [
   buildTheme("calendar", "Calendar", ["/calendar", "/app/calendar"], "calendar"),
   buildTheme("templates", "Templates", ["/templates", "/app/templates"], "templates"),
-  buildTheme("attendance-tracker", "Attendance Tracker", ["/attendance", "/app/attendance"], "attendance"),
+  buildTheme("attendance-tracker", "Attendance", ["/attendance", "/app/attendance"], "attendance"),
   buildTheme(
     "notes",
     "Documentation",

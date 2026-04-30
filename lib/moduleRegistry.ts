@@ -74,7 +74,7 @@ export const MODULE_REGISTRY: readonly ModuleRegistryItem[] = [
   },
   {
     key: "attendance",
-    title: "Attendance Tracker",
+    title: "Attendance",
     href: "/app/attendance",
     icon: ClipboardCheck,
     accentGradientClasses: MODULE_VISUAL_TOKENS.attendance.accentGradientClasses,
