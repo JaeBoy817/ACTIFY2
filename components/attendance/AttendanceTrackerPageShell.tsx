@@ -1300,12 +1300,23 @@ export function AttendanceTrackerPageShell({
               </CardTitle>
               <CardDescription>Quickly log a simple resident room visit. No clinical note required.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)]">
-              <div className="grid gap-4 rounded-[1.75rem] border border-white bg-slate-50/80 p-5 shadow-inner shadow-white lg:grid-cols-6">
-                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
+            <CardContent className="space-y-6 p-5 sm:p-7">
+              <div className="rounded-[2rem] border border-white bg-gradient-to-br from-slate-50 via-white to-fuchsia-50/35 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_55px_rgba(15,23,42,0.06)] sm:p-7">
+                <div className="flex flex-col gap-2 border-b border-slate-100 pb-5">
+                  <Badge variant="outline" className="w-fit border-fuchsia-200 bg-white/80 text-fuchsia-800">
+                    Visit details
+                  </Badge>
+                  <h3 className="text-2xl font-black tracking-[-0.04em] text-slate-950">Log a 1:1 activity visit</h3>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                    Keep it quick: choose the resident, add the visit details, and optionally leave a short note.
+                  </p>
+                </div>
+
+                <div className="mt-6 grid gap-5 lg:grid-cols-12">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-5">
                   Resident
                   <Select value={oneToOneResidentId} onValueChange={setOneToOneResidentId}>
-                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
+                    <SelectTrigger className="mt-2 h-12 rounded-2xl bg-white shadow-sm">
                       <SelectValue placeholder="Select resident" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1317,18 +1328,18 @@ export function AttendanceTrackerPageShell({
                     </SelectContent>
                   </Select>
                 </label>
-                <label className="text-sm font-semibold text-slate-600">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-3">
                   Date
-                  <Input type="date" value={oneToOneDate} onChange={(event) => setOneToOneDate(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
+                  <Input type="date" value={oneToOneDate} onChange={(event) => setOneToOneDate(event.target.value)} className="mt-2 h-12 rounded-2xl bg-white shadow-sm" />
                 </label>
-                <label className="text-sm font-semibold text-slate-600">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
                   Time
-                  <Input type="time" value={oneToOneTime} onChange={(event) => setOneToOneTime(event.target.value)} className="mt-2 h-11 rounded-2xl bg-white" />
+                  <Input type="time" value={oneToOneTime} onChange={(event) => setOneToOneTime(event.target.value)} className="mt-2 h-12 rounded-2xl bg-white shadow-sm" />
                 </label>
-                <label className="text-sm font-semibold text-slate-600">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
                   Duration
                   <Select value={oneToOneDuration} onValueChange={setOneToOneDuration}>
-                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
+                    <SelectTrigger className="mt-2 h-12 rounded-2xl bg-white shadow-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1341,7 +1352,7 @@ export function AttendanceTrackerPageShell({
                   </Select>
                 </label>
                 {oneToOneDuration === "custom" ? (
-                  <label className="text-sm font-semibold text-slate-600">
+                  <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
                     Custom Minutes
                     <Input
                       type="number"
@@ -1349,14 +1360,14 @@ export function AttendanceTrackerPageShell({
                       max={240}
                       value={oneToOneCustomDuration}
                       onChange={(event) => setOneToOneCustomDuration(event.target.value)}
-                      className="mt-2 h-11 rounded-2xl bg-white"
+                      className="mt-2 h-12 rounded-2xl bg-white shadow-sm"
                     />
                   </label>
                 ) : null}
-                <label className="text-sm font-semibold text-slate-600 lg:col-span-2">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-5">
                   Activity Provided
                   <Select value={oneToOneActivity} onValueChange={setOneToOneActivity}>
-                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
+                    <SelectTrigger className="mt-2 h-12 rounded-2xl bg-white shadow-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1368,10 +1379,10 @@ export function AttendanceTrackerPageShell({
                     </SelectContent>
                   </Select>
                 </label>
-                <label className="text-sm font-semibold text-slate-600">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-3">
                   Completed
                   <Select value={oneToOneCompleted} onValueChange={setOneToOneCompleted}>
-                    <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
+                    <SelectTrigger className="mt-2 h-12 rounded-2xl bg-white shadow-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1381,10 +1392,10 @@ export function AttendanceTrackerPageShell({
                   </Select>
                 </label>
                 {oneToOneCompleted === "No" ? (
-                  <label className="text-sm font-semibold text-slate-600">
+                  <label className="text-sm font-semibold text-slate-600 lg:col-span-4">
                     Status
                     <Select value={oneToOneIncompleteStatus} onValueChange={(value) => setOneToOneIncompleteStatus(value as "Declined" | "Unavailable")}>
-                      <SelectTrigger className="mt-2 h-11 rounded-2xl bg-white">
+                      <SelectTrigger className="mt-2 h-12 rounded-2xl bg-white shadow-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1394,20 +1405,24 @@ export function AttendanceTrackerPageShell({
                     </Select>
                   </label>
                 ) : null}
-                <label className="text-sm font-semibold text-slate-600 lg:col-span-6">
+                <label className="text-sm font-semibold text-slate-600 lg:col-span-12">
                   Short Note <span className="font-normal text-slate-400">(optional)</span>
                   <textarea
                     value={oneToOneShortNote}
                     onChange={(event) => setOneToOneShortNote(event.target.value)}
                     placeholder="Visited resident in room for crossword puzzle."
-                    className="mt-2 min-h-[108px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    className="mt-2 min-h-[140px] w-full rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 text-sm leading-6 shadow-sm outline-none transition focus:border-fuchsia-300 focus:ring-4 focus:ring-fuchsia-100"
                   />
                 </label>
-                <div className="lg:col-span-6">
-                  <Button type="button" className="h-11 rounded-2xl bg-slate-950 text-white hover:bg-slate-800" onClick={saveOneToOneVisit} disabled={!canEdit || loggingOneToOne || initialData.residents.length === 0}>
+                <div className="flex flex-col gap-3 rounded-[1.5rem] border border-white bg-white/85 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between lg:col-span-12">
+                  <p className="text-sm text-slate-500">
+                    Completed visits count toward daily, weekly, and monthly participation.
+                  </p>
+                  <Button type="button" className="h-12 rounded-2xl bg-slate-950 px-6 text-white hover:bg-slate-800" onClick={saveOneToOneVisit} disabled={!canEdit || loggingOneToOne || initialData.residents.length === 0}>
                     {loggingOneToOne ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
                     Save 1:1 Visit
                   </Button>
+                </div>
                 </div>
               </div>
 
