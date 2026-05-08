@@ -1,6 +1,12 @@
 import { useState } from "react";
-import { ArrowUp, CalendarDays, ChevronDown, ScrollText, SlidersHorizontal, Square, UsersRound } from "lucide-react";
+import { ArrowUp, CalendarDays, ChevronDown, FilePenLine, HeartHandshake, ScrollText, SlidersHorizontal, Square } from "lucide-react";
 
+import {
+  buildCalendarIdeasPrompt,
+  buildOneToOneNotePrompt,
+  buildProgressNotePrompt,
+  buildRefusalNotePrompt
+} from "@/lib/actifyPromptHelpers";
 import { cn } from "@/lib/utils";
 
 type AssistantComposerProps = {
@@ -18,9 +24,10 @@ type AssistantComposerProps = {
 };
 
 const TOOL_PRESETS = [
-  { id: "note", label: "Note Mode", insert: "Reword this note:", icon: ScrollText },
-  { id: "calendar", label: "Calendar Help", insert: "Help me plan this week:", icon: CalendarDays },
-  { id: "resident", label: "Residents Context", insert: "Suggest ideas for this resident:", icon: UsersRound }
+  { id: "progress-note", label: "Progress Note", insert: buildProgressNotePrompt(), icon: FilePenLine },
+  { id: "one-to-one-note", label: "1:1 Note", insert: buildOneToOneNotePrompt(), icon: HeartHandshake },
+  { id: "refusal-note", label: "Refusal Note", insert: buildRefusalNotePrompt(), icon: ScrollText },
+  { id: "calendar-ideas", label: "Calendar Ideas", insert: buildCalendarIdeasPrompt(), icon: CalendarDays }
 ] as const;
 
 export function AssistantComposer({
@@ -28,7 +35,7 @@ export function AssistantComposer({
   onChange,
   onSubmit,
   onQuickInsert,
-  placeholder = "Ask for activity ideas, note help, resident support, or calendar planning…",
+  placeholder = "Ask for a progress note, 1:1 note, activity idea, care plan wording, or calendar help...",
   centered = false,
   className,
   hideHint = false,

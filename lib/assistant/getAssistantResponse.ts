@@ -16,7 +16,9 @@ export type AssistantResponseIntent =
   | "noteRewordProgress"
   | "noteRewordOneToOne"
   | "noteRewordNeedsType"
-  | "noteRewordNeedsText";
+  | "noteRewordNeedsText"
+  | "identity"
+  | "clinicalRedirect";
 
 export type AssistantResponseResult = {
   intent: AssistantResponseIntent;
@@ -47,11 +49,46 @@ function pickResponseForIntent(intent: AssistantIntent, excludeId?: string) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function isIdentityQuestion(prompt: string) {
+  const normalized = prompt.trim().toLowerCase();
+  return /^(who|what)\s+are\s+you\??$/.test(normalized) || normalized.includes("who are you") || normalized.includes("what are you");
+}
+
+function isClinicalRequest(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  return (
+    normalized.includes("act like a doctor") ||
+    normalized.includes("diagnose") ||
+    normalized.includes("diagnosis") ||
+    normalized.includes("medical advice") ||
+    normalized.includes("nursing assessment")
+  );
+}
+
 export function getAssistantResponseFromPrompt(options: {
   prompt: string;
   forceIntent?: AssistantResponseIntent;
   excludeResponseId?: string;
 }): AssistantResponseResult {
+  if (isIdentityQuestion(options.prompt)) {
+    return {
+      intent: "identity",
+      responseId: "actify-identity",
+      source: "preset",
+      formattedMessage: "Actify, the AI Assistant tool for Activity Directors."
+    };
+  }
+
+  if (isClinicalRequest(options.prompt)) {
+    return {
+      intent: "clinicalRedirect",
+      responseId: "clinical-redirect",
+      source: "preset",
+      formattedMessage:
+        "That may need to be addressed by nursing or the interdisciplinary team per facility policy. From an Activities documentation standpoint, you can document only the observed activity response, resident engagement, participation, mood/affect if observed, and any Activities follow-up that is supported by the facts you provide."
+    };
+  }
+
   const rewriteRequest = parseRewriteRequest(options.prompt);
 
   if (
@@ -68,7 +105,7 @@ export function getAssistantResponseFromPrompt(options: {
           ? "one_to_one"
           : rewriteRequest.noteType;
 
-    if (noteText.length < 20) {
+    if (noteText.trim().length < 4) {
       return {
         intent: "noteRewordNeedsText",
         responseId: "reword-needs-text",

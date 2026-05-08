@@ -11,6 +11,14 @@ import { type AssistantExampleCard } from "@/components/assistant/AssistantExamp
 import { AssistantTopBar } from "@/components/assistant/AssistantTopBar";
 import { EmptyState } from "@/components/assistant-dashboard/EmptyState";
 import {
+  buildActivityIdeaPrompt,
+  buildCarePlanPrompt,
+  buildOneToOneNotePrompt,
+  buildProgressNotePrompt,
+  buildRefusalNotePrompt,
+  buildRewordProgressNotePrompt
+} from "@/lib/actifyPromptHelpers";
+import {
   buildResidentContextLabel,
   consumeResidentScopedAssistantRequest,
   isResidentScopedRequest
@@ -69,37 +77,44 @@ const STORAGE_KEY = "actify-assistant-chat-v5";
 const MAX_MESSAGES = 24;
 const MAX_HISTORY_THREADS = 14;
 const ASSISTANT_PREFILL_QUERY_PARAM = "assistantPrompt";
+const ASSISTANT_GENERATION_ERROR = "Actify had trouble generating that response. Please try again.";
 
 const QUICK_PROMPTS: AssistantExampleCard[] = [
   {
-    id: "note-reword",
-    title: "Reword a progress note for bingo participation",
-    prompt: "Reword this progress note: Resident attended bingo, needed encouragement at first, then smiled and talked with peers.",
+    id: "progress-note",
+    title: "Progress Note",
+    prompt: buildProgressNotePrompt(),
     kind: "notes"
   },
   {
-    id: "one-to-one",
-    title: "Generate a 1:1 idea for a bed-bound resident",
-    prompt: "Give me a 1:1 idea for a bed-bound resident.",
+    id: "reword-note",
+    title: "Reword Note",
+    prompt: buildRewordProgressNotePrompt(),
+    kind: "notes"
+  },
+  {
+    id: "one-to-one-note",
+    title: "1:1 Visit",
+    prompt: buildOneToOneNotePrompt(),
     kind: "one-to-one"
   },
   {
-    id: "fill-days",
-    title: "Help me fill empty activity days this week",
-    prompt: "Help me fill empty activity days this week with low-prep ideas.",
-    kind: "calendar"
-  },
-  {
-    id: "draft-note",
-    title: "Draft a 1:1 note for a room visit",
-    prompt: "Draft a 1:1 note for a room visit with a resident who was initially withdrawn but became conversational.",
+    id: "refusal-note",
+    title: "Refusal Note",
+    prompt: buildRefusalNotePrompt(),
     kind: "notes"
   },
   {
-    id: "themed-week",
-    title: "Build a themed week for next month",
-    prompt: "Build a themed activity week for next month with daily anchor activities and one backup option each day.",
-    kind: "calendar"
+    id: "care-plan",
+    title: "Care Plan",
+    prompt: buildCarePlanPrompt(),
+    kind: "notes"
+  },
+  {
+    id: "activity-ideas",
+    title: "Activity Ideas",
+    prompt: buildActivityIdeaPrompt(),
+    kind: "ideas"
   }
 ];
 
@@ -320,13 +335,13 @@ async function requestAssistantResponseStream(
   if (!response.ok) {
     const data = (await response.json().catch(() => null)) as AssistantApiResponse | null;
     if (isAssistantApiError(data)) {
-      throw new Error(data.error || "We couldn’t generate a response right now. Please try again.");
+      throw new Error(data.error || ASSISTANT_GENERATION_ERROR);
     }
-    throw new Error("We couldn’t generate a response right now. Please try again.");
+    throw new Error(ASSISTANT_GENERATION_ERROR);
   }
 
   if (!response.body) {
-    throw new Error("We couldn’t stream a response right now. Please try again.");
+    throw new Error(ASSISTANT_GENERATION_ERROR);
   }
 
   const reader = response.body.getReader();
@@ -386,7 +401,7 @@ async function requestAssistantResponseStream(
         const errorText =
           parsed && typeof parsed === "object" && typeof (parsed as { error?: unknown }).error === "string"
             ? (parsed as { error: string }).error
-            : "Response stopped unexpectedly. Try again.";
+            : ASSISTANT_GENERATION_ERROR;
         throw new Error(errorText);
       }
 
@@ -696,7 +711,7 @@ export function AssistantChat() {
       const resolvedError =
         error instanceof Error && error.message
           ? error.message
-          : "Response stopped unexpectedly. Try again.";
+          : ASSISTANT_GENERATION_ERROR;
 
       setErrorMessage(resolvedError);
       setMessages((current) =>
@@ -704,7 +719,7 @@ export function AssistantChat() {
           if (message.id !== assistantMessageId) return message;
           return {
             ...message,
-            text: message.text.trim().length > 0 ? message.text : "Response stopped unexpectedly. Try again.",
+            text: message.text.trim().length > 0 ? message.text : ASSISTANT_GENERATION_ERROR,
             status: "error"
           };
         })
@@ -790,9 +805,11 @@ export function AssistantChat() {
 
   const insertToolPrompt = useCallback((prefix: string) => {
     setPrompt((current) => {
-      if (!current.trim()) return prefix;
+      const currentText = current.trim();
+      if (!currentText) return prefix;
+      if (prefix.includes("[Paste details here]")) return prefix.replace("[Paste details here]", currentText);
       if (current.toLowerCase().startsWith(prefix.toLowerCase())) return current;
-      return `${prefix} ${current}`.trim();
+      return `${prefix}\n${currentText}`.trim();
     });
   }, []);
 
@@ -857,7 +874,7 @@ export function AssistantChat() {
         onSubmit={() => {
           void sendPrompt(prompt);
         }}
-        placeholder="What can Actify help you with today?"
+        placeholder="Paste a rough note or ask Actify to write one..."
         centered
         disabled={isSubmitting}
         isStreaming={isSubmitting}
@@ -937,8 +954,8 @@ export function AssistantChat() {
             cards={quickPrompts}
             onSelectPrompt={(selectedPrompt) => {
               setPrompt(selectedPrompt);
+              setActivePrompt(selectedPrompt);
               setActiveTab("chat");
-              void sendPrompt(selectedPrompt);
             }}
             composer={emptyComposer}
           />

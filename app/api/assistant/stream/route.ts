@@ -17,6 +17,7 @@ import type {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const ASSISTANT_GENERATION_ERROR = "Actify had trouble generating that response. Please try again.";
 
 const conversationEntrySchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -54,6 +55,7 @@ const assistantRequestSchema = z.object({
 
 function shouldUseLocalFallback(error: MistralAssistantError) {
   return [
+    "MISTRAL_NOT_CONFIGURED",
     "TIMEOUT",
     "MISTRAL_PROVIDER_ERROR",
     "MISTRAL_EMPTY_OUTPUT",
@@ -242,7 +244,7 @@ export async function POST(request: Request) {
           return;
         }
 
-        const defaultErrorMessage = "Response stopped unexpectedly. Try again.";
+        const defaultErrorMessage = ASSISTANT_GENERATION_ERROR;
         if (error instanceof MistralAssistantError) {
           emit("error", {
             error: error.message || defaultErrorMessage,

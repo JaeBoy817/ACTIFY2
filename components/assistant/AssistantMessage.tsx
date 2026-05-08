@@ -75,6 +75,7 @@ function AssistantMessageComponent({
   const formattedAssistantText = isAssistant ? formatAssistantResponse(message.text) : message.text;
   const cardLabel = isAssistant ? inferCardLabel(formattedAssistantText) : null;
   const isNoteSupport = cardLabel === "Note Support";
+  const copyLabel = copyState === "copied" ? "Copied" : isNoteSupport ? "Copy note" : "Copy response";
 
   return (
     <article
@@ -110,7 +111,7 @@ function AssistantMessageComponent({
                 <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300" />
                 <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 [animation-delay:120ms]" />
                 <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 [animation-delay:240ms]" />
-                <span className="ml-1 text-xs font-medium text-slate-500">Actify is responding…</span>
+                <span className="ml-1 text-xs font-medium text-slate-500">Actify is drafting your note...</span>
               </div>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -133,8 +134,8 @@ function AssistantMessageComponent({
             onClick={() => onCopy(message.id, formattedAssistantText)}
             disabled={formattedAssistantText.trim().length === 0}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
-            title={copyState === "copied" ? "Copied" : "Copy response"}
-            aria-label={copyState === "copied" ? "Copied" : "Copy response"}
+            title={copyLabel}
+            aria-label={copyLabel}
           >
             {copyState === "copied" ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Clipboard className="h-3.5 w-3.5" aria-hidden />}
           </button>

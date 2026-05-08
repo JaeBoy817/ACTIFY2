@@ -2,6 +2,11 @@ import type { ResidentStatus } from "@prisma/client";
 
 import type { ResidentListRow } from "@/lib/residents/types";
 import type { ResidentAIContext } from "@/lib/assistant/types";
+import {
+  buildOneToOneNotePrompt,
+  buildProgressNotePrompt,
+  buildRewordProgressNotePrompt
+} from "@/lib/actifyPromptHelpers";
 
 import type {
   ResidentDraftPayload,
@@ -720,6 +725,15 @@ export function residentMatchesSearch(resident: ResidentSnapshot, searchTerm: st
 
 export function buildAssistantPrompt(action: SnapshotIntentAction, resident: ResidentSnapshot) {
   const name = resident.preferredName?.trim() || resident.fullName;
+  if (action.id === "note-progress") {
+    return buildProgressNotePrompt(`Resident: ${name}\nDetails: [Add event details here]`);
+  }
+  if (action.id === "note-1to1") {
+    return buildOneToOneNotePrompt(`Resident: ${name}\nDetails: [Add visit details here]`);
+  }
+  if (action.id === "reword") {
+    return buildRewordProgressNotePrompt(`Resident: ${name}\nNote: [Paste rough note here]`);
+  }
   if (action.id === "ask-resident") {
     return `Help me with ${name}. Review this resident context and suggest practical next steps.`;
   }

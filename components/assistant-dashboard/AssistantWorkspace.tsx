@@ -162,7 +162,7 @@ const ACTIVITY_IDEAS = [
 ];
 
 const SEEDED_NOTE_PREVIEW =
-  "Progress Note: Resident attended afternoon bingo social for 30 minutes. Resident required minimal verbal cueing and remained calm and cooperative throughout the activity. Resident responded positively to peer interaction and smiled during group discussion. Follow-up: Offer afternoon social programming this week based on observed engagement pattern.";
+  "Title:\nProgress Note\n\nPriority Level:\nLow\n\nParticipation Level:\nModerate\n\nMood/Affect:\nCalm\n\nCues/Assistance:\nMinimal verbal cueing\n\nResponse Type:\nPositive\n\nProgress Note:\nResident attended afternoon bingo social for 30 minutes. Resident required minimal verbal cueing and remained calm and cooperative throughout the activity. Resident responded positively to peer interaction and smiled during group discussion.\n\nOptional Follow-Up:\nOffer afternoon social programming this week based on observed engagement pattern.";
 
 function buildGeneratedNote(input: {
   noteType: string;
@@ -177,24 +177,46 @@ function buildGeneratedNote(input: {
 }) {
   const resident = input.residentName.trim() || "Resident";
   const activity = input.activityType.trim() || "activity programming";
-  const noteHeader = `${input.noteType}:`;
+  const title = input.noteType || "Progress Note";
   const followUpLine =
     input.followUpNeeded === "Yes"
-      ? "Follow-up: Additional support visit recommended within 48 hours."
-      : "Follow-up: Continue current approach based on response.";
+      ? "Additional Activities follow-up recommended within 48 hours."
+      : "Continue current Activities approach based on resident response.";
 
   const detailLine = input.details.trim() ? `Additional details: ${input.details.trim()}` : "";
-
-  return [
-    `${noteHeader} ${resident} participated in ${activity}.`,
+  const progressNote = [
+    `${resident} participated in ${activity}.`,
     `Participation level observed: ${input.participationLevel}.`,
     `Mood/affect: ${input.mood}. Cueing support: ${input.cueing}.`,
     `Response type: ${input.responseType}.`,
-    followUpLine,
     detailLine
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
+
+  return [
+    "Title:",
+    title,
+    "",
+    "Priority Level:",
+    "Low",
+    "",
+    "Participation Level:",
+    input.participationLevel || "Not specified",
+    "",
+    "Mood/Affect:",
+    input.mood || "Not specified",
+    "",
+    "Cues/Assistance:",
+    input.cueing || "Not specified",
+    "",
+    "Response Type:",
+    input.responseType || "Not specified",
+    "",
+    "Progress Note:",
+    progressNote,
+    "",
+    "Optional Follow-Up:",
+    followUpLine
+  ].join("\n");
 }
 
 export function AssistantWorkspace({ firstName, residents }: AssistantWorkspaceProps) {
