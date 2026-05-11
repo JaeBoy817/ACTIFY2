@@ -1082,6 +1082,7 @@ export async function getAttendanceTrackerSummary(params: {
         totalActiveResidents: activeResidentIds.size,
         weeklyParticipants: weekly.participatedResidentCount,
         weeklyParticipationPercentage: weekly.participationPercent,
+        monthlyParticipationPercentage: monthly.participationPercent,
         monthlyGroupCheckIns: monthly.groupAttendanceCount,
         monthlyOneToOneVisits: monthly.oneToOneVisitCount,
         notSeenThisWeek: residentsNotSeenThisWeek.length

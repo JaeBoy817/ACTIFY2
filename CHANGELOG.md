@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.1 - 2026-05-10
+
+- Updated Attendance Tracker State-Ready Summary to include monthly participation percentage.
+- Kept the summary deterministic from saved attendance statistics with no AI generation.
+
 ## v1.4.0 - 2026-05-08
 
 - Updated Actify AI Assistant with finalized Activities Director system instructions.

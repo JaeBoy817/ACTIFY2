@@ -18,6 +18,7 @@ export type SimpleAttendanceStats = {
   totalActiveResidents: number;
   weeklyParticipants: number;
   weeklyParticipationPercentage: number;
+  monthlyParticipationPercentage: number;
   monthlyGroupCheckIns: number;
   monthlyOneToOneVisits: number;
   notSeenThisWeek: number;
@@ -100,5 +101,5 @@ export function formatStateReadySummary(stats: SimpleAttendanceStats, currentDat
     return `As of ${currentDate}, there are no active residents available for attendance tracking.`;
   }
 
-  return `As of ${currentDate}, ${stats.weeklyParticipants} of ${stats.totalActiveResidents} active residents have participated in at least one activity this week, for a weekly participation rate of ${stats.weeklyParticipationPercentage.toFixed(1)}%. There have been ${stats.monthlyGroupCheckIns} group activity ${stats.monthlyGroupCheckIns === 1 ? "check-in" : "check-ins"} and ${stats.monthlyOneToOneVisits} completed 1:1 ${stats.monthlyOneToOneVisits === 1 ? "visit" : "visits"} this month. ${pluralize(stats.notSeenThisWeek, "resident")} ${stats.notSeenThisWeek === 1 ? "has" : "have"} not participated this week and may need follow-up.`;
+  return `As of ${currentDate}, ${stats.weeklyParticipants} of ${stats.totalActiveResidents} active residents have participated in at least one activity this week, for a weekly participation rate of ${stats.weeklyParticipationPercentage.toFixed(1)}%. There have been ${stats.monthlyGroupCheckIns} group activity ${stats.monthlyGroupCheckIns === 1 ? "check-in" : "check-ins"} and ${stats.monthlyOneToOneVisits} completed 1:1 ${stats.monthlyOneToOneVisits === 1 ? "visit" : "visits"} this month for a monthly participation rate of ${stats.monthlyParticipationPercentage.toFixed(1)}%. ${pluralize(stats.notSeenThisWeek, "resident")} ${stats.notSeenThisWeek === 1 ? "has" : "have"} not participated this week and may need follow-up.`;
 }
