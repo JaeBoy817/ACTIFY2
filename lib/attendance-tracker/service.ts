@@ -112,8 +112,37 @@ function isWithinRange(date: Date, start: Date, end: Date) {
   return time >= start.getTime() && time <= end.getTime();
 }
 
+function getActivityMetadata(metadata: Prisma.JsonValue) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  return metadata as Record<string, unknown>;
+}
+
+function getActivityMetadataString(metadata: Prisma.JsonValue, key: string) {
+  const value = getActivityMetadata(metadata)?.[key];
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function isOneToOneActivityInstance(activity: { title: string; adaptationsEnabled: Prisma.JsonValue }) {
+  const title = activity.title.trim().toLowerCase();
+  const type = getActivityMetadataString(activity.adaptationsEnabled, "type");
+  const source = getActivityMetadataString(activity.adaptationsEnabled, "source");
+  const metadata = getActivityMetadata(activity.adaptationsEnabled);
+
+  if (type === "1:1" || type === "one-to-one" || type === "one_to_one") return true;
+  if (source === "attendance-tracker" && type && type !== "group") return true;
+  if (metadata && ("activityProvided" in metadata || "durationMinutes" in metadata)) return true;
+  return title.startsWith("1:1") || title.startsWith("one-to-one") || title.startsWith("one to one");
+}
+
+function isGroupAttendanceActivityInstance(activity: { title: string; adaptationsEnabled: Prisma.JsonValue }) {
+  return !isOneToOneActivityInstance(activity);
+}
+
 function isOneToOneRow(row: AttendanceTrackerRow) {
-  return row.status === AttendanceStatus.ACTIVE || row.activityInstance.title.toLowerCase().includes("1:1");
+  return row.status === AttendanceStatus.ACTIVE || isOneToOneActivityInstance(row.activityInstance);
 }
 
 function rowActivityType(row: AttendanceTrackerRow): "Group" | "1:1" {
@@ -411,6 +440,7 @@ export async function getAttendanceSessionsForDay(params: {
       startAt: true,
       endAt: true,
       location: true,
+      adaptationsEnabled: true,
       createdAt: true,
       attendance: {
         select: {
@@ -426,7 +456,9 @@ export async function getAttendanceSessionsForDay(params: {
     where: activeResidentWhere(params.facilityId)
   });
 
-  const summaries: AttendanceSessionSummary[] = sessions.map((session) => {
+  const groupSessions = sessions.filter(isGroupAttendanceActivityInstance);
+
+  const summaries: AttendanceSessionSummary[] = groupSessions.map((session) => {
     const { counts, hasNotes } = countFromAttendanceRows(session.attendance);
     const completionPercent = activeResidentCount > 0 ? Number(((counts.totalEntries / activeResidentCount) * 100).toFixed(1)) : 0;
 

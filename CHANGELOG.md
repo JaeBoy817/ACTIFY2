@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.2 - 2026-05-10
+
+- Fixed the Take Attendance calendar activity selector so 1:1 visits no longer appear as group attendance options.
+- Updated selector labels and empty-state copy for scheduled group calendar activities.
+
 ## v1.4.1 - 2026-05-10
 
 - Updated Attendance Tracker State-Ready Summary to include monthly participation percentage.

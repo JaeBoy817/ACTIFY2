@@ -1081,21 +1081,32 @@ export function AttendanceTrackerPageShell({
                   </CardDescription>
                 </div>
                 <div className="min-w-[260px]">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Select Calendar Activity
+                  </p>
                   <Select value={selectedSession?.id ?? "manual"} onValueChange={updateSelectedSession}>
-                    <SelectTrigger className="h-11 rounded-2xl bg-white">
-                      <SelectValue placeholder="Select or create activity" />
+                    <SelectTrigger className="h-11 rounded-2xl bg-white" aria-label="Select Calendar Activity">
+                      <SelectValue placeholder="Choose a scheduled calendar activity" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manual">Manual quick activity</SelectItem>
+                      <SelectItem value="manual">Manual quick group activity</SelectItem>
+                      {groupSessions.length === 0 ? (
+                        <SelectItem value="no-calendar-activities" disabled>
+                          No calendar activities scheduled for today
+                        </SelectItem>
+                      ) : null}
                       {groupSessions.map((session) => (
                         <SelectItem key={session.id} value={session.id}>
-                          {formatTime(session.startAt, timeZone)} · {session.title}
+                          {formatTime(session.startAt, timeZone)} {session.title}
+                          {session.location ? ` - ${session.location}` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="mt-2 text-xs text-slate-500">
-                    {groupSessions.length > 0 ? "Today’s scheduled activities are available above." : "No scheduled activities today. Manual entry is ready."}
+                    {groupSessions.length > 0
+                      ? "Choose a scheduled calendar activity or create a quick group activity manually."
+                      : "No calendar activities scheduled for today. You can still create a quick group activity manually."}
                   </p>
                 </div>
               </div>
