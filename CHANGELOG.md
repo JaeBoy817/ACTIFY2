@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.2 - 2026-05-19
+
+- Updated monthly participation rate to include both group attendance and completed 1:1 visits.
+- Kept monthly group check-ins, 1:1 visit totals, and no-group-participation lists separated.
+
 ## v1.5.1 - 2026-05-19
 
 - Fixed Monthly Attendance Report participation rate to use the same shared monthly group participation calculation as the Attendance page.

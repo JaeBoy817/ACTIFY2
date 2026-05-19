@@ -366,6 +366,7 @@ function getMonthlyAttendanceStats(params: {
   timeZone: string;
 }): MonthlyAttendanceStats {
   const participatingResidentIds = new Set<string>();
+  const groupParticipatingResidentIds = new Set<string>();
   const groupActivityIds = new Set<string>();
   let groupCheckInCount = 0;
   let oneOnOneVisitCount = 0;
@@ -380,6 +381,7 @@ function getMonthlyAttendanceStats(params: {
       groupActivityIds.add(row.activityInstance.id);
       if (isGroupAttendedRow(row)) {
         participatingResidentIds.add(row.residentId);
+        groupParticipatingResidentIds.add(row.residentId);
         groupCheckInCount += 1;
       }
       if (row.status === AttendanceStatus.REFUSED) declined += 1;
@@ -387,12 +389,13 @@ function getMonthlyAttendanceStats(params: {
     }
 
     if (isCompletedOneToOneRow(row)) {
+      participatingResidentIds.add(row.residentId);
       oneOnOneVisitCount += 1;
     }
   }
 
   const residentsWithNoGroupParticipation = params.residents
-    .filter((resident) => !participatingResidentIds.has(resident.id))
+    .filter((resident) => !groupParticipatingResidentIds.has(resident.id))
     .map((resident) => ({
       id: resident.id,
       name: residentDisplayNameFromResident(resident),
@@ -471,7 +474,7 @@ function buildAttendanceReportSummaryText(params: {
     return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one group activity this week, for a weekly participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities}. ${notSeen} did not participate in group activities this week and may need follow-up.${oneToOneSentence}`;
   }
 
-  return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one group activity this month, for a monthly participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities} and ${oneToOneVisits}. ${notSeen} had no recorded group participation this month and may need follow-up.`;
+  return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one activity this month, for a monthly participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities} and ${oneToOneVisits}. ${notSeen} had no recorded group participation this month and may need follow-up.`;
 }
 
 function buildGroupReportSummary(params: {
