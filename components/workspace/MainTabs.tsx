@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, ClipboardCheck, Sparkles, UserRound } from "lucide-react";
 
+import { OPEN_ASSISTANT_MAIN_EVENT } from "@/lib/assistant/events";
 import { cn } from "@/lib/utils";
 
 type WorkspaceTab = {
@@ -54,6 +55,11 @@ export function MainTabs() {
             <li key={tab.href}>
               <Link
                 href={tab.href}
+                onClick={() => {
+                  if (tab.href === "/app") {
+                    window.dispatchEvent(new Event(OPEN_ASSISTANT_MAIN_EVENT));
+                  }
+                }}
                 aria-current={isActive ? "page" : undefined}
                 title={tab.helpText}
                 className={cn(

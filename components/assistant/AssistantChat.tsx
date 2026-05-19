@@ -23,6 +23,7 @@ import {
   consumeResidentScopedAssistantRequest,
   isResidentScopedRequest
 } from "@/lib/assistant/residentContext";
+import { OPEN_ASSISTANT_MAIN_EVENT } from "@/lib/assistant/events";
 import type {
   AssistantApiErrorResponse,
   AssistantApiResponse,
@@ -455,28 +456,13 @@ export function AssistantChat() {
   }, [residentContext]);
 
   useEffect(() => {
-    const parsedStore = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
-    const { nextStore, didArchive } = archiveCurrentConversation(parsedStore);
+    const nextStore = parsePersistedChatState(window.sessionStorage.getItem(STORAGE_KEY));
 
-    if (didArchive) {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextStore));
-    }
-
-    if (nextStore.current.messages.length > 0) {
-      setMessages(nextStore.current.messages);
-    }
-    if (nextStore.history.length > 0) {
-      setHistoryThreads(nextStore.history);
-      if (nextStore.current.messages.length === 0) {
-        setActiveTab("history");
-      }
-    }
-    if (nextStore.current.conversationId) {
-      setConversationId(nextStore.current.conversationId);
-    }
-    if (nextStore.current.model) {
-      setActiveModel(nextStore.current.model);
-    }
+    setMessages(nextStore.current.messages);
+    setHistoryThreads(nextStore.history);
+    setConversationId(nextStore.current.conversationId);
+    setActiveModel(nextStore.current.model);
+    setActiveTab("chat");
 
     const scopedResidentRequest = consumeResidentScopedAssistantRequest();
     if (scopedResidentRequest && isResidentScopedRequest(scopedResidentRequest)) {
@@ -520,6 +506,17 @@ export function AssistantChat() {
     };
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   }, [messages, conversationId, activeModel, historyThreads]);
+
+  useEffect(() => {
+    const openMainAssistantView = () => {
+      setActiveTab("chat");
+    };
+
+    window.addEventListener(OPEN_ASSISTANT_MAIN_EVENT, openMainAssistantView);
+    return () => {
+      window.removeEventListener(OPEN_ASSISTANT_MAIN_EVENT, openMainAssistantView);
+    };
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "chat") return;
@@ -904,7 +901,7 @@ export function AssistantChat() {
               <EmptyState
                 icon={Sparkles}
                 title="No previous chats yet"
-                description="After you send messages, refreshed sessions will appear here."
+                description="After you start a new chat, prior conversations will appear here."
                 className="rounded-3xl border-slate-200 bg-white/80 p-8"
               />
             ) : (
