@@ -61,7 +61,7 @@ type MetricCardProps = {
 type AttendanceSection = "overview" | "take" | "oneToOne" | "reports";
 type SimpleAttendanceStatus = "Attended" | "Declined" | "Unavailable" | "Not Recorded";
 type StatusFilter = "all" | SimpleAttendanceStatus;
-type ReportType = "daily" | "weekly" | "monthly";
+type ReportType = "daily" | "weekly" | "monthly" | "oneToOneMonthly";
 
 const ATTENDANCE_SECTIONS: Array<{
   id: AttendanceSection;
@@ -102,6 +102,10 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeHtmlWithBreaks(value: string) {
+  return escapeHtml(value).replaceAll("\n", "<br />");
 }
 
 function formatTime(value: string, timeZone: string) {
@@ -222,84 +226,230 @@ function buildPrintHtml(params: {
   reportType: ReportType;
 }) {
   const { summary, facilityName } = params;
-  const report = summary.reports[params.reportType];
-  const notSeenRows = "residentsNotSeen" in report && report.residentsNotSeen.length
-    ? report.residentsNotSeen
-        .map(
-          (resident) =>
-            `<tr><td>${escapeHtml(resident.name)}</td><td>${escapeHtml(resident.room)}</td><td>${escapeHtml(
-              resident.lastParticipatedLabel ?? "No recent record"
-            )}</td><td>${escapeHtml(resident.recommendedAction ?? "Follow up this week")}</td></tr>`
-        )
+  const isOneToOneReport = params.reportType === "oneToOneMonthly";
+  const reportSummary =
+    params.reportType === "oneToOneMonthly" ? summary.reports.oneToOneMonthly.summary : summary.reports[params.reportType].summary;
+  const reportTitle = reportSummary.title;
+  const dateRangeLabel = reportSummary.dateRangeLabel;
+  const generatedLabel = reportSummary.generatedLabel;
+
+  const residentRows = (residents: Array<{ name: string; room: string; recommendedAction?: string | null }>, emptyText: string) =>
+    residents.length
+      ? residents
+          .map(
+            (resident) =>
+              `<tr><td>${escapeHtml(resident.name)}</td><td>${escapeHtml(resident.room || "Not entered")}</td><td>${escapeHtml(
+                resident.recommendedAction ?? "Follow up"
+              )}</td></tr>`
+          )
+          .join("")
+      : `<tr><td colspan="3">${escapeHtml(emptyText)}</td></tr>`;
+
+  const activityBreakdowns = summary.reports.daily.activityBreakdowns.length
+    ? summary.reports.daily.activityBreakdowns
+        .map((activity) => {
+          const residents = activity.residents.length
+            ? `<ul>${activity.residents
+                .map((resident) => `<li>${escapeHtml(resident.residentName)}${resident.room ? ` <span class="muted">(Room ${escapeHtml(resident.room)})</span>` : ""}</li>`)
+                .join("")}</ul>`
+            : `<p class="muted">No residents attended this activity.</p>`;
+
+          return `<div class="entry"><h3>${escapeHtml(activity.activityName)}</h3><p class="muted">Time: ${escapeHtml(
+            activity.timeLabel
+          )} · Location: ${escapeHtml(activity.location || "Location not entered")}</p><p><strong>Attendance:</strong> ${activity.attendanceCount} ${
+            activity.attendanceCount === 1 ? "resident" : "residents"
+          }</p><p class="label">Residents:</p>${residents}</div>`;
+        })
         .join("")
-    : `<tr><td colspan="4">No residents in this follow-up list.</td></tr>`;
-  const dailyRows = params.reportType === "daily" && summary.reports.daily.rows.length
+    : `<p class="empty">No group activity attendance was recorded for this date.</p>`;
+
+  const dailyRows = summary.reports.daily.rows.length
     ? summary.reports.daily.rows
         .map(
           (row) =>
-            `<tr><td>${escapeHtml(row.residentName)}</td><td>${escapeHtml(row.room)}</td><td>${escapeHtml(row.activityName)}</td><td>${escapeHtml(row.activityType)}</td><td>${escapeHtml(row.status)}</td></tr>`
+            `<tr><td>${escapeHtml(row.residentName)}</td><td>${escapeHtml(row.room)}</td><td>${escapeHtml(row.activityName)}</td><td>${escapeHtml(row.status)}</td></tr>`
         )
+        .join("")
+    : `<tr><td colspan="4">No group activity attendance was recorded for this date.</td></tr>`;
+
+  const weeklySnapshots = summary.reports.weekly.daySnapshots
+    .map(
+      (day) =>
+        `<tr><td>${escapeHtml(day.dateLabel)}</td><td>${day.groupActivityCount}</td><td>${day.groupCheckIns}</td><td>${day.uniqueParticipants}</td><td>${escapeHtml(
+          formatPercent(day.participationPercent)
+        )}</td></tr>`
+    )
+    .join("");
+
+  const topWeeklyActivities = summary.reports.weekly.topActivities.length
+    ? summary.reports.weekly.topActivities
+        .map(
+          (activity) =>
+            `<tr><td>${escapeHtml(activity.activityName)}</td><td>${escapeHtml(activity.dateLabel ?? "Date not entered")}</td><td>${escapeHtml(
+              activity.timeLabel ?? "Time not entered"
+            )}</td><td>${activity.count}</td></tr>`
+        )
+        .join("")
+    : `<tr><td colspan="4">No group activity attendance was recorded for this week.</td></tr>`;
+
+  const monthlyAnalytics = !isOneToOneReport
+    ? [
+        ["Active Residents", summary.reports.monthly.summary.totalActiveResidents],
+        ["Residents Participated This Month", summary.reports.monthly.summary.participatedResidentCount],
+        ["Monthly Participation Rate", formatPercent(summary.reports.monthly.summary.participationPercent)],
+        ["Group Activity Check-Ins", summary.reports.monthly.summary.groupCheckIns],
+        ["Completed 1:1 Visits", summary.reports.monthly.summary.oneToOneVisits],
+        ["Group Activities Held", summary.reports.monthly.summary.groupSessionCount],
+        ["Residents With No Group Participation", summary.reports.monthly.summary.notSeenResidentCount]
+      ]
+        .map(([metric, value]) => `<tr><td>${escapeHtml(String(metric))}</td><td>${escapeHtml(String(value))}</td></tr>`)
         .join("")
     : "";
-  const monthlyRows = params.reportType === "monthly"
-    ? summary.reports.monthly.residentParticipation
+
+  const monthlyWeekRows = summary.reports.monthly.weekBreakdowns.length
+    ? summary.reports.monthly.weekBreakdowns
         .map(
-          (resident) =>
-            `<tr><td>${escapeHtml(resident.residentName)}</td><td>${escapeHtml(resident.room)}</td><td>${resident.participatedThisMonth ? "Yes" : "No"}</td><td>${resident.groupCheckIns}</td><td>${resident.oneToOneVisits}</td><td>${escapeHtml(resident.lastParticipatedLabel ?? "No recent record")}</td></tr>`
+          (week) =>
+            `<tr><td>${escapeHtml(week.weekLabel)}</td><td>${week.groupActivityCount}</td><td>${week.groupCheckIns}</td><td>${week.uniqueParticipants}</td><td>${escapeHtml(
+              formatPercent(week.participationPercent)
+            )}</td><td>${week.oneToOneVisits}</td></tr>`
         )
         .join("")
+    : `<tr><td colspan="6">No group activity attendance was recorded for this month.</td></tr>`;
+
+  const monthlyTopActivities = summary.reports.monthly.mostAttendedActivities.length
+    ? summary.reports.monthly.mostAttendedActivities
+        .map(
+          (activity) =>
+            `<tr><td>${escapeHtml(activity.activityName)}</td><td>${escapeHtml(activity.dateLabel ?? "Date not entered")}</td><td>${escapeHtml(
+              activity.timeLabel ?? "Time not entered"
+            )}</td><td>${activity.count}</td></tr>`
+        )
+        .join("")
+    : `<tr><td colspan="4">No group activity attendance was recorded for this month.</td></tr>`;
+
+  const oneToOneEntries = summary.reports.oneToOneMonthly.entries.length
+    ? summary.reports.oneToOneMonthly.entries
+        .map(
+          (entry) =>
+            `<div class="entry note-entry"><h3>${escapeHtml(entry.residentName || "Unknown Resident")}</h3><p><strong>Date:</strong> ${escapeHtml(
+              entry.dateLabel || "Date Not Entered"
+            )}</p><p><strong>Time:</strong> ${escapeHtml(entry.timeLabel || "Time Not Entered")}</p><p class="label">Progress Note:</p><p>${escapeHtmlWithBreaks(
+              entry.progressNote || "No progress note entered."
+            )}</p></div>`
+        )
+        .join("")
+    : `<p class="empty">No completed 1:1 visits were documented for this month.</p>`;
+
+  const missingOneToOneEntries = summary.reports.oneToOneMonthly.missingDateOrTimeEntries.length
+    ? `<section class="section"><h2>Entries Missing Date or Time</h2>${summary.reports.oneToOneMonthly.missingDateOrTimeEntries
+        .map(
+          (entry) =>
+            `<div class="entry note-entry"><h3>${escapeHtml(entry.residentName || "Unknown Resident")}</h3><p><strong>Date:</strong> ${escapeHtml(
+              entry.dateLabel || "Date Not Entered"
+            )}</p><p><strong>Time:</strong> ${escapeHtml(entry.timeLabel || "Time Not Entered")}</p><p class="label">Progress Note:</p><p>${escapeHtmlWithBreaks(
+              entry.progressNote || "No progress note entered."
+            )}</p></div>`
+        )
+        .join("")}</section>`
     : "";
 
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Attendance Tracker Summary</title>
+    <title>${escapeHtml(reportTitle)}</title>
     <style>
-      body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+      body { font-family: Arial, sans-serif; color: #111827; margin: 32px; line-height: 1.45; }
       h1 { margin: 0; font-size: 30px; }
-      h2 { margin-top: 28px; font-size: 18px; }
+      h2 { margin: 0 0 12px; font-size: 18px; }
+      h3 { margin: 0 0 4px; font-size: 16px; }
+      p { margin: 6px 0; }
+      ul { margin: 8px 0 0 20px; padding: 0; columns: 2; }
+      li { margin: 3px 0; break-inside: avoid; }
       .muted { color: #6b7280; }
+      .brand { color: #4338ca; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+      .summary { border: 1px solid #d1d5db; border-left: 5px solid #4f46e5; border-radius: 14px; margin-top: 20px; padding: 16px; background: #f8fafc; }
+      .section { margin-top: 26px; page-break-inside: avoid; }
       .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
       .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 16px; }
       .value { font-size: 28px; font-weight: 800; margin-top: 8px; }
+      .label { font-weight: 800; color: #374151; margin-top: 10px; }
+      .entry { border: 1px solid #d1d5db; border-radius: 14px; padding: 14px; margin-top: 12px; page-break-inside: avoid; }
+      .note-entry { padding: 16px; }
+      .empty { border: 1px solid #d1d5db; border-radius: 12px; padding: 14px; color: #6b7280; background: #f9fafb; }
       table { width: 100%; border-collapse: collapse; margin-top: 12px; }
       th, td { border: 1px solid #d1d5db; padding: 9px; text-align: left; font-size: 13px; }
       th { background: #f3f4f6; }
+      footer { margin-top: 32px; color: #6b7280; font-size: 12px; }
       @page { margin: 0.55in; }
+      @media print {
+        body { margin: 0; }
+        .summary, .card, .entry, .empty { box-shadow: none; }
+        ul { columns: 2; }
+      }
     </style>
   </head>
   <body>
-    <p class="muted">Actify Attendance Tracker</p>
-    <h1>${escapeHtml(report.summary.title)}</h1>
-    <p>${escapeHtml(facilityName)} · ${escapeHtml(report.summary.dateRangeLabel)} · Generated ${escapeHtml(report.summary.generatedLabel)}</p>
-    <div class="grid">
-      <div class="card"><div class="muted">Active Residents</div><div class="value">${report.summary.totalActiveResidents}</div></div>
-      <div class="card"><div class="muted">Participated</div><div class="value">${report.summary.participatedResidentCount}</div></div>
-      <div class="card"><div class="muted">Participation Rate</div><div class="value">${escapeHtml(formatPercent(report.summary.participationPercent))}</div></div>
-    </div>
-    <h2>State-ready counts</h2>
-    <table>
-      <thead><tr><th>Group check-ins</th><th>Completed 1:1 visits</th><th>Declined</th><th>Unavailable</th><th>Not seen</th></tr></thead>
-      <tbody>
-        <tr><td>${report.summary.groupCheckIns}</td><td>${report.summary.oneToOneVisits}</td><td>${report.summary.declined}</td><td>${report.summary.unavailable}</td><td>${report.summary.notSeenResidentCount}</td></tr>
-      </tbody>
-    </table>
+    <p class="brand">Actify Attendance Tracker</p>
+    <h1>${escapeHtml(reportTitle)}</h1>
+    <p><strong>Facility:</strong> ${escapeHtml(facilityName)}</p>
+    <p><strong>Report Period:</strong> ${escapeHtml(dateRangeLabel)}</p>
+    <p><strong>Printed:</strong> ${escapeHtml(generatedLabel)}</p>
+    <p class="muted">Generated by Actify</p>
+    <div class="summary">${escapeHtml(reportSummary.summaryText)}</div>
     ${
       params.reportType === "daily"
-        ? `<h2>Resident Attendance</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Activity</th><th>Type</th><th>Status</th></tr></thead><tbody>${dailyRows || `<tr><td colspan="5">No attendance data found for this date range.</td></tr>`}</tbody></table>`
+        ? `<div class="grid">
+            <div class="card"><div class="muted">Active Residents</div><div class="value">${summary.reports.daily.summary.totalActiveResidents}</div></div>
+            <div class="card"><div class="muted">Group Participants</div><div class="value">${summary.reports.daily.summary.participatedResidentCount}</div></div>
+            <div class="card"><div class="muted">Daily Rate</div><div class="value">${escapeHtml(formatPercent(summary.reports.daily.summary.participationPercent))}</div></div>
+          </div>
+          <section class="section"><h2>Daily Summary</h2><table><thead><tr><th>Group check-ins</th><th>Group activities held</th><th>Completed 1:1 visits</th><th>Declined</th><th>Unavailable</th><th>No group participation</th></tr></thead><tbody><tr><td>${summary.reports.daily.summary.groupCheckIns}</td><td>${summary.reports.daily.summary.groupSessionCount}</td><td>${summary.reports.daily.summary.oneToOneVisits}</td><td>${summary.reports.daily.summary.declined}</td><td>${summary.reports.daily.summary.unavailable}</td><td>${summary.reports.daily.summary.notSeenResidentCount}</td></tr></tbody></table></section>
+          <section class="section"><h2>Activity Breakdown</h2>${activityBreakdowns}</section>
+          <section class="section"><h2>Resident Attendance List</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Activity</th><th>Status</th></tr></thead><tbody>${dailyRows}</tbody></table></section>
+          <section class="section"><h2>Residents With No Recorded Group Participation Today</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Recommended Action</th></tr></thead><tbody>${residentRows(summary.reports.daily.residentsNotSeen, "All active residents had recorded group participation today.")}</tbody></table></section>`
         : ""
     }
     ${
       params.reportType === "weekly"
-        ? `<h2>Residents Not Seen This Week</h2><table><thead><tr><th>Name</th><th>Room</th><th>Last Participated</th><th>Recommended Action</th></tr></thead><tbody>${notSeenRows}</tbody></table>`
+        ? `<div class="grid">
+            <div class="card"><div class="muted">Active Residents</div><div class="value">${summary.reports.weekly.summary.totalActiveResidents}</div></div>
+            <div class="card"><div class="muted">Group Participants</div><div class="value">${summary.reports.weekly.summary.participatedResidentCount}</div></div>
+            <div class="card"><div class="muted">Weekly Rate</div><div class="value">${escapeHtml(formatPercent(summary.reports.weekly.summary.participationPercent))}</div></div>
+          </div>
+          <section class="section"><h2>Weekly Summary</h2><table><thead><tr><th>Group check-ins</th><th>Group activities held</th><th>Completed 1:1 visits</th><th>Declined</th><th>Unavailable</th><th>No group participation</th></tr></thead><tbody><tr><td>${summary.reports.weekly.summary.groupCheckIns}</td><td>${summary.reports.weekly.summary.groupSessionCount}</td><td>${summary.reports.weekly.summary.oneToOneVisits}</td><td>${summary.reports.weekly.summary.declined}</td><td>${summary.reports.weekly.summary.unavailable}</td><td>${summary.reports.weekly.summary.notSeenResidentCount}</td></tr></tbody></table></section>
+          <section class="section"><h2>Day-by-Day Attendance Snapshot</h2><table><thead><tr><th>Date</th><th>Group Activities</th><th>Total Check-Ins</th><th>Unique Residents Participated</th><th>Participation %</th></tr></thead><tbody>${weeklySnapshots}</tbody></table></section>
+          <section class="section"><h2>Top Participated Activities This Week</h2><table><thead><tr><th>Activity</th><th>Date</th><th>Time</th><th>Attendance Count</th></tr></thead><tbody>${topWeeklyActivities}</tbody></table></section>
+          <section class="section"><h2>Residents With No Weekly Group Participation</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Recommended Action</th></tr></thead><tbody>${residentRows(summary.reports.weekly.residentsNotSeen, "All active residents had recorded group participation this week.")}</tbody></table></section>`
         : ""
     }
     ${
       params.reportType === "monthly"
-        ? `<h2>Resident Participation</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Participated This Month</th><th>Group Check-ins</th><th>1:1 Visits</th><th>Last Participated</th></tr></thead><tbody>${monthlyRows}</tbody></table>`
+        ? `<div class="grid">
+            <div class="card"><div class="muted">Active Residents</div><div class="value">${summary.reports.monthly.summary.totalActiveResidents}</div></div>
+            <div class="card"><div class="muted">Group Participants</div><div class="value">${summary.reports.monthly.summary.participatedResidentCount}</div></div>
+            <div class="card"><div class="muted">Monthly Rate</div><div class="value">${escapeHtml(formatPercent(summary.reports.monthly.summary.participationPercent))}</div></div>
+          </div>
+          <section class="section"><h2>Monthly Analytics</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>${monthlyAnalytics}</tbody></table></section>
+          <section class="section"><h2>Week-by-Week Breakdown</h2><table><thead><tr><th>Week</th><th>Group Activities</th><th>Total Check-Ins</th><th>Unique Residents Participated</th><th>Participation %</th><th>1:1 Visits</th></tr></thead><tbody>${monthlyWeekRows}</tbody></table></section>
+          <section class="section"><h2>Most Attended Activities This Month</h2><table><thead><tr><th>Activity</th><th>Date</th><th>Time</th><th>Attendance Count</th></tr></thead><tbody>${monthlyTopActivities}</tbody></table></section>
+          <section class="section"><h2>Residents With No Monthly Group Participation</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Recommended Action</th></tr></thead><tbody>${residentRows(summary.reports.monthly.residentsNotSeen, "All active residents had recorded group participation this month.")}</tbody></table></section>`
         : ""
     }
+    ${
+      params.reportType === "oneToOneMonthly"
+        ? `<div class="grid">
+            <div class="card"><div class="muted">Completed 1:1 Visits</div><div class="value">${summary.reports.oneToOneMonthly.summary.totalCompletedVisits}</div></div>
+            <div class="card"><div class="muted">Residents Served</div><div class="value">${summary.reports.oneToOneMonthly.summary.residentsServedCount}</div></div>
+            <div class="card"><div class="muted">Average / Week</div><div class="value">${summary.reports.oneToOneMonthly.summary.averageVisitsPerWeek.toFixed(1)}</div></div>
+          </div>
+          <section class="section"><h2>Monthly 1:1 Summary</h2><table><thead><tr><th>Total completed visits</th><th>Residents served</th><th>Residents without completed 1:1</th><th>Average visits per week</th><th>Most recent 1:1 date</th></tr></thead><tbody><tr><td>${summary.reports.oneToOneMonthly.summary.totalCompletedVisits}</td><td>${summary.reports.oneToOneMonthly.summary.residentsServedCount}</td><td>${summary.reports.oneToOneMonthly.summary.residentsWithoutOneToOneCount}</td><td>${summary.reports.oneToOneMonthly.summary.averageVisitsPerWeek.toFixed(1)}</td><td>${escapeHtml(summary.reports.oneToOneMonthly.summary.mostRecentVisitDate ?? "No recent visit")}</td></tr></tbody></table></section>
+          <section class="section"><h2>Completed 1:1 Session List</h2>${oneToOneEntries}</section>
+          ${missingOneToOneEntries}`
+        : ""
+    }
+    <footer>Actify supports activity workflow and state-ready reporting. This report is not an EHR or clinical record system.</footer>
   </body>
 </html>`;
 }
@@ -422,6 +572,11 @@ export function AttendanceTrackerPageShell({
   const groupSessions = useMemo(() => {
     return sessions.filter((session) => session.title !== "1:1 Visits");
   }, [sessions]);
+  const selectedReportSummary =
+    reportType === "oneToOneMonthly" ? summary.reports.oneToOneMonthly.summary : summary.reports[reportType].summary;
+  const selectedAttendanceReportSummary =
+    reportType === "oneToOneMonthly" ? null : summary.reports[reportType].summary;
+  const isOneToOneReport = reportType === "oneToOneMonthly";
 
   const selectedSession = useMemo(() => {
     return selectedSessionId ? groupSessions.find((session) => session.id === selectedSessionId) ?? null : null;
@@ -1506,7 +1661,7 @@ export function AttendanceTrackerPageShell({
                   Reports
                 </CardTitle>
                 <CardDescription>
-                  View, print, or export simple daily, weekly, and monthly attendance summaries.
+                  View, print, or export daily, weekly, monthly, and monthly 1:1 reports.
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -1532,61 +1687,113 @@ export function AttendanceTrackerPageShell({
                       <SelectItem value="daily">Daily Attendance Report</SelectItem>
                       <SelectItem value="weekly">Weekly Participation Report</SelectItem>
                       <SelectItem value="monthly">Monthly Participation Report</SelectItem>
+                      <SelectItem value="oneToOneMonthly">Monthly 1:1 Report List</SelectItem>
                     </SelectContent>
                   </Select>
                 </label>
                 <div className="text-sm text-slate-500">
-                  Date range: <span className="font-semibold text-slate-700">{summary.reports[reportType].summary.dateRangeLabel}</span>
+                  Date range: <span className="font-semibold text-slate-700">{selectedReportSummary.dateRangeLabel}</span>
                 </div>
               </div>
 
               <div className="rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.05)]">
                 <div className="flex flex-col gap-1 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-black tracking-[-0.04em] text-slate-950">{summary.reports[reportType].summary.title}</h3>
+                  <h3 className="text-2xl font-black tracking-[-0.04em] text-slate-950">{selectedReportSummary.title}</h3>
                   <p className="text-sm text-slate-500">
-                    {facilityName} · {summary.reports[reportType].summary.dateRangeLabel} · Generated {summary.reports[reportType].summary.generatedLabel}
+                    {facilityName} · {selectedReportSummary.dateRangeLabel} · Generated {selectedReportSummary.generatedLabel}
+                  </p>
+                  <p className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-sm leading-6 text-indigo-950">
+                    {selectedReportSummary.summaryText}
                   </p>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-white p-4 shadow-inner shadow-white">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Active Residents</p>
-                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.totalActiveResidents}</p>
+                {isOneToOneReport ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-4">
+                    <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-white p-4 shadow-inner shadow-white">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Completed 1:1 Visits</p>
+                      <p className="mt-2 text-2xl font-bold">{summary.reports.oneToOneMonthly.summary.totalCompletedVisits}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-white p-4 shadow-inner shadow-white">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Residents Served</p>
+                      <p className="mt-2 text-2xl font-bold">{summary.reports.oneToOneMonthly.summary.residentsServedCount}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-4 shadow-inner shadow-white">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Average / Week</p>
+                      <p className="mt-2 text-2xl font-bold">{summary.reports.oneToOneMonthly.summary.averageVisitsPerWeek.toFixed(1)}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-4 shadow-inner shadow-white">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Without 1:1</p>
+                      <p className="mt-2 text-2xl font-bold">{summary.reports.oneToOneMonthly.summary.residentsWithoutOneToOneCount}</p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-white p-4 shadow-inner shadow-white">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participated</p>
-                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.participatedResidentCount}</p>
-                  </div>
-                  <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-4 shadow-inner shadow-white">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participation Rate</p>
-                    <p className="mt-2 text-2xl font-bold">{formatPercent(summary.reports[reportType].summary.participationPercent)}</p>
-                  </div>
-                  <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-4 shadow-inner shadow-white">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Not Seen</p>
-                    <p className="mt-2 text-2xl font-bold">{summary.reports[reportType].summary.notSeenResidentCount}</p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-100 p-4">
-                    <p className="text-sm text-slate-500">Group check-ins</p>
-                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.groupCheckIns}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 p-4">
-                    <p className="text-sm text-slate-500">Completed 1:1 visits</p>
-                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.oneToOneVisits}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 p-4">
-                    <p className="text-sm text-slate-500">Declined</p>
-                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.declined}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 p-4">
-                    <p className="text-sm text-slate-500">Unavailable</p>
-                    <p className="mt-1 text-xl font-bold">{summary.reports[reportType].summary.unavailable}</p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="mt-4 grid gap-3 md:grid-cols-4">
+                      <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-white p-4 shadow-inner shadow-white">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Active Residents</p>
+                        <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.totalActiveResidents ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-white p-4 shadow-inner shadow-white">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Group Participants</p>
+                        <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.participatedResidentCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-4 shadow-inner shadow-white">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Participation Rate</p>
+                        <p className="mt-2 text-2xl font-bold">{formatPercent(selectedAttendanceReportSummary?.participationPercent ?? 0)}</p>
+                      </div>
+                      <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-4 shadow-inner shadow-white">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">No Group Participation</p>
+                        <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.notSeenResidentCount ?? 0}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-4">
+                      <div className="rounded-2xl border border-slate-100 p-4">
+                        <p className="text-sm text-slate-500">Group check-ins</p>
+                        <p className="mt-1 text-xl font-bold">{selectedAttendanceReportSummary?.groupCheckIns ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 p-4">
+                        <p className="text-sm text-slate-500">Completed 1:1 visits</p>
+                        <p className="mt-1 text-xl font-bold">{selectedAttendanceReportSummary?.oneToOneVisits ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 p-4">
+                        <p className="text-sm text-slate-500">Declined</p>
+                        <p className="mt-1 text-xl font-bold">{selectedAttendanceReportSummary?.declined ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 p-4">
+                        <p className="text-sm text-slate-500">Unavailable</p>
+                        <p className="mt-1 text-xl font-bold">{selectedAttendanceReportSummary?.unavailable ?? 0}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {reportType === "daily" ? (
-                  <div className="mt-6">
-                    <h4 className="text-lg font-bold text-slate-950">Resident Attendance List</h4>
+                  <div className="mt-6 space-y-5">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Activity Breakdown</h4>
+                      {summary.reports.daily.activityBreakdowns.length > 0 ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          {summary.reports.daily.activityBreakdowns.map((activity) => (
+                            <div key={activity.activityId} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <p className="font-semibold text-slate-950">{activity.activityName}</p>
+                              <p className="mt-1 text-slate-500">
+                                {activity.timeLabel} · {activity.location}
+                              </p>
+                              <p className="mt-2 font-medium text-slate-700">{activity.attendanceCount} residents attended</p>
+                              <p className="mt-2 text-xs text-slate-500">
+                                {activity.residents.slice(0, 5).map((resident) => resident.residentName).join(", ")}
+                                {activity.residents.length > 5 ? ` +${activity.residents.length - 5} more` : ""}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">
+                          No group activity attendance was recorded for this date.
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Resident Attendance List</h4>
                     {summary.reports.daily.rows.length > 0 ? (
                       <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100">
                         {summary.reports.daily.rows.map((row) => (
@@ -1603,15 +1810,67 @@ export function AttendanceTrackerPageShell({
                       </div>
                     ) : (
                       <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">
-                        No attendance data found for this date range.
+                        No group activity attendance was recorded for this date.
                       </div>
                     )}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Residents With No Recorded Group Participation Today</h4>
+                      {summary.reports.daily.residentsNotSeen.length > 0 ? (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {summary.reports.daily.residentsNotSeen.map((resident) => (
+                            <div key={resident.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <p className="font-semibold text-slate-950">{resident.name}</p>
+                              <p className="text-slate-500">Room {resident.room}</p>
+                              <p className="mt-2 font-medium text-slate-700">{resident.recommendedAction ?? "Offer group activity"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+                          All active residents had recorded group participation today.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : null}
 
                 {reportType === "weekly" ? (
-                  <div className="mt-6">
-                    <h4 className="text-lg font-bold text-slate-950">Residents Not Seen This Week</h4>
+                  <div className="mt-6 space-y-5">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Day-by-Day Attendance Snapshot</h4>
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100">
+                        {summary.reports.weekly.daySnapshots.map((day) => (
+                          <div key={day.dateLabel} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-0 md:grid-cols-[1fr_0.7fr_0.7fr_0.9fr_0.6fr]">
+                            <span className="font-semibold">{day.dateLabel}</span>
+                            <span>{day.groupActivityCount} activities</span>
+                            <span>{day.groupCheckIns} check-ins</span>
+                            <span>{day.uniqueParticipants} residents</span>
+                            <span>{formatPercent(day.participationPercent)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Top Participated Activities This Week</h4>
+                      {summary.reports.weekly.topActivities.length > 0 ? (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {summary.reports.weekly.topActivities.map((activity) => (
+                            <div key={`${activity.activityId ?? activity.activityName}-${activity.dateLabel ?? ""}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <p className="font-semibold text-slate-950">{activity.activityName}</p>
+                              <p className="text-slate-500">
+                                {activity.dateLabel ?? "Date not entered"} · {activity.timeLabel ?? "Time not entered"}
+                              </p>
+                              <p className="mt-2 font-medium text-slate-700">{activity.count} group check-ins</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">No group activity attendance was recorded for this week.</p>
+                      )}
+                    </div>
+                    <div>
+                    <h4 className="text-lg font-bold text-slate-950">Residents With No Weekly Group Participation</h4>
                     {summary.reports.weekly.residentsNotSeen.length > 0 ? (
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         {summary.reports.weekly.residentsNotSeen.map((resident) => (
@@ -1624,27 +1883,46 @@ export function AttendanceTrackerPageShell({
                       </div>
                     ) : (
                       <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-                        All active residents have participated this week.
+                        All active residents had recorded group participation this week.
                       </div>
                     )}
+                    </div>
                   </div>
                 ) : null}
 
                 {reportType === "monthly" ? (
                   <div className="mt-6 space-y-5">
                     <div>
+                      <h4 className="text-lg font-bold text-slate-950">Week-by-Week Breakdown</h4>
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100">
+                        {summary.reports.monthly.weekBreakdowns.map((week) => (
+                          <div key={week.weekLabel} className="grid gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-0 md:grid-cols-[1.4fr_0.7fr_0.7fr_0.9fr_0.7fr_0.6fr]">
+                            <span className="font-semibold">{week.weekLabel}</span>
+                            <span>{week.groupActivityCount} activities</span>
+                            <span>{week.groupCheckIns} check-ins</span>
+                            <span>{week.uniqueParticipants} residents</span>
+                            <span>{formatPercent(week.participationPercent)}</span>
+                            <span>{week.oneToOneVisits} 1:1</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
                       <h4 className="text-lg font-bold text-slate-950">Most Attended Activities</h4>
                       {summary.reports.monthly.mostAttendedActivities.length > 0 ? (
                         <div className="mt-3 grid gap-2 md:grid-cols-2">
                           {summary.reports.monthly.mostAttendedActivities.map((activity) => (
-                            <div key={activity.activityName} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                            <div key={`${activity.activityId ?? activity.activityName}-${activity.dateLabel ?? ""}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
                               <p className="font-semibold text-slate-950">{activity.activityName}</p>
-                              <p className="text-slate-500">{activity.count} group check-ins</p>
+                              <p className="text-slate-500">
+                                {activity.dateLabel ?? "Date not entered"} · {activity.timeLabel ?? "Time not entered"}
+                              </p>
+                              <p className="mt-2 font-medium text-slate-700">{activity.count} group check-ins</p>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">No attendance data found for this date range.</p>
+                        <p className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">No group activity attendance was recorded for this month.</p>
                       )}
                     </div>
                     <div>
@@ -1661,6 +1939,56 @@ export function AttendanceTrackerPageShell({
                           </div>
                         ))}
                       </div>
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Residents With No Monthly Group Participation</h4>
+                      {summary.reports.monthly.residentsNotSeen.length > 0 ? (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {summary.reports.monthly.residentsNotSeen.map((resident) => (
+                            <div key={resident.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <p className="font-semibold text-slate-950">{resident.name}</p>
+                              <p className="text-slate-500">Room {resident.room}</p>
+                              <p className="mt-2 font-medium text-slate-700">{resident.recommendedAction ?? "Follow up this month"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+                          All active residents had recorded group participation this month.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {reportType === "oneToOneMonthly" ? (
+                  <div className="mt-6 space-y-5">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-950">Completed 1:1 Session List</h4>
+                      {summary.reports.oneToOneMonthly.entries.length > 0 ? (
+                        <div className="mt-3 grid gap-3">
+                          {summary.reports.oneToOneMonthly.entries.slice(0, 12).map((entry) => (
+                            <div key={`${entry.sessionId}-${entry.residentId}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="font-semibold text-slate-950">{entry.residentName}</p>
+                                <p className="text-slate-500">
+                                  {entry.dateLabel} · {entry.timeLabel}
+                                </p>
+                              </div>
+                              <p className="mt-3 whitespace-pre-wrap leading-6 text-slate-700">{entry.progressNote}</p>
+                            </div>
+                          ))}
+                          {summary.reports.oneToOneMonthly.entries.length > 12 ? (
+                            <p className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-900">
+                              Print the report to view all {summary.reports.oneToOneMonthly.entries.length} completed 1:1 visits.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">
+                          No completed 1:1 visits were documented for this month.
+                        </p>
+                      )}
                     </div>
                   </div>
                 ) : null}

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.0 - 2026-05-19
+
+- Expanded Attendance Tracker print reports with richer daily, weekly, and monthly group attendance summaries.
+- Added daily activity breakdowns, weekly snapshots, monthly week-by-week analytics, and no-group-participation follow-up lists.
+- Added a Monthly 1:1 Report List with resident, date, time, and progress note details for completed 1:1 visits.
+- Kept group attendance and 1:1 visit documentation separated in report calculations and PDF output.
+
 ## v1.4.2 - 2026-05-10
 
 - Fixed the Take Attendance calendar activity selector so 1:1 visits no longer appear as group attendance options.

@@ -147,10 +147,44 @@ export type AttendanceTrackerReportRow = {
   dateLabel: string;
 };
 
+export type AttendanceTrackerReportResidentRef = {
+  residentId: string;
+  residentName: string;
+  room: string;
+};
+
+export type AttendanceTrackerActivityBreakdown = {
+  activityId: string;
+  activityName: string;
+  dateLabel: string;
+  timeLabel: string;
+  location: string;
+  attendanceCount: number;
+  residents: AttendanceTrackerReportResidentRef[];
+};
+
+export type AttendanceTrackerDaySnapshot = {
+  dateLabel: string;
+  groupActivityCount: number;
+  groupCheckIns: number;
+  uniqueParticipants: number;
+  participationPercent: number;
+};
+
+export type AttendanceTrackerWeekBreakdown = {
+  weekLabel: string;
+  groupActivityCount: number;
+  groupCheckIns: number;
+  uniqueParticipants: number;
+  participationPercent: number;
+  oneToOneVisits: number;
+};
+
 export type AttendanceTrackerReportSummary = {
   title: string;
   dateRangeLabel: string;
   generatedLabel: string;
+  summaryText: string;
   totalActiveResidents: number;
   participatedResidentCount: number;
   notSeenResidentCount: number;
@@ -173,23 +207,59 @@ export type AttendanceTrackerResidentParticipationRow = {
 };
 
 export type AttendanceTrackerActivityCount = {
+  activityId?: string;
   activityName: string;
+  dateLabel?: string;
+  timeLabel?: string;
   count: number;
+};
+
+export type AttendanceTrackerOneToOneReportEntry = {
+  sessionId: string;
+  residentId: string;
+  residentName: string;
+  dateLabel: string;
+  timeLabel: string;
+  progressNote: string;
+  missingDateOrTime: boolean;
+};
+
+export type AttendanceTrackerOneToOneReportSummary = {
+  title: string;
+  dateRangeLabel: string;
+  generatedLabel: string;
+  summaryText: string;
+  monthLabel: string;
+  totalCompletedVisits: number;
+  residentsServedCount: number;
+  residentsWithoutOneToOneCount: number;
+  averageVisitsPerWeek: number;
+  mostRecentVisitDate: string | null;
 };
 
 export type AttendanceTrackerReports = {
   daily: {
     summary: AttendanceTrackerReportSummary;
     rows: AttendanceTrackerReportRow[];
+    activityBreakdowns: AttendanceTrackerActivityBreakdown[];
+    residentsNotSeen: AttendanceTrackerResidentSummary[];
   };
   weekly: {
     summary: AttendanceTrackerReportSummary;
     residentsNotSeen: AttendanceTrackerResidentSummary[];
+    daySnapshots: AttendanceTrackerDaySnapshot[];
+    topActivities: AttendanceTrackerActivityCount[];
   };
   monthly: {
     summary: AttendanceTrackerReportSummary;
     residentsNotSeen: AttendanceTrackerResidentSummary[];
     residentParticipation: AttendanceTrackerResidentParticipationRow[];
     mostAttendedActivities: AttendanceTrackerActivityCount[];
+    weekBreakdowns: AttendanceTrackerWeekBreakdown[];
+  };
+  oneToOneMonthly: {
+    summary: AttendanceTrackerOneToOneReportSummary;
+    entries: AttendanceTrackerOneToOneReportEntry[];
+    missingDateOrTimeEntries: AttendanceTrackerOneToOneReportEntry[];
   };
 };

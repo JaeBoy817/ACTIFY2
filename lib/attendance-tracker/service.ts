@@ -21,13 +21,20 @@ import type {
   AttendanceTrackerSummary,
   AttendanceQuickResident,
   AttendanceQuickTakePayload,
+  AttendanceTrackerActivityBreakdown,
   AttendanceTrackerActivityCount,
+  AttendanceTrackerDaySnapshot,
+  AttendanceTrackerOneToOneReportEntry,
+  AttendanceTrackerOneToOneReportSummary,
   AttendanceTrackerRecentOneToOneVisit,
+  AttendanceTrackerReportResidentRef,
   AttendanceTrackerReportRow,
   AttendanceTrackerReportSummary,
   AttendanceTrackerResidentParticipationRow,
+  AttendanceTrackerResidentSummary,
   AttendanceSessionDetail,
   AttendanceSessionSummary,
+  AttendanceTrackerWeekBreakdown,
   MonthlyAttendanceReportPayload,
   SessionSummaryCounts
 } from "@/lib/attendance-tracker/types";
@@ -133,7 +140,7 @@ function isOneToOneActivityInstance(activity: { title: string; adaptationsEnable
 
   if (type === "1:1" || type === "one-to-one" || type === "one_to_one") return true;
   if (source === "attendance-tracker" && type && type !== "group") return true;
-  if (metadata && ("activityProvided" in metadata || "durationMinutes" in metadata)) return true;
+  if (source === "attendance-tracker" && metadata && ("activityProvided" in metadata || "durationMinutes" in metadata)) return true;
   return title.startsWith("1:1") || title.startsWith("one-to-one") || title.startsWith("one to one");
 }
 
@@ -185,6 +192,21 @@ function formatReportDate(date: Date, timeZone: string) {
     month: "long",
     day: "numeric",
     year: "numeric"
+  });
+}
+
+function formatReportDateShort(date: Date, timeZone: string) {
+  return formatInTimeZone(date, timeZone, {
+    weekday: "short",
+    month: "short",
+    day: "numeric"
+  });
+}
+
+function formatReportTime(date: Date, timeZone: string) {
+  return formatInTimeZone(date, timeZone, {
+    hour: "numeric",
+    minute: "2-digit"
   });
 }
 
@@ -245,54 +267,148 @@ function participationResidentIdsForRange(params: {
   return residentIds;
 }
 
-function countDeclined(rows: AttendanceTrackerRow[], start: Date, end: Date) {
-  return rows.filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && row.status === AttendanceStatus.REFUSED).length;
+function addZonedDays(date: Date, days: number, timeZone: string) {
+  return startOfZonedDay(new Date(date.getTime() + days * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000), timeZone);
 }
 
-function countUnavailable(rows: AttendanceTrackerRow[], start: Date, end: Date) {
-  return rows.filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && row.status === AttendanceStatus.NO_SHOW).length;
+function isGroupAttendedRow(row: AttendanceTrackerRow) {
+  return rowActivityType(row) === "Group" && row.status === AttendanceStatus.PRESENT;
 }
 
-function groupSessionCount(rows: AttendanceTrackerRow[], start: Date, end: Date) {
-  return new Set(
-    rows
-      .filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && rowActivityType(row) === "Group")
-      .map((row) => row.activityInstance.id)
-  ).size;
+function isCompletedOneToOneRow(row: AttendanceTrackerRow) {
+  return rowActivityType(row) === "1:1" && row.status === AttendanceStatus.ACTIVE;
 }
 
-function buildReportSummary(params: {
+function residentDisplayName(row: Pick<AttendanceTrackerRow, "resident">) {
+  return `${row.resident.firstName} ${row.resident.lastName}`.trim() || "Unknown Resident";
+}
+
+function residentDisplayNameFromResident(resident: Pick<AttendanceQuickResident, "firstName" | "lastName">) {
+  return `${resident.firstName} ${resident.lastName}`.trim() || "Unknown Resident";
+}
+
+type GroupReportRangeSummary = {
+  activeResidentCount: number;
+  participatedResidentCount: number;
+  participationPercent: number;
+  groupAttendanceCount: number;
+  oneToOneVisitCount: number;
+  groupSessionCount: number;
+  declined: number;
+  unavailable: number;
+};
+
+function summarizeGroupReportRange(params: {
+  rows: AttendanceTrackerRow[];
+  activeResidentIds: Set<string>;
+  start: Date;
+  end: Date;
+}): GroupReportRangeSummary {
+  const participatedResidentIds = new Set<string>();
+  const groupSessionIds = new Set<string>();
+  let groupAttendanceCount = 0;
+  let oneToOneVisitCount = 0;
+  let declined = 0;
+  let unavailable = 0;
+
+  for (const row of params.rows) {
+    if (!params.activeResidentIds.has(row.residentId)) continue;
+    if (!isWithinRange(row.activityInstance.startAt, params.start, params.end)) continue;
+
+    if (rowActivityType(row) === "Group") {
+      groupSessionIds.add(row.activityInstance.id);
+      if (row.status === AttendanceStatus.PRESENT) {
+        participatedResidentIds.add(row.residentId);
+        groupAttendanceCount += 1;
+      }
+      if (row.status === AttendanceStatus.REFUSED) declined += 1;
+      if (row.status === AttendanceStatus.NO_SHOW) unavailable += 1;
+    }
+
+    if (isCompletedOneToOneRow(row)) {
+      oneToOneVisitCount += 1;
+    }
+  }
+
+  return {
+    activeResidentCount: params.activeResidentIds.size,
+    participatedResidentCount: participatedResidentIds.size,
+    participationPercent: percent(participatedResidentIds.size, params.activeResidentIds.size),
+    groupAttendanceCount,
+    oneToOneVisitCount,
+    groupSessionCount: groupSessionIds.size,
+    declined,
+    unavailable
+  };
+}
+
+function plural(count: number, singular: string, pluralWord = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralWord}`;
+}
+
+function buildAttendanceReportSummaryText(params: {
+  reportKind: "daily" | "weekly" | "monthly";
+  asOfLabel: string;
+  range: GroupReportRangeSummary;
+  notSeenResidentCount: number;
+}) {
+  const residents = plural(params.range.activeResidentCount, "active resident");
+  const participated = plural(params.range.participatedResidentCount, "active resident");
+  const groupCheckIns = plural(params.range.groupAttendanceCount, "total group activity check-in");
+  const groupActivities = plural(params.range.groupSessionCount, "scheduled group activity", "scheduled group activities");
+  const oneToOneVisits = plural(params.range.oneToOneVisitCount, "completed 1:1 visit");
+  const notSeen = plural(params.notSeenResidentCount, "resident");
+
+  if (params.reportKind === "daily") {
+    const oneToOneSentence = params.range.oneToOneVisitCount > 0 ? ` There were also ${oneToOneVisits} documented today.` : "";
+    return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one group activity today, for a daily participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities}. ${notSeen} did not participate in group activities today and may need follow-up.${oneToOneSentence}`;
+  }
+
+  if (params.reportKind === "weekly") {
+    const oneToOneSentence = params.range.oneToOneVisitCount > 0 ? ` There were also ${oneToOneVisits} documented this week.` : "";
+    return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one group activity this week, for a weekly participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities}. ${notSeen} did not participate in group activities this week and may need follow-up.${oneToOneSentence}`;
+  }
+
+  return `As of ${params.asOfLabel}, ${participated} of ${residents} participated in at least one group activity this month, for a monthly participation rate of ${params.range.participationPercent.toFixed(1)}%. There were ${groupCheckIns} across ${groupActivities} and ${oneToOneVisits}. ${notSeen} had no recorded group participation this month and may need follow-up.`;
+}
+
+function buildGroupReportSummary(params: {
   title: string;
   dateRangeLabel: string;
   generatedLabel: string;
-  range: AttendanceTrackerRangeSummary;
-  rows: AttendanceTrackerRow[];
-  start: Date;
-  end: Date;
+  asOfLabel: string;
+  reportKind: "daily" | "weekly" | "monthly";
+  range: GroupReportRangeSummary;
   notSeenResidentCount: number;
 }): AttendanceTrackerReportSummary {
   return {
     title: params.title,
     dateRangeLabel: params.dateRangeLabel,
     generatedLabel: params.generatedLabel,
+    summaryText: buildAttendanceReportSummaryText({
+      reportKind: params.reportKind,
+      asOfLabel: params.asOfLabel,
+      range: params.range,
+      notSeenResidentCount: params.notSeenResidentCount
+    }),
     totalActiveResidents: params.range.activeResidentCount,
     participatedResidentCount: params.range.participatedResidentCount,
     notSeenResidentCount: params.notSeenResidentCount,
     participationPercent: params.range.participationPercent,
     groupCheckIns: params.range.groupAttendanceCount,
     oneToOneVisits: params.range.oneToOneVisitCount,
-    declined: countDeclined(params.rows, params.start, params.end),
-    unavailable: countUnavailable(params.rows, params.start, params.end),
-    groupSessionCount: groupSessionCount(params.rows, params.start, params.end)
+    declined: params.range.declined,
+    unavailable: params.range.unavailable,
+    groupSessionCount: params.range.groupSessionCount
   };
 }
 
 function buildReportRows(rows: AttendanceTrackerRow[], start: Date, end: Date, timeZone: string): AttendanceTrackerReportRow[] {
   return rows
-    .filter((row) => isWithinRange(row.activityInstance.startAt, start, end))
+    .filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && rowActivityType(row) === "Group")
     .map((row) => ({
       id: row.id,
-      residentName: `${row.resident.firstName} ${row.resident.lastName}`.trim(),
+      residentName: residentDisplayName(row),
       room: row.resident.room,
       activityName: row.activityInstance.title,
       activityType: rowActivityType(row),
@@ -305,6 +421,155 @@ function buildReportRows(rows: AttendanceTrackerRow[], start: Date, end: Date, t
       })
     }))
     .sort((a, b) => a.residentName.localeCompare(b.residentName));
+}
+
+function getResidentsWithNoGroupParticipation(params: {
+  residents: AttendanceQuickResident[];
+  rows: AttendanceTrackerRow[];
+  start: Date;
+  end: Date;
+  recommendedAction: string;
+}): AttendanceTrackerResidentSummary[] {
+  const participatedResidentIds = new Set(
+    params.rows
+      .filter((row) => isWithinRange(row.activityInstance.startAt, params.start, params.end) && isGroupAttendedRow(row))
+      .map((row) => row.residentId)
+  );
+
+  return params.residents
+    .filter((resident) => !participatedResidentIds.has(resident.id))
+    .map((resident) => ({
+      id: resident.id,
+      name: residentDisplayNameFromResident(resident),
+      room: resident.room,
+      unitName: resident.unitName,
+      lastParticipatedLabel: null,
+      recommendedAction: params.recommendedAction
+    }));
+}
+
+function buildActivityBreakdowns(rows: AttendanceTrackerRow[], start: Date, end: Date, timeZone: string): AttendanceTrackerActivityBreakdown[] {
+  const activityMap = new Map<
+    string,
+    {
+      activityId: string;
+      activityName: string;
+      dateLabel: string;
+      timeLabel: string;
+      location: string;
+      startAt: Date;
+      residents: Map<string, AttendanceTrackerReportResidentRef>;
+    }
+  >();
+
+  for (const row of rows) {
+    if (!isWithinRange(row.activityInstance.startAt, start, end) || rowActivityType(row) !== "Group") continue;
+
+    const existing = activityMap.get(row.activityInstance.id);
+    const entry =
+      existing ??
+      {
+        activityId: row.activityInstance.id,
+        activityName: row.activityInstance.title,
+        dateLabel: formatReportDate(row.activityInstance.startAt, timeZone),
+        timeLabel: formatReportTime(row.activityInstance.startAt, timeZone),
+        location: row.activityInstance.location || "Location not entered",
+        startAt: row.activityInstance.startAt,
+        residents: new Map<string, AttendanceTrackerReportResidentRef>()
+      };
+
+    if (isGroupAttendedRow(row)) {
+      entry.residents.set(row.residentId, {
+        residentId: row.residentId,
+        residentName: residentDisplayName(row),
+        room: row.resident.room
+      });
+    }
+
+    activityMap.set(row.activityInstance.id, entry);
+  }
+
+  return Array.from(activityMap.values())
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime() || a.activityName.localeCompare(b.activityName))
+    .map((entry) => ({
+      activityId: entry.activityId,
+      activityName: entry.activityName,
+      dateLabel: entry.dateLabel,
+      timeLabel: entry.timeLabel,
+      location: entry.location,
+      attendanceCount: entry.residents.size,
+      residents: Array.from(entry.residents.values()).sort((a, b) => a.residentName.localeCompare(b.residentName))
+    }));
+}
+
+function buildDaySnapshots(params: {
+  rows: AttendanceTrackerRow[];
+  activeResidentIds: Set<string>;
+  start: Date;
+  end: Date;
+  timeZone: string;
+}): AttendanceTrackerDaySnapshot[] {
+  const snapshots: AttendanceTrackerDaySnapshot[] = [];
+  let cursor = params.start;
+
+  while (cursor.getTime() <= params.end.getTime()) {
+    const dayStart = cursor;
+    const dayEnd = new Date(Math.min(endOfZonedDay(dayStart, params.timeZone).getTime(), params.end.getTime()));
+    const range = summarizeGroupReportRange({
+      rows: params.rows,
+      activeResidentIds: params.activeResidentIds,
+      start: dayStart,
+      end: dayEnd
+    });
+
+    snapshots.push({
+      dateLabel: formatReportDateShort(dayStart, params.timeZone),
+      groupActivityCount: range.groupSessionCount,
+      groupCheckIns: range.groupAttendanceCount,
+      uniqueParticipants: range.participatedResidentCount,
+      participationPercent: range.participationPercent
+    });
+
+    cursor = addZonedDays(dayStart, 1, params.timeZone);
+  }
+
+  return snapshots;
+}
+
+function buildWeekBreakdowns(params: {
+  rows: AttendanceTrackerRow[];
+  activeResidentIds: Set<string>;
+  monthStart: Date;
+  monthEnd: Date;
+  timeZone: string;
+}): AttendanceTrackerWeekBreakdown[] {
+  const breakdowns: AttendanceTrackerWeekBreakdown[] = [];
+  let cursor = params.monthStart;
+
+  while (cursor.getTime() <= params.monthEnd.getTime()) {
+    const weekStart = cursor;
+    const seventhDay = addZonedDays(weekStart, 6, params.timeZone);
+    const weekEnd = new Date(Math.min(endOfZonedDay(seventhDay, params.timeZone).getTime(), params.monthEnd.getTime()));
+    const range = summarizeGroupReportRange({
+      rows: params.rows,
+      activeResidentIds: params.activeResidentIds,
+      start: weekStart,
+      end: weekEnd
+    });
+
+    breakdowns.push({
+      weekLabel: `${formatReportDate(weekStart, params.timeZone)} - ${formatReportDate(weekEnd, params.timeZone)}`,
+      groupActivityCount: range.groupSessionCount,
+      groupCheckIns: range.groupAttendanceCount,
+      uniqueParticipants: range.participatedResidentCount,
+      participationPercent: range.participationPercent,
+      oneToOneVisits: range.oneToOneVisitCount
+    });
+
+    cursor = addZonedDays(weekStart, 7, params.timeZone);
+  }
+
+  return breakdowns;
 }
 
 function buildResidentParticipationRows(params: {
@@ -321,16 +586,17 @@ function buildResidentParticipationRows(params: {
         isWithinRange(row.activityInstance.startAt, params.monthStart, params.monthEnd) &&
         isParticipationStatus(row.status)
     );
+    const groupRows = residentRows.filter((row) => rowActivityType(row) === "Group" && row.status === AttendanceStatus.PRESENT);
 
-    const groupCheckIns = residentRows.filter((row) => rowActivityType(row) === "Group" && row.status === AttendanceStatus.PRESENT).length;
+    const groupCheckIns = groupRows.length;
     const oneToOneVisits = residentRows.filter((row) => rowActivityType(row) === "1:1" && row.status === AttendanceStatus.ACTIVE).length;
-    const lastParticipated = residentRows.sort((a, b) => b.activityInstance.startAt.getTime() - a.activityInstance.startAt.getTime())[0];
+    const lastParticipated = groupRows.sort((a, b) => b.activityInstance.startAt.getTime() - a.activityInstance.startAt.getTime())[0];
 
     return {
       residentId: resident.id,
-      residentName: `${resident.firstName} ${resident.lastName}`.trim(),
+      residentName: residentDisplayNameFromResident(resident),
       room: resident.room,
-      participatedThisMonth: residentRows.length > 0,
+      participatedThisMonth: groupRows.length > 0,
       groupCheckIns,
       oneToOneVisits,
       lastParticipatedLabel: lastParticipated ? formatReportDate(lastParticipated.activityInstance.startAt, params.timeZone) : null
@@ -338,17 +604,99 @@ function buildResidentParticipationRows(params: {
   });
 }
 
-function buildMostAttendedActivities(rows: AttendanceTrackerRow[]): AttendanceTrackerActivityCount[] {
-  const counts = new Map<string, number>();
+function buildMostAttendedActivities(rows: AttendanceTrackerRow[], timeZone: string, limit = 10): AttendanceTrackerActivityCount[] {
+  const counts = new Map<string, { activityId: string; activityName: string; dateLabel: string; timeLabel: string; count: number; startAt: Date }>();
   for (const row of rows) {
-    if (rowActivityType(row) !== "Group" || row.status !== AttendanceStatus.PRESENT) continue;
-    counts.set(row.activityInstance.title, (counts.get(row.activityInstance.title) ?? 0) + 1);
+    if (!isGroupAttendedRow(row)) continue;
+    const current = counts.get(row.activityInstance.id) ?? {
+      activityId: row.activityInstance.id,
+      activityName: row.activityInstance.title,
+      dateLabel: formatReportDate(row.activityInstance.startAt, timeZone),
+      timeLabel: formatReportTime(row.activityInstance.startAt, timeZone),
+      count: 0,
+      startAt: row.activityInstance.startAt
+    };
+    current.count += 1;
+    counts.set(row.activityInstance.id, current);
   }
 
-  return Array.from(counts.entries())
-    .map(([activityName, count]) => ({ activityName, count }))
-    .sort((a, b) => b.count - a.count || a.activityName.localeCompare(b.activityName))
-    .slice(0, 5);
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count || a.startAt.getTime() - b.startAt.getTime() || a.activityName.localeCompare(b.activityName))
+    .slice(0, limit)
+    .map((activity) => ({
+      activityId: activity.activityId,
+      activityName: activity.activityName,
+      dateLabel: activity.dateLabel,
+      timeLabel: activity.timeLabel,
+      count: activity.count
+    }));
+}
+
+function progressNoteFromOneToOneRow(row: AttendanceTrackerRow) {
+  const metadata = getActivityMetadata(row.activityInstance.adaptationsEnabled);
+  const metadataNote = metadata && typeof metadata.shortNote === "string" ? metadata.shortNote.trim() : "";
+  return row.notes?.trim() || metadataNote || "No progress note entered.";
+}
+
+function buildOneToOneReportEntries(rows: AttendanceTrackerRow[], start: Date, end: Date, timeZone: string): AttendanceTrackerOneToOneReportEntry[] {
+  return rows
+    .filter((row) => isWithinRange(row.activityInstance.startAt, start, end) && isCompletedOneToOneRow(row))
+    .map((row) => {
+      const validDate = row.activityInstance.startAt instanceof Date && Number.isFinite(row.activityInstance.startAt.getTime());
+      return {
+        sortAt: validDate ? row.activityInstance.startAt.getTime() : Number.POSITIVE_INFINITY,
+        sessionId: row.activityInstance.id,
+        residentId: row.residentId,
+        residentName: residentDisplayName(row),
+        dateLabel: validDate ? formatReportDate(row.activityInstance.startAt, timeZone) : "Date Not Entered",
+        timeLabel: validDate ? formatReportTime(row.activityInstance.startAt, timeZone) : "Time Not Entered",
+        progressNote: progressNoteFromOneToOneRow(row),
+        missingDateOrTime: !validDate
+      };
+    })
+    .sort((a, b) => a.sortAt - b.sortAt || a.residentName.localeCompare(b.residentName))
+    .map((entry) => ({
+      sessionId: entry.sessionId,
+      residentId: entry.residentId,
+      residentName: entry.residentName,
+      dateLabel: entry.dateLabel,
+      timeLabel: entry.timeLabel,
+      progressNote: entry.progressNote,
+      missingDateOrTime: entry.missingDateOrTime
+    }));
+}
+
+function buildOneToOneReportSummary(params: {
+  entries: AttendanceTrackerOneToOneReportEntry[];
+  activeResidentCount: number;
+  monthLabel: string;
+  dateRangeLabel: string;
+  generatedLabel: string;
+  weekCount: number;
+}): AttendanceTrackerOneToOneReportSummary {
+  const residentIds = new Set(params.entries.map((entry) => entry.residentId));
+  const totalCompletedVisits = params.entries.length;
+  const residentsServedCount = residentIds.size;
+  const averageVisitsPerWeek = params.weekCount > 0 ? Number((totalCompletedVisits / params.weekCount).toFixed(1)) : 0;
+  const validDateEntries = params.entries.filter((entry) => !entry.missingDateOrTime);
+  const mostRecentVisitDate = validDateEntries.length ? validDateEntries[validDateEntries.length - 1].dateLabel : null;
+  const summaryText =
+    totalCompletedVisits > 0
+      ? `For ${params.monthLabel}, there were ${plural(totalCompletedVisits, "completed 1:1 visit")} documented for ${plural(residentsServedCount, "resident")}. This report includes the resident name, session date, session time, and attached progress note for each completed 1:1 visit.`
+      : "No completed 1:1 visits were documented for this month.";
+
+  return {
+    title: "Monthly 1:1 Report List",
+    dateRangeLabel: params.dateRangeLabel,
+    generatedLabel: params.generatedLabel,
+    summaryText,
+    monthLabel: params.monthLabel,
+    totalCompletedVisits,
+    residentsServedCount,
+    residentsWithoutOneToOneCount: Math.max(0, params.activeResidentCount - residentsServedCount),
+    averageVisitsPerWeek,
+    mostRecentVisitDate
+  };
 }
 
 function countFromAttendanceRows(
@@ -917,12 +1265,6 @@ export async function getAttendanceTrackerSummary(params: {
     start: weekStart,
     end: weekEnd
   });
-  const monthlyParticipantIds = participationResidentIdsForRange({
-    rows,
-    activeResidentIds,
-    start: monthStart,
-    end: monthEnd
-  });
   const notSeenResidentIds = residents.filter((resident) => !weeklyParticipantIds.has(resident.id)).map((resident) => resident.id);
 
   const lastParticipationRows = notSeenResidentIds.length
@@ -974,17 +1316,6 @@ export async function getAttendanceTrackerSummary(params: {
       recommendedAction: "Offer 1:1 visit"
     }));
 
-  const residentsNotSeenThisMonth = residents
-    .filter((resident) => !monthlyParticipantIds.has(resident.id))
-    .map((resident) => ({
-      id: resident.id,
-      name: `${resident.firstName} ${resident.lastName}`.trim(),
-      room: resident.room,
-      unitName: resident.unitName,
-      lastParticipatedLabel: null,
-      recommendedAction: "Follow up this month"
-    }));
-
   const daily = summarizeTrackerRange({
     rows,
     activeResidentIds,
@@ -1022,7 +1353,20 @@ export async function getAttendanceTrackerSummary(params: {
     month: "long",
     year: "numeric"
   });
+  const monthRangeLabel = `${formatReportDate(monthStart, params.timeZone)} - ${formatReportDate(monthEnd, params.timeZone)}`;
   const generatedLabel = formatInTimeZone(new Date(), params.timeZone, {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+  const weeklyAsOfLabel = formatInTimeZone(weekEnd, params.timeZone, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+  const monthlyAsOfLabel = formatInTimeZone(monthEnd, params.timeZone, {
+    weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric"
@@ -1047,46 +1391,102 @@ export async function getAttendanceTrackerSummary(params: {
       completed: row.status === AttendanceStatus.ACTIVE
     }));
 
+  const dailyGroupReport = summarizeGroupReportRange({
+    rows,
+    activeResidentIds,
+    start: dayStart,
+    end: dayEnd
+  });
+  const weeklyGroupReport = summarizeGroupReportRange({
+    rows,
+    activeResidentIds,
+    start: weekStart,
+    end: weekEnd
+  });
+  const monthlyGroupReport = summarizeGroupReportRange({
+    rows,
+    activeResidentIds,
+    start: monthStart,
+    end: monthEnd
+  });
   const monthlyRows = rows.filter((row) => isWithinRange(row.activityInstance.startAt, monthStart, monthEnd));
+  const dailyNoGroupParticipation = getResidentsWithNoGroupParticipation({
+    residents,
+    rows,
+    start: dayStart,
+    end: dayEnd,
+    recommendedAction: "Offer group activity"
+  });
+  const weeklyNoGroupParticipation = getResidentsWithNoGroupParticipation({
+    residents,
+    rows,
+    start: weekStart,
+    end: weekEnd,
+    recommendedAction: "Offer 1:1 visit"
+  });
+  const monthlyNoGroupParticipation = getResidentsWithNoGroupParticipation({
+    residents,
+    rows,
+    start: monthStart,
+    end: monthEnd,
+    recommendedAction: "Follow up this month"
+  });
+  const weekBreakdowns = buildWeekBreakdowns({
+    rows,
+    activeResidentIds,
+    monthStart,
+    monthEnd,
+    timeZone: params.timeZone
+  });
+  const oneToOneReportEntries = buildOneToOneReportEntries(rows, monthStart, monthEnd, params.timeZone);
+  const oneToOneMissingEntries = oneToOneReportEntries.filter((entry) => entry.missingDateOrTime);
+  const oneToOneVisibleEntries = oneToOneReportEntries.filter((entry) => !entry.missingDateOrTime);
   const reports = {
     daily: {
-      summary: buildReportSummary({
+      summary: buildGroupReportSummary({
         title: "Daily Attendance Report",
         dateRangeLabel: dayLabel,
         generatedLabel,
-        range: daily,
-        rows,
-        start: dayStart,
-        end: dayEnd,
-        notSeenResidentCount: activeResidentIds.size - daily.participatedResidentCount
+        asOfLabel: dayLabel,
+        reportKind: "daily",
+        range: dailyGroupReport,
+        notSeenResidentCount: dailyNoGroupParticipation.length
       }),
-      rows: buildReportRows(rows, dayStart, dayEnd, params.timeZone)
+      rows: buildReportRows(rows, dayStart, dayEnd, params.timeZone),
+      activityBreakdowns: buildActivityBreakdowns(rows, dayStart, dayEnd, params.timeZone),
+      residentsNotSeen: dailyNoGroupParticipation
     },
     weekly: {
-      summary: buildReportSummary({
+      summary: buildGroupReportSummary({
         title: "Weekly Participation Report",
         dateRangeLabel: weekLabel,
         generatedLabel,
-        range: weekly,
+        asOfLabel: weeklyAsOfLabel,
+        reportKind: "weekly",
+        range: weeklyGroupReport,
+        notSeenResidentCount: weeklyNoGroupParticipation.length
+      }),
+      residentsNotSeen: weeklyNoGroupParticipation,
+      daySnapshots: buildDaySnapshots({
         rows,
+        activeResidentIds,
         start: weekStart,
         end: weekEnd,
-        notSeenResidentCount: residentsNotSeenThisWeek.length
+        timeZone: params.timeZone
       }),
-      residentsNotSeen: residentsNotSeenThisWeek
+      topActivities: buildMostAttendedActivities(rows.filter((row) => isWithinRange(row.activityInstance.startAt, weekStart, weekEnd)), params.timeZone, 10)
     },
     monthly: {
-      summary: buildReportSummary({
+      summary: buildGroupReportSummary({
         title: "Monthly Participation Report",
-        dateRangeLabel: monthLabel,
+        dateRangeLabel: monthRangeLabel,
         generatedLabel,
-        range: monthly,
-        rows,
-        start: monthStart,
-        end: monthEnd,
-        notSeenResidentCount: residentsNotSeenThisMonth.length
+        asOfLabel: monthlyAsOfLabel,
+        reportKind: "monthly",
+        range: monthlyGroupReport,
+        notSeenResidentCount: monthlyNoGroupParticipation.length
       }),
-      residentsNotSeen: residentsNotSeenThisMonth,
+      residentsNotSeen: monthlyNoGroupParticipation,
       residentParticipation: buildResidentParticipationRows({
         residents,
         rows,
@@ -1094,7 +1494,20 @@ export async function getAttendanceTrackerSummary(params: {
         monthEnd,
         timeZone: params.timeZone
       }),
-      mostAttendedActivities: buildMostAttendedActivities(monthlyRows)
+      mostAttendedActivities: buildMostAttendedActivities(monthlyRows, params.timeZone, 10),
+      weekBreakdowns
+    },
+    oneToOneMonthly: {
+      summary: buildOneToOneReportSummary({
+        entries: oneToOneReportEntries,
+        activeResidentCount: activeResidentIds.size,
+        monthLabel,
+        dateRangeLabel: monthRangeLabel,
+        generatedLabel,
+        weekCount: weekBreakdowns.length
+      }),
+      entries: oneToOneVisibleEntries,
+      missingDateOrTimeEntries: oneToOneMissingEntries
     }
   };
 
