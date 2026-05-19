@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.1 - 2026-05-19
+
+- Fixed Monthly Attendance Report participation rate to use the same shared monthly group participation calculation as the Attendance page.
+- Ensured monthly participation counts unique active resident IDs with at least one group activity attendance record.
+- Included group activity Leading records as group participation while keeping 1:1 visits separate.
+
 ## v1.5.0 - 2026-05-19
 
 - Expanded Attendance Tracker print reports with richer daily, weekly, and monthly group attendance summaries.
