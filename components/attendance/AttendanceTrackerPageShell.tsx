@@ -354,6 +354,13 @@ function buildPrintHtml(params: {
         .join("")}</section>`
     : "";
 
+  const signatureSection = `<section class="signature-section">
+      <div class="signature-row">
+        <div class="signature-line">Activities Director Signature:<span></span></div>
+        <div class="signature-line">Administrator Signature:<span></span></div>
+      </div>
+    </section>`;
+
   return `<!doctype html>
 <html>
   <head>
@@ -382,6 +389,10 @@ function buildPrintHtml(params: {
       th, td { border: 1px solid #d1d5db; padding: 9px; text-align: left; font-size: 13px; }
       th { background: #f3f4f6; }
       footer { margin-top: 32px; color: #6b7280; font-size: 12px; }
+      .signature-section { margin-top: 32px; padding-top: 16px; break-inside: avoid; page-break-inside: avoid; }
+      .signature-row { display: flex; flex-wrap: wrap; gap: 24px 32px; justify-content: space-between; align-items: flex-end; }
+      .signature-line { flex: 1 1 260px; color: #111827; font-size: 13px; font-weight: 700; white-space: nowrap; }
+      .signature-line span { display: inline-block; width: 220px; border-bottom: 1px solid #111827; margin-left: 8px; transform: translateY(-2px); }
       @page { margin: 0.55in; }
       @media print {
         body { margin: 0; }
@@ -449,6 +460,7 @@ function buildPrintHtml(params: {
           ${missingOneToOneEntries}`
         : ""
     }
+    ${signatureSection}
     <footer>Actify supports activity workflow and state-ready reporting. This report is not an EHR or clinical record system.</footer>
   </body>
 </html>`;

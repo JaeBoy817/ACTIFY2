@@ -447,3 +447,59 @@ export function FooterMeta({
     </View>
   );
 }
+
+export function ReportSignatureSection({
+  theme,
+  style
+}: {
+  theme: ReportThemeTokens;
+  style?: StyleLike;
+}) {
+  const styleList = Array.isArray(style) ? style : style ? [style] : [];
+
+  return (
+    <View
+      wrap={false}
+      style={[
+        {
+          marginTop: 16,
+          paddingTop: 10,
+          flexDirection: "row",
+          justifyContent: "space-between"
+        },
+        ...styleList
+      ]}
+    >
+      {["Activities Director Signature:", "Administrator Signature:"].map((label) => (
+        <View
+          key={label}
+          style={{
+            width: "48%",
+            flexDirection: "row",
+            alignItems: "flex-end"
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: PDF_BODY_FONT,
+              fontSize: 9,
+              lineHeight: 1.25,
+              color: theme.colors.textPrimary,
+              marginRight: 6
+            }}
+          >
+            {label}
+          </Text>
+          <View
+            style={{
+              flexGrow: 1,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.textPrimary,
+              height: 8
+            }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}

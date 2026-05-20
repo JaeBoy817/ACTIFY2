@@ -5,6 +5,7 @@ import { Defs, Document, Image, LinearGradient, Page, Path, RadialGradient, Rect
 
 import { ACTIFY_LOGO_FILE_CANDIDATES } from "@/lib/branding/constants";
 import { defaultReportTheme, type ReportThemeTokens } from "./ReportTheme";
+import { ReportSignatureSection } from "./components";
 import { PDF_BODY_FONT, PDF_DISPLAY_FONT } from "./fonts";
 import { type MonthlyReportPdfData } from "./types";
 
@@ -755,6 +756,8 @@ function monthlyReportDocument({
             </View>
           </View>
         ) : null}
+
+        <ReportSignatureSection theme={theme} style={{ marginTop: 14, marginBottom: 22 }} />
 
         <Footer theme={theme} generatedAt={generatedAt} includeMeta={includeFooterMeta ?? true} />
       </Page>

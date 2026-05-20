@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.3 - 2026-05-20
+
+- Added Activities Director and Administrator signature lines to printed/exported reports.
+- Kept existing report layouts, calculations, filters, and PDF styling unchanged.
+
 ## v1.5.2 - 2026-05-19
 
 - Updated monthly participation rate to include both group attendance and completed 1:1 visits.
