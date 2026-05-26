@@ -191,6 +191,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
+  const [editingResidentId, setEditingResidentId] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [trackAttendanceOpen, setTrackAttendanceOpen] = useState(false);
@@ -257,6 +258,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     }
     return visibleResidents[0] ?? null;
   }, [residents, selectedResidentId, visibleResidents]);
+
+  const editingResident = useMemo(() => {
+    if (!editingResidentId) return null;
+    return residents.find((resident) => resident.id === editingResidentId) ?? null;
+  }, [editingResidentId, residents]);
 
   const trackedResident = useMemo(() => {
     if (trackResidentId) {
@@ -424,14 +430,27 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   }
 
   function openCreateDrawer() {
+    setEditingResidentId(null);
     setDrawerMode("create");
     setDrawerOpen(true);
   }
 
-  function openEditDrawer() {
-    if (!selectedResident) return;
+  function openEditDrawer(residentId = selectedResident?.id) {
+    if (!residentId) {
+      setFeedback({ tone: "error", text: "Select a resident to edit." });
+      return;
+    }
+    setSelectedResidentId(residentId);
+    setEditingResidentId(residentId);
     setDrawerMode("edit");
     setDrawerOpen(true);
+  }
+
+  function closeResidentDrawer() {
+    if (isSavingResident) return;
+    setDrawerOpen(false);
+    setEditingResidentId(null);
+    setDrawerMode("create");
   }
 
   function openTrackAttendance(residentId: string) {
@@ -475,7 +494,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     void refreshParticipationSummaries();
   }
 
-  async function handleSaveResident(form: ResidentSnapshotFormValue) {
+  async function saveResident(form: ResidentSnapshotFormValue) {
     setIsSavingResident(true);
     setFeedback(null);
 
@@ -494,10 +513,16 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         setResidents((current) => [created, ...current]);
         setSelectedResidentId(created.id);
         setFeedback({ tone: "success", text: "Resident saved." });
+        setDrawerOpen(false);
+        setEditingResidentId(null);
+        setDrawerMode("create");
+        await refreshResidents();
+        return created;
       } else {
-        if (!selectedResident) throw new Error("Select a resident to edit.");
+        const residentId = editingResidentId ?? selectedResident?.id;
+        if (!residentId) throw new Error("Select a resident to edit.");
 
-        const payload = (await fetchJson(`/api/residents/${selectedResident.id}`, {
+        const payload = (await fetchJson(`/api/residents/${encodeURIComponent(residentId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(draft)
@@ -509,24 +534,29 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         setResidents((current) => current.map((resident) => (resident.id === updated.id ? updated : resident)));
         setSelectedResidentId(updated.id);
         setFeedback({ tone: "success", text: "Resident updated." });
+        setDrawerOpen(false);
+        setEditingResidentId(null);
+        setDrawerMode("create");
+        await refreshResidents();
+        return updated;
       }
-
-      setDrawerOpen(false);
-      await refreshResidents();
     } catch (error) {
       setFeedback({ tone: "error", text: getErrorMessage(error) });
+      throw error;
     } finally {
       setIsSavingResident(false);
     }
   }
 
+  async function handleSaveResident(form: ResidentSnapshotFormValue) {
+    await saveResident(form).catch(() => undefined);
+  }
+
   async function handleSaveAndAskActify(form: ResidentSnapshotFormValue) {
-    await handleSaveResident(form);
-    const target =
-      (selectedResidentId ? residents.find((resident) => resident.id === selectedResidentId) : null) ??
-      selectedResident;
-    if (!target) return;
-    launchAssistant(getAction("idea-1to1"), target);
+    const target = await saveResident(form).catch(() => null);
+    if (target) {
+      launchAssistant(getAction("idea-1to1"), target);
+    }
   }
 
   async function handleArchiveConfirm(input: { date: string; reason: ArchiveReason; note: string }) {
@@ -777,10 +807,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   {
                     id: `edit-${resident.id}`,
                     label: "Edit Resident",
-                    onClick: () => {
-                      setSelectedResidentId(resident.id);
-                      openEditDrawer();
-                    }
+                    onClick: () => openEditDrawer(resident.id)
                   },
                   {
                     id: `follow-up-${resident.id}`,
@@ -847,10 +874,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   {
                     id: `edit-list-${resident.id}`,
                     label: "Edit Resident",
-                    onClick: () => {
-                      setSelectedResidentId(resident.id);
-                      openEditDrawer();
-                    }
+                    onClick: () => openEditDrawer(resident.id)
                   },
                   {
                     id: `follow-up-list-${resident.id}`,
@@ -920,8 +944,8 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         <AddResidentDrawerSimple
           open
           mode={drawerMode}
-          resident={drawerMode === "edit" ? selectedResident : null}
-          onClose={() => setDrawerOpen(false)}
+          resident={drawerMode === "edit" ? editingResident : null}
+          onClose={closeResidentDrawer}
           onSave={handleSaveResident}
           onSaveAndAskActify={handleSaveAndAskActify}
           isSaving={isSavingResident}

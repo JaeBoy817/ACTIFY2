@@ -443,7 +443,7 @@ export function toFormValue(snapshot: ResidentSnapshot): ResidentSnapshotFormVal
     preferredName: snapshot.preferredName ?? "",
     room: snapshot.room,
     admissionDate: snapshot.admissionDate ? snapshot.admissionDate.slice(0, 10) : "",
-    status: snapshot.status === "DISCHARGED" ? "DISCHARGED" : "ACTIVE",
+    status: snapshot.status,
     birthDate: snapshot.birthDate ? snapshot.birthDate.slice(0, 10) : "",
     interests: snapshot.interests.join(", "),
     dislikes: snapshot.dislikes.join(", "),
@@ -473,7 +473,7 @@ export function toDraftPayload(value: ResidentSnapshotFormValue): ResidentDraftP
   const interests = uniqueList(splitList(value.interests));
   const likesTags = interests.slice(0, 4);
 
-  const tags = uniqueList(quickTags.concat(likesTags).concat(value.supportNeeds).concat(value.status === "PENDING" ? ["New Admission"] : []));
+  const tags = uniqueList(quickTags.concat(likesTags).concat(value.supportNeeds));
 
   const preferencesLines = [
     listToLine(FORM_LINE_KEYS.interests, value.interests),
@@ -502,8 +502,6 @@ export function toDraftPayload(value: ResidentSnapshotFormValue): ResidentDraftP
     plainToLine("General Support Notes", value.supportNeeds.length ? "See support need tags" : "")
   ].filter((line): line is string => Boolean(line));
 
-  const status = value.status === "DISCHARGED" ? "DISCHARGED" : "ACTIVE";
-
   return {
     firstName: parsedName.firstName,
     lastName: parsedName.lastName,
@@ -511,7 +509,7 @@ export function toDraftPayload(value: ResidentSnapshotFormValue): ResidentDraftP
     room: value.room.trim(),
     admissionDate: value.admissionDate.trim() || null,
     birthDate: value.birthDate.trim() || null,
-    status,
+    status: value.status,
     preferences: preferencesLines.length ? preferencesLines.join("\n") : null,
     notes: notesLines.length ? notesLines.join("\n") : null,
     safetyNotes: supportLines.length ? supportLines.join("\n") : null,

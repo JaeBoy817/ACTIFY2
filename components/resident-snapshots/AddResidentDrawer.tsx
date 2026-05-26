@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import { SUPPORT_NEED_OPTIONS, toDefaultFormValue, toFormValue } from "@/components/resident-snapshots/helpers";
 import type { ResidentSnapshot, ResidentSnapshotFormValue } from "@/components/resident-snapshots/types";
+import { formatResidentStatusLabel, residentStatusOptions } from "@/lib/resident-status";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
@@ -79,6 +80,10 @@ function TextareaField({
   );
 }
 
+function hasFirstAndLastName(fullName: string) {
+  return fullName.trim().split(/\s+/).filter(Boolean).length >= 2;
+}
+
 export function AddResidentDrawer({
   open,
   mode,
@@ -99,27 +104,34 @@ export function AddResidentDrawer({
   const [step, setStep] = useState<StepId>(1);
   const [form, setForm] = useState<ResidentSnapshotFormValue>(toDefaultFormValue());
   const [error, setError] = useState<string | null>(null);
+  const initializedFormKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-
-    if (mode === "edit" && resident) {
-      setForm(toFormValue(resident));
-      setStep(1);
-      setError(null);
+    if (!open) {
+      initializedFormKey.current = null;
       return;
     }
 
-    if (mode === "create" && !form.fullName && !form.room) {
-      setForm(toDefaultFormValue());
-      setStep(1);
-      setError(null);
+    const formKey = `${mode}:${resident?.id ?? "new"}`;
+    if (initializedFormKey.current === formKey) return;
+    initializedFormKey.current = formKey;
+
+    setStep(1);
+    setError(null);
+
+    if (mode === "edit" && resident) {
+      setForm(toFormValue(resident));
+      return;
     }
-  }, [open, mode, resident, form.fullName, form.room]);
+
+    if (mode === "create") {
+      setForm(toDefaultFormValue());
+    }
+  }, [open, mode, resident]);
 
   const canContinue = useMemo(() => {
     if (step === 1) {
-      return form.fullName.trim().length > 1 && form.room.trim().length > 0;
+      return hasFirstAndLastName(form.fullName) && form.room.trim().length > 0;
     }
     return true;
   }, [form.fullName, form.room, step]);
@@ -131,8 +143,8 @@ export function AddResidentDrawer({
   };
 
   async function saveNow(modeToUse: "save" | "save-and-ask") {
-    if (!form.fullName.trim() || !form.room.trim()) {
-      setError("Add a resident name and room number before saving.");
+    if (!hasFirstAndLastName(form.fullName) || !form.room.trim()) {
+      setError("Enter a first and last name plus room number before saving.");
       setStep(1);
       return;
     }
@@ -194,9 +206,11 @@ export function AddResidentDrawer({
                   onChange={(event) => updateField("status", event.target.value as ResidentSnapshotFormValue["status"])}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-100"
                 >
-                  <option value="ACTIVE">Active</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="DISCHARGED">Discharged</option>
+                  {residentStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {formatResidentStatusLabel(status)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <InputField label="Admission Date" type="date" value={form.admissionDate} onChange={(value) => updateField("admissionDate", value)} />
@@ -257,16 +271,26 @@ export function AddResidentDrawer({
           {error ? <p className="mt-4 text-sm font-medium text-rose-600">{error}</p> : null}
         </div>
 
-        <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-5 py-4">
-          <button
-            type="button"
-            onClick={() => setStep((current) => (current > 1 ? ((current - 1) as StepId) : current))}
-            disabled={step === 1 || isSaving}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ChevronLeft className="h-4 w-4" aria-hidden />
-            Back
-          </button>
+        <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep((current) => (current > 1 ? ((current - 1) as StepId) : current))}
+              disabled={step === 1 || isSaving}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+              Back
+            </button>
+          </div>
 
           {step < 3 ? (
             <button

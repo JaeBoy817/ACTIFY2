@@ -131,7 +131,7 @@ export type ResidentSnapshotFormValue = {
   preferredName: string;
   room: string;
   admissionDate: string;
-  status: "ACTIVE" | "PENDING" | "DISCHARGED";
+  status: ResidentListRow["status"];
   birthDate: string;
   interests: string;
   dislikes: string;
