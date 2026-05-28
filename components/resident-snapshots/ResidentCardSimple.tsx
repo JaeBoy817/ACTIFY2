@@ -2,11 +2,18 @@ import { Sparkles } from "lucide-react";
 
 import { ResidentAnalyticsMiniStrip } from "@/components/resident-snapshots/ResidentAnalyticsMiniStrip";
 import { ResidentMoreMenu, type ResidentMoreMenuAction } from "@/components/resident-snapshots/ResidentMoreMenu";
+import { ResidentParticipationPieChart } from "@/components/resident-snapshots/ResidentParticipationPieChart";
 import type { ResidentSnapshot } from "@/components/resident-snapshots/types";
 import { toRelativeDayLabel } from "@/components/resident-snapshots/helpers";
 import { ActionButton, StatusBadge, TagChip } from "@/components/workspace/shared";
-import { toResidentStatusLabel } from "@/lib/residents/types";
+import { formatResidentBirthDate, getResidentAge, toResidentStatusLabel } from "@/lib/residents/types";
 import { cn } from "@/lib/utils";
+
+function getBirthdateLabel(birthDate: string | null) {
+  if (!birthDate) return "Not listed";
+  const formatted = formatResidentBirthDate(birthDate);
+  return formatted === "Not set" ? "Not listed" : formatted;
+}
 
 export function ResidentCardSimple({
   resident,
@@ -16,6 +23,7 @@ export function ResidentCardSimple({
   onTrackAttendance,
   onViewDetails,
   moreActions,
+  monthLabel,
   showCheckbox,
   checked,
   onToggleChecked
@@ -27,10 +35,13 @@ export function ResidentCardSimple({
   onTrackAttendance: () => void;
   onViewDetails: () => void;
   moreActions: ResidentMoreMenuAction[];
+  monthLabel: string;
   showCheckbox?: boolean;
   checked?: boolean;
   onToggleChecked?: () => void;
 }) {
+  const birthdateLabel = getBirthdateLabel(resident.birthDate);
+  const age = getResidentAge(resident.birthDate);
   const compactBadges = [
     resident.followUpRequired ? "Needs Follow-Up" : null,
     resident.supportNeeds.some((need) => /bed-bound/i.test(need)) || resident.status === "BED_BOUND" ? "Bed-Bound" : null,
@@ -51,6 +62,10 @@ export function ResidentCardSimple({
         <button type="button" onClick={onSelect} className="text-left">
           <h3 className="text-base font-semibold text-slate-900">{resident.fullName}</h3>
           <p className="text-sm text-slate-600">Room {resident.room}</p>
+          <p className="text-xs text-slate-500">
+            Birthdate: {birthdateLabel}
+            {age !== null ? <span className="ml-1.5 text-slate-400">Age: {age}</span> : null}
+          </p>
           {resident.preferredName ? <p className="text-xs text-slate-500">Prefers: {resident.preferredName}</p> : null}
         </button>
         <div className="flex items-center gap-2">
@@ -79,6 +94,13 @@ export function ResidentCardSimple({
       <p className="mt-2 text-xs text-slate-500">Last engagement: {toRelativeDayLabel(resident.lastEngagementDate)}</p>
 
       <ResidentAnalyticsMiniStrip resident={resident} />
+
+      <ResidentParticipationPieChart
+        residentName={resident.fullName}
+        groupActivityCount={resident.attendedCountThisMonth ?? resident.attendanceCount ?? 0}
+        oneOnOneActivityCount={resident.oneToOneCompletedCountThisMonth ?? resident.oneToOneCount ?? 0}
+        monthLabel={monthLabel}
+      />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <ActionButton tone="secondary" onClick={onAskActify}>

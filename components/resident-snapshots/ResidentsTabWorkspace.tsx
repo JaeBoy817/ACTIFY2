@@ -169,6 +169,12 @@ function getBirthdayUpcomingScore(value: string | null) {
   return nextBirthday.getTime() - now.getTime();
 }
 
+function getParticipationMonthLabel(value?: string | null) {
+  const parsed = value ? new Date(value) : new Date();
+  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return `${safeDate.toLocaleDateString(undefined, { month: "long" })} Participation`;
+}
+
 export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialResidents: ResidentListRow[]; canEdit: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -202,6 +208,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   const [isArchiveSubmitting, setIsArchiveSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingParticipation, setIsLoadingParticipation] = useState(false);
+  const [participationMonthLabel, setParticipationMonthLabel] = useState(() => getParticipationMonthLabel());
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const deferredSearch = useDeferredValue(search.trim());
 
@@ -381,6 +388,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         "/api/attendance/residents/participation?timeframe=THIS_MONTH"
       )) as BulkResidentParticipationPayload;
       if (payload.ok) {
+        setParticipationMonthLabel(getParticipationMonthLabel(payload.rangeStart));
         applyParticipationSummaries(payload);
       }
     } catch {
@@ -803,6 +811,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   setSelectedResidentId(resident.id);
                   setDetailOpen(true);
                 }}
+                monthLabel={participationMonthLabel}
                 moreActions={[
                   {
                     id: `edit-${resident.id}`,
@@ -870,6 +879,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
                   setSelectedResidentId(resident.id);
                   setDetailOpen(true);
                 }}
+                monthLabel={participationMonthLabel}
                 moreActions={[
                   {
                     id: `edit-list-${resident.id}`,
