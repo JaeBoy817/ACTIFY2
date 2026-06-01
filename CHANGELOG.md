@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.6.0 - 2026-06-01
+
+- Added Residents Not Seen This Month tracking to identify active residents without group attendance or completed 1:1 documentation during the current month.
+
 ## v1.5.3 - 2026-05-20
 
 - Added Activities Director and Administrator signature lines to printed/exported reports.

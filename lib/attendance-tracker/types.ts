@@ -97,6 +97,8 @@ export type AttendanceTrackerResidentSummary = {
   room: string;
   unitName: string | null;
   lastParticipatedLabel?: string | null;
+  daysSinceLastParticipated?: number | null;
+  statusText?: string;
   recommendedAction?: string;
 };
 
@@ -122,6 +124,7 @@ export type AttendanceTrackerSummary = {
   weekly: AttendanceTrackerRangeSummary;
   monthly: AttendanceTrackerRangeSummary;
   residentsNotSeenThisWeek: AttendanceTrackerResidentSummary[];
+  residentsNotSeenThisMonth: AttendanceTrackerResidentSummary[];
   stateReadySummary: string;
   recentOneToOneVisits: AttendanceTrackerRecentOneToOneVisit[];
   reports: AttendanceTrackerReports;

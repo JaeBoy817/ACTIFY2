@@ -139,6 +139,11 @@ function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function monthlyNotSeenSummary(count: number) {
+  if (count === 0) return "All active residents have been seen this month.";
+  return `${count} ${count === 1 ? "resident has" : "residents have"} not been seen this month.`;
+}
+
 function matchesResidentSearch(resident: AttendanceQuickResident, query: string) {
   if (!query) return true;
   const haystack = `${resident.firstName} ${resident.lastName} ${resident.room} ${resident.unitName ?? ""}`.toLowerCase();
@@ -214,7 +219,18 @@ function buildTrackerCsv(params: {
     [],
     ["Residents Not Participated This Week"],
     ["Name", "Room", "Unit"],
-    ...summary.residentsNotSeenThisWeek.map((resident) => [resident.name, resident.room, resident.unitName ?? ""])
+    ...summary.residentsNotSeenThisWeek.map((resident) => [resident.name, resident.room, resident.unitName ?? ""]),
+    [],
+    ["Residents Not Seen This Month"],
+    ["Name", "Room", "Unit", "Last Seen", "Days Since Last Documented Activity", "Status"],
+    ...summary.residentsNotSeenThisMonth.map((resident) => [
+      resident.name,
+      resident.room,
+      resident.unitName ?? "",
+      resident.lastParticipatedLabel ?? "Never documented",
+      resident.daysSinceLastParticipated ?? "",
+      resident.statusText ?? "No activity documented this month"
+    ])
   ];
 
   return rows.map((row) => row.map(toCsvCell).join(",")).join("\n");
@@ -244,6 +260,19 @@ function buildPrintHtml(params: {
           )
           .join("")
       : `<tr><td colspan="3">${escapeHtml(emptyText)}</td></tr>`;
+
+  const monthlyNotSeenRows = summary.residentsNotSeenThisMonth.length
+    ? summary.residentsNotSeenThisMonth
+        .map(
+          (resident) =>
+            `<tr><td>${escapeHtml(resident.name)}</td><td>${escapeHtml(resident.room || "Not entered")}</td><td>${escapeHtml(
+              resident.lastParticipatedLabel ?? "Never documented"
+            )}</td><td>${resident.daysSinceLastParticipated === null || resident.daysSinceLastParticipated === undefined ? "Not available" : `${resident.daysSinceLastParticipated} days`}</td><td>${escapeHtml(
+              resident.statusText ?? "No activity documented this month"
+            )}</td></tr>`
+        )
+        .join("")
+    : `<tr><td colspan="5">All active residents were seen this month.</td></tr>`;
 
   const activityBreakdowns = summary.reports.daily.activityBreakdowns.length
     ? summary.reports.daily.activityBreakdowns
@@ -300,7 +329,7 @@ function buildPrintHtml(params: {
         ["Group Activity Check-Ins", summary.reports.monthly.summary.groupCheckIns],
         ["Completed 1:1 Visits", summary.reports.monthly.summary.oneToOneVisits],
         ["Group Activities Held", summary.reports.monthly.summary.groupSessionCount],
-        ["Residents With No Group Participation", summary.reports.monthly.summary.notSeenResidentCount]
+        ["Residents Not Seen This Month", summary.reports.monthly.summary.notSeenResidentCount]
       ]
         .map(([metric, value]) => `<tr><td>${escapeHtml(String(metric))}</td><td>${escapeHtml(String(value))}</td></tr>`)
         .join("")
@@ -439,13 +468,13 @@ function buildPrintHtml(params: {
       params.reportType === "monthly"
         ? `<div class="grid">
             <div class="card"><div class="muted">Active Residents</div><div class="value">${summary.reports.monthly.summary.totalActiveResidents}</div></div>
-            <div class="card"><div class="muted">Group Participants</div><div class="value">${summary.reports.monthly.summary.participatedResidentCount}</div></div>
+            <div class="card"><div class="muted">Monthly Participants</div><div class="value">${summary.reports.monthly.summary.participatedResidentCount}</div></div>
             <div class="card"><div class="muted">Monthly Rate</div><div class="value">${escapeHtml(formatPercent(summary.reports.monthly.summary.participationPercent))}</div></div>
           </div>
           <section class="section"><h2>Monthly Analytics</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>${monthlyAnalytics}</tbody></table></section>
           <section class="section"><h2>Week-by-Week Breakdown</h2><table><thead><tr><th>Week</th><th>Group Activities</th><th>Total Check-Ins</th><th>Unique Residents Participated</th><th>Participation %</th><th>1:1 Visits</th></tr></thead><tbody>${monthlyWeekRows}</tbody></table></section>
           <section class="section"><h2>Most Attended Activities This Month</h2><table><thead><tr><th>Activity</th><th>Date</th><th>Time</th><th>Attendance Count</th></tr></thead><tbody>${monthlyTopActivities}</tbody></table></section>
-          <section class="section"><h2>Residents With No Monthly Group Participation</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Recommended Action</th></tr></thead><tbody>${residentRows(summary.reports.monthly.residentsNotSeen, "All active residents had recorded group participation this month.")}</tbody></table></section>`
+          <section class="section"><h2>Residents Not Seen This Month</h2><table><thead><tr><th>Resident</th><th>Room</th><th>Last Seen</th><th>Days Since Last Documented Activity</th><th>Status</th></tr></thead><tbody>${monthlyNotSeenRows}</tbody></table></section>`
         : ""
     }
     ${
@@ -1182,6 +1211,7 @@ export function AttendanceTrackerPageShell({
             ) : null}
               </div>
 
+            <div className="space-y-5">
             <Card ref={notSeenRef} className="overflow-hidden border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl">
@@ -1225,6 +1255,70 @@ export function AttendanceTrackerPageShell({
                 )}
               </CardContent>
             </Card>
+            <Card className="overflow-hidden border-white/80 bg-white/90 shadow-[0_16px_45px_rgba(15,23,42,0.06)]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-2xl">
+                  <UserCheck className="h-6 w-6 text-indigo-600" />
+                  Residents Not Seen This Month
+                </CardTitle>
+                <CardDescription>
+                  Active residents without group attendance or completed 1:1 documentation this month.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {summary.activeResidentCount === 0 ? (
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 text-sm text-amber-800">
+                    <p className="font-semibold">No active residents found.</p>
+                    <p className="mt-1">Add residents in the Residents tab before taking attendance.</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-4 text-sm font-semibold text-slate-700">
+                      {monthlyNotSeenSummary(summary.residentsNotSeenThisMonth.length)}
+                    </p>
+                    {summary.residentsNotSeenThisMonth.length > 0 ? (
+                      <div className="overflow-hidden rounded-2xl border border-slate-100">
+                        <div className="hidden grid-cols-[1.15fr_0.35fr_0.8fr_0.75fr_1fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 lg:grid">
+                          <span>Resident Name</span>
+                          <span>Room</span>
+                          <span>Last Seen</span>
+                          <span>Days Since</span>
+                          <span>Status</span>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                          {summary.residentsNotSeenThisMonth.map((resident) => (
+                            <div
+                              key={resident.id}
+                              className="grid gap-2 bg-white px-4 py-4 text-sm lg:grid-cols-[1.15fr_0.35fr_0.8fr_0.75fr_1fr] lg:items-center"
+                            >
+                              <div>
+                                <p className="font-semibold text-slate-950">{resident.name}</p>
+                                <p className="text-xs text-slate-500 lg:hidden">Room {resident.room}</p>
+                              </div>
+                              <p className="hidden text-slate-600 lg:block">{resident.room}</p>
+                              <p className="text-slate-600">{resident.lastParticipatedLabel ?? "Never documented"}</p>
+                              <p className="text-slate-600">
+                                {resident.daysSinceLastParticipated === null || resident.daysSinceLastParticipated === undefined
+                                  ? "Not available"
+                                  : `${resident.daysSinceLastParticipated} days`}
+                              </p>
+                              <p className="font-medium text-slate-700">
+                                {resident.statusText ?? "No activity documented this month"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+                        All active residents have been seen this month.
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            </div>
             </section>
           </>
         ) : null}
@@ -1745,7 +1839,9 @@ export function AttendanceTrackerPageShell({
                         <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.totalActiveResidents ?? 0}</p>
                       </div>
                       <div className="rounded-2xl bg-gradient-to-br from-cyan-50 to-white p-4 shadow-inner shadow-white">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Group Participants</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                          {reportType === "monthly" ? "Monthly Participants" : "Group Participants"}
+                        </p>
                         <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.participatedResidentCount ?? 0}</p>
                       </div>
                       <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-4 shadow-inner shadow-white">
@@ -1753,7 +1849,9 @@ export function AttendanceTrackerPageShell({
                         <p className="mt-2 text-2xl font-bold">{formatPercent(selectedAttendanceReportSummary?.participationPercent ?? 0)}</p>
                       </div>
                       <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-4 shadow-inner shadow-white">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">No Group Participation</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                          {reportType === "monthly" ? "Not Seen This Month" : "No Group Participation"}
+                        </p>
                         <p className="mt-2 text-2xl font-bold">{selectedAttendanceReportSummary?.notSeenResidentCount ?? 0}</p>
                       </div>
                     </div>
@@ -1953,20 +2051,29 @@ export function AttendanceTrackerPageShell({
                       </div>
                     </div>
                     <div>
-                      <h4 className="text-lg font-bold text-slate-950">Residents With No Monthly Group Participation</h4>
+                      <h4 className="text-lg font-bold text-slate-950">Residents Not Seen This Month</h4>
                       {summary.reports.monthly.residentsNotSeen.length > 0 ? (
                         <div className="mt-3 grid gap-2 md:grid-cols-2">
                           {summary.reports.monthly.residentsNotSeen.map((resident) => (
                             <div key={resident.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
                               <p className="font-semibold text-slate-950">{resident.name}</p>
-                              <p className="text-slate-500">Room {resident.room}</p>
-                              <p className="mt-2 font-medium text-slate-700">{resident.recommendedAction ?? "Follow up this month"}</p>
+                              <p className="text-slate-500">
+                                Room {resident.room} · {resident.lastParticipatedLabel ?? "Never documented"}
+                              </p>
+                              <p className="mt-2 text-slate-600">
+                                {resident.daysSinceLastParticipated === null || resident.daysSinceLastParticipated === undefined
+                                  ? "Days since last documented activity: Not available"
+                                  : `${resident.daysSinceLastParticipated} days since last documented activity`}
+                              </p>
+                              <p className="mt-2 font-medium text-slate-700">
+                                {resident.statusText ?? "No activity documented this month"}
+                              </p>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-                          All active residents had recorded group participation this month.
+                          All active residents were seen this month.
                         </div>
                       )}
                     </div>
