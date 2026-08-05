@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.2 - 2026-08-05
+
+- Fixed authenticated app loading after sign-in by hardening the user/facility bootstrap path.
+- Added Vercel build schema sync so production deployments apply the current Prisma schema.
+
 ## v1.6.1 - 2026-08-05
 
 - Fixed the Residents Not Seen This Month last-seen lookup to avoid loading large historical attendance sets during server rendering.
