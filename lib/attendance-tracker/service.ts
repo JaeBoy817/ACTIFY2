@@ -452,6 +452,37 @@ function monthlyStatsToGroupReportRange(stats: MonthlyAttendanceStats): GroupRep
   };
 }
 
+async function getLastParticipationByResidentId(params: {
+  facilityId: string;
+  residentIds: string[];
+  before: Date;
+}) {
+  if (params.residentIds.length === 0) {
+    return new Map<string, Date>();
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ residentId: string; lastParticipatedAt: Date | null }>>`
+    SELECT
+      a."residentId" AS "residentId",
+      MAX(ai."startAt") AS "lastParticipatedAt"
+    FROM "Attendance" a
+    INNER JOIN "ActivityInstance" ai ON ai."id" = a."activityInstanceId"
+    WHERE a."residentId" IN (${Prisma.join(params.residentIds)})
+      AND a."status"::text IN (${Prisma.join([...PARTICIPATION_STATUSES])})
+      AND ai."facilityId" = ${params.facilityId}
+      AND ai."startAt" < ${params.before}
+    GROUP BY a."residentId"
+  `;
+
+  const lastParticipationByResidentId = new Map<string, Date>();
+  for (const row of rows) {
+    if (row.lastParticipatedAt) {
+      lastParticipationByResidentId.set(row.residentId, row.lastParticipatedAt);
+    }
+  }
+  return lastParticipationByResidentId;
+}
+
 function buildMonthlyNotSeenResidents(params: {
   residents: AttendanceTrackerResidentSummary[];
   lastParticipationByResidentId: Map<string, Date>;
@@ -1544,39 +1575,11 @@ export async function getAttendanceTrackerSummary(params: {
     timeZone: params.timeZone
   });
   const monthlyNotSeenResidentIds = monthlyAttendanceStats.residentsNotSeenThisMonth.map((resident) => resident.id);
-  const monthlyLastParticipationRows = monthlyNotSeenResidentIds.length
-    ? await prisma.attendance.findMany({
-        where: {
-          residentId: { in: monthlyNotSeenResidentIds },
-          status: { in: [...PARTICIPATION_STATUSES] },
-          activityInstance: {
-            facilityId: params.facilityId,
-            startAt: {
-              lt: monthStart
-            }
-          }
-        },
-        orderBy: {
-          activityInstance: {
-            startAt: "desc"
-          }
-        },
-        select: {
-          residentId: true,
-          activityInstance: {
-            select: {
-              startAt: true
-            }
-          }
-        }
-      })
-    : [];
-  const monthlyLastParticipationByResidentId = new Map<string, Date>();
-  for (const row of monthlyLastParticipationRows) {
-    if (!monthlyLastParticipationByResidentId.has(row.residentId)) {
-      monthlyLastParticipationByResidentId.set(row.residentId, row.activityInstance.startAt);
-    }
-  }
+  const monthlyLastParticipationByResidentId = await getLastParticipationByResidentId({
+    facilityId: params.facilityId,
+    residentIds: monthlyNotSeenResidentIds,
+    before: monthStart
+  });
   const residentsNotSeenThisMonth = buildMonthlyNotSeenResidents({
     residents: monthlyAttendanceStats.residentsNotSeenThisMonth,
     lastParticipationByResidentId: monthlyLastParticipationByResidentId,

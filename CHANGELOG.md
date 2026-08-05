@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.6.1 - 2026-08-05
+
+- Fixed the Residents Not Seen This Month last-seen lookup to avoid loading large historical attendance sets during server rendering.
+
 ## v1.6.0 - 2026-06-01
 
 - Added Residents Not Seen This Month tracking to identify active residents without group attendance or completed 1:1 documentation during the current month.
