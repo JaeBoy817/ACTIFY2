@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AssistantExampleCardGrid, type AssistantExampleCard } from "@/components/assistant/AssistantExampleCardGrid";
 import { AssistantGreeting } from "@/components/assistant/AssistantGreeting";
 import { AssistantOrb } from "@/components/assistant/AssistantOrb";
+import BorderGlow from "@/components/ui/border-glow";
 
 type AssistantEmptyStateProps = {
   name: string | null;
@@ -28,7 +29,21 @@ export function AssistantEmptyState({
           <AssistantOrb />
         </div>
         <AssistantGreeting name={name} />
-        <div className="mx-auto w-full max-w-3xl">{composer}</div>
+        <div className="mx-auto w-full max-w-3xl">
+          <BorderGlow
+            edgeSensitivity={24}
+            glowColor="188 88 58"
+            backgroundColor="#ffffff"
+            borderRadius={32}
+            glowRadius={26}
+            glowIntensity={0.72}
+            coneSpread={20}
+            fillOpacity={0.16}
+            colors={["#0f766e", "#38bdf8", "#f59e0b"]}
+          >
+            {composer}
+          </BorderGlow>
+        </div>
         <div className="mx-auto w-full max-w-4xl">
           <AssistantExampleCardGrid cards={cards} activePrompt={activePrompt} onSelect={onSelectPrompt} />
         </div>
