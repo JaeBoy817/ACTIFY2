@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { CircleDot } from "lucide-react";
+import { CircleDot, Settings } from "lucide-react";
 
 import { ActifyLogo } from "@/components/branding/ActifyLogo";
 import { MainTabs } from "@/components/workspace/MainTabs";
@@ -34,6 +34,13 @@ export function WorkspaceLayoutShell({
             </div>
 
             <div className="ml-auto flex items-center gap-2.5">
+              <Link
+                href="/app/settings"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                <Settings className="h-3.5 w-3.5" aria-hidden />
+                Settings
+              </Link>
               <span className="hidden items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700 sm:inline-flex">
                 <CircleDot className="h-3 w-3 fill-current" aria-hidden />
                 Live Assistant
