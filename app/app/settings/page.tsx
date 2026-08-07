@@ -1,42 +1,21 @@
-import { Role } from "@prisma/client";
+import { SubscriptionStatus } from "@prisma/client";
 
-import { type SettingsTabKey } from "@/app/app/settings/_components/SettingsTabs";
-import { SettingsTabsLazy } from "@/app/app/settings/_components/SettingsTabsLazy";
+import { ProductionSettingsWorkspaceLazy } from "@/app/app/settings/_components/ProductionSettingsWorkspaceLazy";
 import { requireFacilityContext } from "@/lib/auth";
-import { parseFacilitySettingsRow, parseUserSettingsRow } from "@/lib/settings/defaults";
-import { ensureFacilitySettingsRecord, ensureUserSettingsRecord } from "@/lib/settings/ensure";
+import { getFacilityBillingState } from "@/lib/billing";
+import { getStripePlanDetailsFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
-
-const validTabs: SettingsTabKey[] = [
-  "facility",
-  "roles",
-  "modules",
-  "calendar",
-  "docs",
-  "careplan",
-  "reports",
-  "inventory",
-  "notifications",
-  "compliance",
-  "personal"
-];
-
-function getInitialTab(tab?: string): SettingsTabKey {
-  if (!tab) return "facility";
-  if (validTabs.includes(tab as SettingsTabKey)) {
-    return tab as SettingsTabKey;
-  }
-  return "facility";
-}
+import { ensureFacilitySettingsRecord, ensureUserSettingsRecord } from "@/lib/settings/ensure";
+import { buildProductionSettingsSnapshot, normalizeSectionParam } from "@/lib/settings/production-settings";
 
 export default async function SettingsPage({
   searchParams
 }: {
-  searchParams?: { tab?: string };
+  searchParams?: { section?: string; tab?: string };
 }) {
   const context = await requireFacilityContext();
 
-  const [facilitySettings, userSettings, users, units, auditEntries] = await Promise.all([
+  const [facilitySettings, userSettings, users, auditEntries, billing] = await Promise.all([
     ensureFacilitySettingsRecord({
       facilityId: context.facilityId,
       timezone: context.facility.timezone,
@@ -52,14 +31,6 @@ export default async function SettingsPage({
         role: true
       },
       orderBy: [{ role: "asc" }, { email: "asc" }]
-    }),
-    prisma.unit.findMany({
-      where: { facilityId: context.facilityId },
-      select: {
-        id: true,
-        name: true
-      },
-      orderBy: { name: "asc" }
     }),
     prisma.auditLog.findMany({
       where: {
@@ -79,24 +50,53 @@ export default async function SettingsPage({
       },
       orderBy: { createdAt: "desc" },
       take: 20
+    }),
+    getFacilityBillingState(context.facilityId).catch((error) => {
+      console.error("[settings] billing lookup failed", error);
+      return {
+        facilityId: context.facilityId,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripePriceId: null,
+        subscriptionStatus: SubscriptionStatus.NONE,
+        subscriptionCurrentPeriodEnd: null,
+        hasActiveSubscription: false
+      };
     })
   ]);
 
-  const initialTab = getInitialTab(searchParams?.tab);
+  const settingsSnapshot = buildProductionSettingsSnapshot({
+    user: {
+      name: context.user.name,
+      email: context.user.email
+    },
+    facilityName: context.facility.name,
+    facilityTimezone: context.facility.timezone,
+    facilitySettings,
+    userSettings
+  });
+
+  const planDetails = getStripePlanDetailsFromPriceId(billing.stripePriceId);
+  const planName = planDetails?.planName ?? "Actify Pro";
+  const planPriceLabel =
+    planDetails?.planKey === "annual"
+      ? "$60 / year"
+      : planDetails?.planKey === "monthly"
+        ? "$5.99 / month"
+        : "$5.99 monthly or $60 yearly";
 
   return (
-    <SettingsTabsLazy
-      initialTab={initialTab}
+    <ProductionSettingsWorkspaceLazy
+      initialSection={normalizeSectionParam(searchParams?.section ?? searchParams?.tab)}
       role={context.role}
       facilityName={context.facility.name}
-      facilityTimezone={context.facility.timezone}
+      values={settingsSnapshot.values}
       users={users.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role as Role
+        role: user.role
       }))}
-      units={units}
       auditEntries={auditEntries.map((entry) => ({
         id: entry.id,
         action: entry.action,
@@ -104,8 +104,15 @@ export default async function SettingsPage({
         createdAt: entry.createdAt.toISOString(),
         actorName: entry.actorUser?.name ?? null
       }))}
-      facilitySettings={parseFacilitySettingsRow(facilitySettings)}
-      userSettings={parseUserSettingsRow(userSettings)}
+      billing={{
+        status: billing.subscriptionStatus,
+        currentPeriodEnd: billing.subscriptionCurrentPeriodEnd?.toISOString() ?? null,
+        stripeCustomerId: billing.stripeCustomerId,
+        stripePriceId: billing.stripePriceId,
+        hasActiveSubscription: billing.hasActiveSubscription,
+        planName,
+        planPriceLabel
+      }}
     />
   );
 }
