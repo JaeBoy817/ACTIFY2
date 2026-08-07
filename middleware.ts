@@ -48,9 +48,11 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
     console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
   }
 
-  // Keep legacy /app/* modules collapsed to the assistant, but allow the
-  // active Attendance Tracker workspace to render at /app/attendance.
-  if (pathname.startsWith("/app/") && !pathname.startsWith("/app/attendance")) {
+  const allowedAppWorkspaceRoutes = ["/app/attendance", "/app/settings"];
+
+  // Keep legacy /app/* modules collapsed to the assistant, but allow active
+  // workspace pages that have dedicated implementations to render normally.
+  if (pathname.startsWith("/app/") && !allowedAppWorkspaceRoutes.some((route) => pathname.startsWith(route))) {
     const assistantUrl = new URL("/app", req.url);
     assistantUrl.search = req.nextUrl.search;
     return NextResponse.redirect(assistantUrl);
