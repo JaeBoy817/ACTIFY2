@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, ClipboardCheck, Sparkles, UserRound } from "lucide-react";
+import { CalendarDays, ClipboardCheck, Settings, Sparkles, UserRound } from "lucide-react";
 
 import { OPEN_ASSISTANT_MAIN_EVENT } from "@/lib/assistant/events";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,12 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
     label: "Attendance",
     helpText: "Track group and 1:1 participation statistics.",
     icon: ClipboardCheck
+  },
+  {
+    href: "/app/settings",
+    label: "Settings",
+    helpText: "Manage facility, AI, reports, team, and account settings.",
+    icon: Settings
   }
 ];
 
@@ -48,7 +54,7 @@ export function MainTabs() {
     <nav aria-label="Primary workspace tabs" className="mt-4">
       <ul className="flex flex-wrap gap-2">
         {WORKSPACE_TABS.map((tab) => {
-          const isActive = pathname === tab.href;
+          const isActive = tab.href === "/app" ? pathname === tab.href : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           const Icon = tab.icon;
 
           return (
