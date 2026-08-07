@@ -49,6 +49,11 @@ const ArchiveResidentModal = dynamic(
   { loading: () => null }
 );
 
+const BulkArchiveResidentsModal = dynamic(
+  () => import("@/components/resident-snapshots/BulkArchiveResidentsModal").then((module) => module.BulkArchiveResidentsModal),
+  { loading: () => null }
+);
+
 const ResidentDetailDrawer = dynamic(
   () => import("@/components/resident-snapshots/ResidentDetailDrawer").then((module) => module.ResidentDetailDrawer),
   { loading: () => null }
@@ -199,6 +204,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const [editingResidentId, setEditingResidentId] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [trackAttendanceOpen, setTrackAttendanceOpen] = useState(false);
   const [trackResidentId, setTrackResidentId] = useState<string | null>(null);
@@ -206,6 +212,7 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
   const [isSavingResident, setIsSavingResident] = useState(false);
   const [isArchiveSubmitting, setIsArchiveSubmitting] = useState(false);
+  const [isBulkArchiveSubmitting, setIsBulkArchiveSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingParticipation, setIsLoadingParticipation] = useState(false);
   const [participationMonthLabel, setParticipationMonthLabel] = useState(() => getParticipationMonthLabel());
@@ -302,6 +309,11 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
       setSelectedIds([]);
     }
   }, [bulkMode]);
+
+  useEffect(() => {
+    const residentIds = new Set(residents.map((resident) => resident.id));
+    setSelectedIds((current) => current.filter((residentId) => residentIds.has(residentId)));
+  }, [residents]);
 
   const residentIdSignature = useMemo(
     () =>
@@ -435,6 +447,14 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
 
   function toggleSelect(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
+  }
+
+  function selectVisibleResidents() {
+    setSelectedIds(visibleResidents.map((resident) => resident.id));
+  }
+
+  function clearSelectedResidents() {
+    setSelectedIds([]);
   }
 
   function openCreateDrawer() {
@@ -635,6 +655,58 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     }
   }
 
+  function openBulkArchiveModal() {
+    if (!canEdit) {
+      setFeedback({ tone: "error", text: "You do not have permission to archive residents." });
+      return;
+    }
+
+    if (selectedResidentsForBulkArchive.length === 0) {
+      setFeedback({ tone: "error", text: "Select at least one active resident to archive." });
+      return;
+    }
+
+    setBulkArchiveOpen(true);
+  }
+
+  async function handleBulkArchiveConfirm(input: { date: string; reason: ArchiveReason; note: string }) {
+    if (selectedResidentsForBulkArchive.length === 0) return;
+    setIsBulkArchiveSubmitting(true);
+
+    try {
+      const payload = (await fetchJson("/api/residents/bulk-archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          residentIds: selectedResidentsForBulkArchive.map((resident) => resident.id),
+          date: input.date,
+          reason: input.reason,
+          note: input.note
+        })
+      })) as { archivedCount?: number; residents?: ResidentListRow[] };
+
+      const archivedSnapshots = toSnapshotCollection(payload.residents ?? []);
+      const archivedMap = new Map(archivedSnapshots.map((resident) => [resident.id, resident]));
+      const archivedCount = payload.archivedCount ?? archivedSnapshots.length;
+
+      setResidents((current) => current.map((resident) => archivedMap.get(resident.id) ?? resident));
+      setSelectedIds([]);
+      setBulkMode(false);
+      setBulkArchiveOpen(false);
+      setView("ARCHIVED");
+      setSelectedResidentId(archivedSnapshots[0]?.id ?? null);
+      setFeedback({
+        tone: "success",
+        text: `${archivedCount} resident${archivedCount === 1 ? "" : "s"} archived.`
+      });
+      await refreshResidents();
+    } catch (error) {
+      setFeedback({ tone: "error", text: getErrorMessage(error) });
+    } finally {
+      setIsBulkArchiveSubmitting(false);
+    }
+  }
+
   async function saveFollowUp(draft: FollowUpDraft, askActifyAfterSave: boolean) {
     if (!selectedResident) return;
     if (!draft.date.trim()) {
@@ -701,6 +773,10 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
     () => residents.filter((resident) => selectedIdSet.has(resident.id)),
     [residents, selectedIdSet]
   );
+  const selectedResidentsForBulkArchive = useMemo(
+    () => selectedResidentsForBulk.filter((resident) => !isArchivedStatus(resident.status)),
+    [selectedResidentsForBulk]
+  );
 
   return (
     <section className="space-y-4" aria-label="Residents workspace">
@@ -760,16 +836,21 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
         bulkMode={bulkMode}
       />
 
-      {bulkMode && selectedIds.length > 0 ? (
+      {bulkMode ? (
         <ResidentsBulkActionBar
           count={selectedIds.length}
+          visibleCount={visibleResidents.length}
+          isArchiving={isBulkArchiveSubmitting}
+          archiveDisabled={selectedResidentsForBulkArchive.length === 0}
+          onSelectVisible={selectVisibleResidents}
+          onClearSelection={clearSelectedResidents}
           onAddTag={() => setFeedback({ tone: "success", text: "Bulk tag flow opened." })}
           onAddFollowUp={() => setFollowUpOpen(true)}
           onAskActify={() => {
             const prompt = `Help me prioritize these residents: ${selectedResidentsForBulk.map((resident) => resident.fullName).join(", ")}.`;
             router.push(`/app?assistantPrompt=${encodeURIComponent(prompt)}`);
           }}
-          onArchive={() => setFeedback({ tone: "success", text: "Bulk archive flow started." })}
+          onArchive={openBulkArchiveModal}
           onExportSummaries={() => setFeedback({ tone: "success", text: "Resident summary export prepared." })}
           onExportParticipation={() => setFeedback({ tone: "success", text: "Participation snapshot export prepared." })}
         />
@@ -969,6 +1050,19 @@ export function ResidentsTabWorkspace({ initialResidents, canEdit }: { initialRe
           onClose={() => setArchiveOpen(false)}
           onConfirm={handleArchiveConfirm}
           isSubmitting={isArchiveSubmitting}
+        />
+      ) : null}
+
+      {bulkArchiveOpen ? (
+        <BulkArchiveResidentsModal
+          open
+          residents={selectedResidentsForBulkArchive}
+          onClose={() => {
+            if (isBulkArchiveSubmitting) return;
+            setBulkArchiveOpen(false);
+          }}
+          onConfirm={handleBulkArchiveConfirm}
+          isSubmitting={isBulkArchiveSubmitting}
         />
       ) : null}
 
