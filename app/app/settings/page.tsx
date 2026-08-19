@@ -126,7 +126,7 @@ export default async function SettingsPage({
     })
   ]);
 
-  const settingsSnapshot = buildProductionSettingsSnapshot({
+  const snapshotInput = {
     user: {
       name: context.user.name,
       email: context.user.email
@@ -135,9 +135,33 @@ export default async function SettingsPage({
     facilityTimezone: context.facility.timezone,
     facilitySettings,
     userSettings
-  });
+  };
 
-  const planDetails = getStripePlanDetailsFromPriceId(billing.stripePriceId);
+  const settingsSnapshot = (() => {
+    try {
+      return buildProductionSettingsSnapshot(snapshotInput);
+    } catch (error) {
+      logSettingsLoadError("settings snapshot build", error);
+      return buildProductionSettingsSnapshot({
+        ...snapshotInput,
+        facilitySettings: fallbackFacilitySettings({
+          facilityId: context.facilityId,
+          timezone: context.facility.timezone,
+          moduleFlags: context.facility.moduleFlags
+        }),
+        userSettings: fallbackUserSettings(context.user.id)
+      });
+    }
+  })();
+
+  const planDetails = (() => {
+    try {
+      return getStripePlanDetailsFromPriceId(billing.stripePriceId);
+    } catch (error) {
+      logSettingsLoadError("plan lookup", error);
+      return null;
+    }
+  })();
   const planName = planDetails?.planName ?? "Actify Pro";
   const planPriceLabel =
     planDetails?.planKey === "annual"

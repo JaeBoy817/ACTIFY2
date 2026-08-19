@@ -1,4 +1,14 @@
-import { DefaultLanding, FontScale, Role, SubscriptionStatus, type FacilitySettings, type UserSettings } from "@prisma/client";
+import type { DefaultLanding, FontScale, Role, SubscriptionStatus, FacilitySettings, UserSettings } from "@prisma/client";
+
+const DEFAULT_LANDING_OPTIONS = ["DASHBOARD", "CALENDAR", "NOTES", "RESIDENTS"] as const satisfies readonly DefaultLanding[];
+const FONT_SCALE_OPTIONS = ["SM", "MD", "LG"] as const satisfies readonly FontScale[];
+
+const ROLE_VALUES = {
+  ADMIN: "ADMIN",
+  AD: "AD",
+  ASSISTANT: "ASSISTANT",
+  READ_ONLY: "READ_ONLY"
+} as const satisfies Record<Role, Role>;
 import { z } from "zod";
 
 import {
@@ -83,8 +93,8 @@ export const profileSettingsSchema = z.object({
   initials: z.string().trim().max(10).optional().default(""),
   preferredTimeFormat: z.enum(["12H", "24H"]),
   personalTimezone: z.string().trim().min(2, "Timezone is required."),
-  defaultLandingPage: z.nativeEnum(DefaultLanding),
-  fontScale: z.nativeEnum(FontScale),
+  defaultLandingPage: z.enum(DEFAULT_LANDING_OPTIONS),
+  fontScale: z.enum(FONT_SCALE_OPTIONS),
   highContrast: z.boolean(),
   reduceMotion: z.boolean()
 });
@@ -689,13 +699,13 @@ export function subscriptionStatusLabel(status: SubscriptionStatus) {
 
 export function roleDisplayLabel(role: Role) {
   switch (role) {
-    case Role.ADMIN:
+    case ROLE_VALUES.ADMIN:
       return "Owner / Administrator";
-    case Role.AD:
+    case ROLE_VALUES.AD:
       return "Activities Director";
-    case Role.ASSISTANT:
+    case ROLE_VALUES.ASSISTANT:
       return "Activities Assistant";
-    case Role.READ_ONLY:
+    case ROLE_VALUES.READ_ONLY:
       return "Read-Only Viewer";
     default:
       return role;

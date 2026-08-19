@@ -1,11 +1,30 @@
-import {
-  DefaultLanding,
-  FontScale,
-  Role,
-  RoomFormatRule,
-  type FacilitySettings,
-  type UserSettings
-} from "@prisma/client";
+import type { DefaultLanding, FontScale, Role, RoomFormatRule, FacilitySettings, UserSettings } from "@prisma/client";
+
+const DEFAULT_LANDING_VALUES = {
+  DASHBOARD: "DASHBOARD",
+  CALENDAR: "CALENDAR",
+  NOTES: "NOTES",
+  RESIDENTS: "RESIDENTS"
+} as const satisfies Record<DefaultLanding, DefaultLanding>;
+
+const FONT_SCALE_VALUES = {
+  SM: "SM",
+  MD: "MD",
+  LG: "LG"
+} as const satisfies Record<FontScale, FontScale>;
+
+const ROLE_VALUES = {
+  ADMIN: "ADMIN",
+  AD: "AD",
+  ASSISTANT: "ASSISTANT",
+  READ_ONLY: "READ_ONLY"
+} as const satisfies Record<Role, Role>;
+
+const ROOM_FORMAT_RULE_VALUES = {
+  A_B: "A_B",
+  NUM: "NUM",
+  CUSTOM: "CUSTOM"
+} as const satisfies Record<RoomFormatRule, RoomFormatRule>;
 
 import { asModuleFlags, defaultModuleFlags, type ModuleFlags } from "@/lib/module-flags";
 
@@ -503,7 +522,7 @@ export function defaultRoleSettingsConfig(): RoleSettingsConfig {
       }
     ],
     notesRequireSupervisorApproval: false,
-    autoRoleForNewUsers: Role.ASSISTANT,
+    autoRoleForNewUsers: ROLE_VALUES.ASSISTANT,
     auditTrailEnabled: true
   };
 }
@@ -771,7 +790,7 @@ export function defaultNotificationDefaults(): NotificationDefaults {
     escalation: {
       enabled: false,
       minutesAfterDue: 60,
-      notifyRole: Role.AD
+      notifyRole: ROLE_VALUES.AD
     },
     dailyDigestEnabled: false,
     dailyDigestTime: "09:00",
@@ -847,7 +866,7 @@ export function defaultFacilitySettingsInput(args: {
   return {
     timezone: args.timezone,
     businessHoursJson: defaultBusinessHours(),
-    roomFormatRule: RoomFormatRule.A_B,
+    roomFormatRule: ROOM_FORMAT_RULE_VALUES.A_B,
     roomFormatHint: null,
     printDefaultsJson: defaultPrintDefaults(),
     policyFlagsJson: {
@@ -872,10 +891,10 @@ export function defaultFacilitySettingsInput(args: {
 
 export function defaultUserSettingsInput() {
   return {
-    defaultLanding: DefaultLanding.DASHBOARD,
+    defaultLanding: DEFAULT_LANDING_VALUES.DASHBOARD,
     reduceMotion: false,
     highContrast: false,
-    fontScale: FontScale.MD,
+    fontScale: FONT_SCALE_VALUES.MD,
     myQuickPhrasesJson: [],
     printPrefsJson: {
       paperSize: "LETTER",
@@ -1323,7 +1342,7 @@ export function asNotificationDefaults(value: unknown): NotificationDefaults {
       enabled: asBoolean(escalation.enabled, fallback.escalation.enabled),
       minutesAfterDue: asNumber(escalation.minutesAfterDue, fallback.escalation.minutesAfterDue),
       notifyRole:
-        notifyRole === Role.ADMIN || notifyRole === Role.ASSISTANT || notifyRole === Role.READ_ONLY ? notifyRole : Role.AD
+        notifyRole === ROLE_VALUES.ADMIN || notifyRole === ROLE_VALUES.ASSISTANT || notifyRole === ROLE_VALUES.READ_ONLY ? notifyRole : ROLE_VALUES.AD
     },
     dailyDigestEnabled: asBoolean(parsed.dailyDigestEnabled, fallback.dailyDigestEnabled),
     dailyDigestTime: asString(parsed.dailyDigestTime, fallback.dailyDigestTime),
@@ -1457,7 +1476,7 @@ export function asRoleSettingsConfig(value: unknown): RoleSettingsConfig {
       fallback.notesRequireSupervisorApproval
     ),
     autoRoleForNewUsers:
-      autoRole === Role.ADMIN || autoRole === Role.ASSISTANT || autoRole === Role.READ_ONLY ? autoRole : Role.AD,
+      autoRole === ROLE_VALUES.ADMIN || autoRole === ROLE_VALUES.ASSISTANT || autoRole === ROLE_VALUES.READ_ONLY ? autoRole : ROLE_VALUES.AD,
     auditTrailEnabled: asBoolean(parsed.auditTrailEnabled, fallback.auditTrailEnabled)
   };
 }

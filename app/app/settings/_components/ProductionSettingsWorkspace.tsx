@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DefaultLanding, FontScale, Role, SubscriptionStatus } from "@prisma/client";
+import type { Role, SubscriptionStatus } from "@prisma/client";
 import {
   BellRing,
   BookOpenCheck,
@@ -40,6 +40,7 @@ import {
   documentationSettingsSchema,
   facilitySettingsSchema,
   notificationsSettingsSchema,
+  type ProductionProfileSettings,
   profileSettingsSchema,
   reportsPrintingSettingsSchema,
   roleDisplayLabel,
@@ -64,6 +65,31 @@ type Category = {
 };
 
 type FieldErrors = Record<string, string>;
+
+const ROLE_VALUES = {
+  ADMIN: "ADMIN",
+  AD: "AD",
+  ASSISTANT: "ASSISTANT",
+  READ_ONLY: "READ_ONLY"
+} as const satisfies Record<Role, Role>;
+
+const SUBSCRIPTION_STATUS_VALUES = {
+  ACTIVE: "ACTIVE",
+  TRIALING: "TRIALING"
+} as const satisfies Partial<Record<SubscriptionStatus, SubscriptionStatus>>;
+
+const DEFAULT_LANDING_OPTIONS = [
+  { value: "DASHBOARD", label: "Dashboard" },
+  { value: "CALENDAR", label: "Calendar" },
+  { value: "NOTES", label: "Documentation" },
+  { value: "RESIDENTS", label: "Residents" }
+] satisfies Array<{ value: ProductionProfileSettings["defaultLandingPage"]; label: string }>;
+
+const FONT_SCALE_OPTIONS = [
+  { value: "SM", label: "Small" },
+  { value: "MD", label: "Medium" },
+  { value: "LG", label: "Large" }
+] satisfies Array<{ value: ProductionProfileSettings["fontScale"]; label: string }>;
 
 const categories: Category[] = [
   { key: "profile", label: "Profile", description: "Your personal Actify preferences.", icon: UserCog, saveable: true },
@@ -161,10 +187,10 @@ function errorsFromZod(schema: ZodTypeAny | undefined, values: unknown): FieldEr
 }
 
 function roleCanSave(role: Role, section: SettingsSectionKey) {
-  if (section === "profile") return role !== Role.READ_ONLY;
-  if (section === "team" || section === "security") return role === Role.ADMIN;
+  if (section === "profile") return role !== ROLE_VALUES.READ_ONLY;
+  if (section === "team" || section === "security") return role === ROLE_VALUES.ADMIN;
   if (section === "subscription") return false;
-  return role === Role.ADMIN || role === Role.AD;
+  return role === ROLE_VALUES.ADMIN || role === ROLE_VALUES.AD;
 }
 
 function getSectionSummary(values: ProductionSettingsValues, section: SettingsSectionKey) {
@@ -366,7 +392,7 @@ export function ProductionSettingsWorkspace({
   billing: SettingsBillingSummary;
 }) {
   const { toast } = useToast();
-  const isAdmin = role === Role.ADMIN;
+  const isAdmin = role === ROLE_VALUES.ADMIN;
   const availableCategories = useMemo(() => categories.filter((category) => !category.adminOnly || isAdmin), [isAdmin]);
   const initial = availableCategories.some((category) => category.key === initialSection) ? initialSection : availableCategories[0]?.key ?? "profile";
   const [activeSection, setActiveSection] = useState<SettingsSectionKey>(initial);
@@ -598,8 +624,8 @@ function renderProfileSection(values: ProductionSettingsValues, updateDraft: <TS
           <TextField label="Initials avatar" value={profile.initials} onChange={(initials) => update({ initials })} />
           <SelectField label="Preferred time format" value={profile.preferredTimeFormat} options={[{ value: "12H", label: "12-hour" }, { value: "24H", label: "24-hour" }]} onChange={(preferredTimeFormat) => update({ preferredTimeFormat })} />
           <TextField label="Personal timezone" value={profile.personalTimezone} error={errors.personalTimezone} onChange={(personalTimezone) => update({ personalTimezone })} />
-          <SelectField label="Default landing page" value={profile.defaultLandingPage} options={[{ value: DefaultLanding.DASHBOARD, label: "Dashboard" }, { value: DefaultLanding.CALENDAR, label: "Calendar" }, { value: DefaultLanding.NOTES, label: "Documentation" }, { value: DefaultLanding.RESIDENTS, label: "Residents" }]} onChange={(defaultLandingPage) => update({ defaultLandingPage })} />
-          <SelectField label="Font scale" value={profile.fontScale} options={[{ value: FontScale.SM, label: "Small" }, { value: FontScale.MD, label: "Medium" }, { value: FontScale.LG, label: "Large" }]} onChange={(fontScale) => update({ fontScale })} />
+          <SelectField label="Default landing page" value={profile.defaultLandingPage} options={DEFAULT_LANDING_OPTIONS} onChange={(defaultLandingPage) => update({ defaultLandingPage })} />
+          <SelectField label="Font scale" value={profile.fontScale} options={FONT_SCALE_OPTIONS} onChange={(fontScale) => update({ fontScale })} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <ToggleRow label="High contrast" checked={profile.highContrast} onChange={(highContrast) => update({ highContrast })} />
@@ -928,7 +954,7 @@ function renderTeamSection({ users, roleDrafts, setRoleDrafts, updatingUserId, s
                       <Select value={roleDrafts[user.id] ?? user.role} onValueChange={(value) => setRoleDrafts((current) => ({ ...current, [user.id]: value as Role }))}>
                         <SelectTrigger className="h-10 min-w-[190px] rounded-xl bg-white"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {[Role.ADMIN, Role.AD, Role.ASSISTANT, Role.READ_ONLY].map((role) => (
+                          {[ROLE_VALUES.ADMIN, ROLE_VALUES.AD, ROLE_VALUES.ASSISTANT, ROLE_VALUES.READ_ONLY].map((role) => (
                             <SelectItem key={role} value={role}>{roleDisplayLabel(role)}</SelectItem>
                           ))}
                         </SelectContent>
@@ -966,7 +992,7 @@ function renderTeamSection({ users, roleDrafts, setRoleDrafts, updatingUserId, s
 }
 
 function renderSubscriptionSection(billing: SettingsBillingSummary) {
-  const active = billing.hasActiveSubscription || billing.status === SubscriptionStatus.ACTIVE || billing.status === SubscriptionStatus.TRIALING;
+  const active = billing.hasActiveSubscription || billing.status === SUBSCRIPTION_STATUS_VALUES.ACTIVE || billing.status === SUBSCRIPTION_STATUS_VALUES.TRIALING;
   return (
     <div className="space-y-4">
       <GlassCard>
