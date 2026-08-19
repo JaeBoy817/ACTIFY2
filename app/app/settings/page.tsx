@@ -1,12 +1,58 @@
-import { SubscriptionStatus } from "@prisma/client";
+import { SubscriptionStatus, type FacilitySettings, type UserSettings } from "@prisma/client";
 
 import { ProductionSettingsWorkspaceLazy } from "@/app/app/settings/_components/ProductionSettingsWorkspaceLazy";
 import { requireFacilityContext } from "@/lib/auth";
-import { getFacilityBillingState } from "@/lib/billing";
+import { getFacilityBillingState, type FacilityBillingState } from "@/lib/billing";
 import { getStripePlanDetailsFromPriceId } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { defaultFacilitySettingsInput, defaultUserSettingsInput } from "@/lib/settings/defaults";
 import { ensureFacilitySettingsRecord, ensureUserSettingsRecord } from "@/lib/settings/ensure";
 import { buildProductionSettingsSnapshot, normalizeSectionParam } from "@/lib/settings/production-settings";
+
+function logSettingsLoadError(label: string, error: unknown) {
+  console.error(`[settings] ${label} failed`, error);
+}
+
+function fallbackBillingState(facilityId: string): FacilityBillingState {
+  return {
+    facilityId,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    stripePriceId: null,
+    subscriptionStatus: SubscriptionStatus.NONE,
+    subscriptionCurrentPeriodEnd: null,
+    hasActiveSubscription: false
+  };
+}
+
+function fallbackFacilitySettings(args: {
+  facilityId: string;
+  timezone: string;
+  moduleFlags?: unknown;
+}): FacilitySettings {
+  const now = new Date();
+  return {
+    id: `fallback-facility-settings-${args.facilityId}`,
+    facilityId: args.facilityId,
+    ...defaultFacilitySettingsInput({
+      timezone: args.timezone,
+      moduleFlags: args.moduleFlags
+    }),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function fallbackUserSettings(userId: string): UserSettings {
+  const now = new Date();
+  return {
+    id: `fallback-user-settings-${userId}`,
+    userId,
+    ...defaultUserSettingsInput(),
+    createdAt: now,
+    updatedAt: now
+  };
+}
 
 export default async function SettingsPage({
   searchParams
@@ -20,8 +66,18 @@ export default async function SettingsPage({
       facilityId: context.facilityId,
       timezone: context.facility.timezone,
       moduleFlags: context.facility.moduleFlags
+    }).catch((error) => {
+      logSettingsLoadError("facility settings lookup", error);
+      return fallbackFacilitySettings({
+        facilityId: context.facilityId,
+        timezone: context.facility.timezone,
+        moduleFlags: context.facility.moduleFlags
+      });
     }),
-    ensureUserSettingsRecord(context.user.id),
+    ensureUserSettingsRecord(context.user.id).catch((error) => {
+      logSettingsLoadError("user settings lookup", error);
+      return fallbackUserSettings(context.user.id);
+    }),
     prisma.user.findMany({
       where: { facilityId: context.facilityId },
       select: {
@@ -31,6 +87,16 @@ export default async function SettingsPage({
         role: true
       },
       orderBy: [{ role: "asc" }, { email: "asc" }]
+    }).catch((error) => {
+      logSettingsLoadError("team lookup", error);
+      return [
+        {
+          id: context.user.id,
+          name: context.user.name,
+          email: context.user.email,
+          role: context.role
+        }
+      ];
     }),
     prisma.auditLog.findMany({
       where: {
@@ -50,18 +116,13 @@ export default async function SettingsPage({
       },
       orderBy: { createdAt: "desc" },
       take: 20
+    }).catch((error) => {
+      logSettingsLoadError("audit lookup", error);
+      return [];
     }),
     getFacilityBillingState(context.facilityId).catch((error) => {
-      console.error("[settings] billing lookup failed", error);
-      return {
-        facilityId: context.facilityId,
-        stripeCustomerId: null,
-        stripeSubscriptionId: null,
-        stripePriceId: null,
-        subscriptionStatus: SubscriptionStatus.NONE,
-        subscriptionCurrentPeriodEnd: null,
-        hasActiveSubscription: false
-      };
+      logSettingsLoadError("billing lookup", error);
+      return fallbackBillingState(context.facilityId);
     })
   ]);
 
