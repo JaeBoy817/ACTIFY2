@@ -1,40 +1,7 @@
-import { WorkspaceLayoutShell } from "@/components/workspace/WorkspaceLayoutShell";
-import { redirectIfNoAppAccessForUser } from "@/lib/access-control";
-import { ensureUserAndFacility } from "@/lib/auth";
+import { SafeWorkspaceShell } from "@/components/workspace/SafeWorkspaceShell";
 
 export const dynamic = "force-dynamic";
 
-function firstNameFromName(name: string | null | undefined) {
-  if (!name) return "there";
-  const first = name.trim().split(/\s+/)[0];
-  return first || "there";
-}
-
-function formatToday(timeZone?: string | null) {
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-      timeZone: timeZone || "America/Chicago"
-    }).format(new Date());
-  } catch {
-    return new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric"
-    }).format(new Date());
-  }
-}
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await ensureUserAndFacility();
-  await redirectIfNoAppAccessForUser(user, { blockedRedirectPath: "/subscribe" });
-
-  const firstName = firstNameFromName(user.name);
-  const todayLabel = formatToday(user.facility.timezone);
-
-  return <WorkspaceLayoutShell firstName={firstName} todayLabel={todayLabel}>{children}</WorkspaceLayoutShell>;
+  return <SafeWorkspaceShell label="/app">{children}</SafeWorkspaceShell>;
 }
