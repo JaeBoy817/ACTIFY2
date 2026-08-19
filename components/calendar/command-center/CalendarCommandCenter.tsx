@@ -11,6 +11,7 @@ import {
   isSameMonth,
 } from "date-fns";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CalendarClock,
@@ -198,7 +199,7 @@ export function CalendarCommandCenter({
     timeZone
   });
 
-  const { events, isLoading, refresh } = useCalendarQueries({
+  const { events, isLoading, error: calendarLoadError, refresh } = useCalendarQueries({
     view,
     range,
     anchorDateKey,
@@ -801,6 +802,17 @@ export function CalendarCommandCenter({
 
           <main className="space-y-3">
             <article className="rounded-2xl border border-[#2a3d62] bg-[#0b1428]/95 p-4">
+              {calendarLoadError ? (
+                <div className="mb-3 rounded-2xl border border-amber-300/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <div>
+                      <p className="font-semibold">Calendar data could not load.</p>
+                      <p className="mt-1 text-xs leading-5 text-amber-100/85">{calendarLoadError}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {isLoading ? <CalendarWorkspaceSkeleton /> : null}
               {!isLoading && visibleEvents.length === 0 ? (
                 <EmptyBlock

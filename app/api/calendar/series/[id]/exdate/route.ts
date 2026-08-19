@@ -3,6 +3,9 @@ import { z } from "zod";
 import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext } from "@/lib/calendar/api-context";
 import { addSeriesExdate } from "@/lib/calendar/service";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const exdatePayloadSchema = z.object({
   occurrenceStartAt: z.string().datetime()
 });

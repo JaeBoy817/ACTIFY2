@@ -2,7 +2,9 @@ import { auth } from "@clerk/nextjs/server";
 import { Role } from "@prisma/client";
 
 import { AppAccessError, requireAppAccessForUser } from "@/lib/access-control";
+import { isDatabaseConnectionError } from "@/lib/database-errors";
 import { asModuleFlags } from "@/lib/module-flags";
+import { isNextControlFlowError } from "@/lib/next-control-flow";
 import { prisma } from "@/lib/prisma";
 import { canWrite } from "@/lib/permissions";
 import { getRequestTimeZone } from "@/lib/request-timezone";
@@ -22,6 +24,8 @@ export class CalendarApiError extends Error {
 }
 
 export function asCalendarApiErrorResponse(error: unknown) {
+  if (isNextControlFlowError(error)) throw error;
+
   if (error instanceof CalendarApiError) {
     return Response.json(
       {
@@ -33,8 +37,19 @@ export function asCalendarApiErrorResponse(error: unknown) {
     );
   }
 
+  if (isDatabaseConnectionError(error)) {
+    console.error("[calendar] database unavailable", error);
+    return Response.json(
+      {
+        error: "Calendar data is temporarily unavailable because Actify could not reach the database."
+      },
+      { status: 503 }
+    );
+  }
+
   if (error instanceof Error) {
-    return Response.json({ error: error.message }, { status: 400 });
+    console.error("[calendar] unexpected API error", error);
+    return Response.json({ error: "Unexpected calendar API error." }, { status: 500 });
   }
 
   return Response.json({ error: "Unexpected calendar API error." }, { status: 500 });

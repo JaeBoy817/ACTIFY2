@@ -1,6 +1,8 @@
 import { unstable_cache } from "next/cache";
+import { AlertTriangle } from "lucide-react";
 
 import { CalendarCommandCenter } from "@/components/calendar/command-center/CalendarCommandCenter";
+import { isNextControlFlowError } from "@/lib/next-control-flow";
 import { requireModulePage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
@@ -77,6 +79,23 @@ async function getCalendarTemplatesSafe(facilityId: string) {
   }
 }
 
+function CalendarDataUnavailableNotice() {
+  return (
+    <section className="mb-4 rounded-[2rem] border border-amber-200 bg-amber-50/90 p-5 text-amber-950 shadow-sm">
+      <div className="flex gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+        <div>
+          <h1 className="text-lg font-black">Calendar data is temporarily unavailable.</h1>
+          <p className="mt-1 text-sm leading-6">
+            Actify loaded the Calendar page, but the calendar database did not respond. You can still use available
+            navigation while the database connection is checked.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function CalendarPage({
   searchParams
 }: {
@@ -87,28 +106,50 @@ export default async function CalendarPage({
     section?: string | string[];
   };
 }) {
-  const context = await requireModulePage("calendar");
-  const timeZone = resolveTimeZone(context.timeZone);
-  const initialView = parseInitialView(searchParams?.view);
-  const initialSection = parseInitialSection(searchParams?.section);
-  const initialDateKey = parseInitialDate(searchParams, timeZone);
+  try {
+    const context = await requireModulePage("calendar");
+    const timeZone = resolveTimeZone(context.timeZone);
+    const initialView = parseInitialView(searchParams?.view);
+    const initialSection = parseInitialSection(searchParams?.section);
+    const initialDateKey = parseInitialDate(searchParams, timeZone);
 
-  const templates = await getCalendarTemplatesSafe(context.facilityId);
+    const templates = await getCalendarTemplatesSafe(context.facilityId);
 
-  return (
-    <CalendarCommandCenter
-      templates={templates.map((template) => ({
-        id: template.id,
-        title: template.title,
-        category: template.category,
-        difficulty: template.difficulty || "Moderate",
-        defaultChecklist: template.defaultChecklist,
-        adaptations: template.adaptations
-      }))}
-      initialDateKey={initialDateKey}
-      initialView={initialView}
-      initialSection={initialSection}
-      timeZone={timeZone}
-    />
-  );
+    return (
+      <CalendarCommandCenter
+        templates={templates.map((template) => ({
+          id: template.id,
+          title: template.title,
+          category: template.category,
+          difficulty: template.difficulty || "Moderate",
+          defaultChecklist: template.defaultChecklist,
+          adaptations: template.adaptations
+        }))}
+        initialDateKey={initialDateKey}
+        initialView={initialView}
+        initialSection={initialSection}
+        timeZone={timeZone}
+      />
+    );
+  } catch (error) {
+    if (isNextControlFlowError(error)) throw error;
+    console.error("[calendar] page fallback rendered", error);
+    const timeZone = "America/Chicago";
+    const initialView = parseInitialView(searchParams?.view);
+    const initialSection = parseInitialSection(searchParams?.section);
+    const initialDateKey = parseInitialDate(searchParams, timeZone);
+
+    return (
+      <>
+        <CalendarDataUnavailableNotice />
+        <CalendarCommandCenter
+          templates={[]}
+          initialDateKey={initialDateKey}
+          initialView={initialView}
+          initialSection={initialSection}
+          timeZone={timeZone}
+        />
+      </>
+    );
+  }
 }

@@ -3,6 +3,9 @@ import { z } from "zod";
 import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext } from "@/lib/calendar/api-context";
 import { CalendarConflictError, createActivityWithChecks, createSeriesWithChecks } from "@/lib/calendar/service";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const recurrencePayloadSchema = z
   .object({
     freq: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),

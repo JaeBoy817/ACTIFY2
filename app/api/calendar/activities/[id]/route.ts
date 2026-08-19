@@ -4,6 +4,9 @@ import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext
 import { addSeriesExdate, CalendarConflictError, updateActivityWithChecks } from "@/lib/calendar/service";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const updatePayloadSchema = z.object({
   title: z.string().min(2).max(200).optional(),
   startAt: z.string().datetime().optional(),

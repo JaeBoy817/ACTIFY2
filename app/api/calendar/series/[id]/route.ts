@@ -4,6 +4,9 @@ import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext
 import { updateSeriesAndRefresh } from "@/lib/calendar/service";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const seriesPatchSchema = z.object({
   scope: z.enum(["series", "future"]).optional(),
   fromDate: z.string().datetime().optional(),

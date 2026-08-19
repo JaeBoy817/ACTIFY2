@@ -3,6 +3,9 @@ import { z } from "zod";
 import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext } from "@/lib/calendar/api-context";
 import { CalendarConflictError, moveActivityWithChecks } from "@/lib/calendar/service";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const movePayloadSchema = z.object({
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),

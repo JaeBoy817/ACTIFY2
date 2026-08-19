@@ -5,6 +5,9 @@ import { asCalendarApiErrorResponse, CalendarApiError, requireCalendarApiContext
 import { getCalendarRangeActivities } from "@/lib/calendar/service";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const querySchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
