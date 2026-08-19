@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 
 import { SubscriptionActivationWatcher } from "@/components/billing/SubscriptionActivationWatcher";
-import { requireUser } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { getFacilityBillingState } from "@/lib/billing";
 import { getStripePlanDetailsFromPriceId } from "@/lib/stripe";
 
@@ -29,8 +29,16 @@ export default async function SubscriptionSuccessPage({
   }
 
   const sessionId = readSearchValue(searchParams, "session_id");
-  const user = await requireUser();
-  const billing = await getFacilityBillingState(user.facilityId).catch(() => null);
+  const user = await getOptionalUser().catch((error) => {
+    console.error("[billing] subscribe success user lookup failed", error);
+    return null;
+  });
+  const billing = user
+    ? await getFacilityBillingState(user.facilityId).catch((error) => {
+        console.error("[billing] subscribe success billing lookup failed", error);
+        return null;
+      })
+    : null;
   const selectedPlan = getStripePlanDetailsFromPriceId(billing?.stripePriceId ?? null);
 
   return (

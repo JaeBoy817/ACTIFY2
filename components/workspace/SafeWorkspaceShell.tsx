@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { WorkspaceLayoutShell } from "@/components/workspace/WorkspaceLayoutShell";
 import { redirectIfNoAppAccessForUser } from "@/lib/access-control";
 import { ensureUserAndFacility } from "@/lib/auth";
+import { isNextControlFlowError } from "@/lib/next-control-flow";
 
 const FALLBACK_TIMEZONE = "America/Chicago";
 
@@ -29,15 +30,6 @@ function formatToday(timeZone?: string | null) {
       year: "numeric"
     }).format(new Date());
   }
-}
-
-function isNextControlFlowError(error: unknown) {
-  if (!error || typeof error !== "object" || !("digest" in error)) return false;
-  const digest = (error as { digest?: unknown }).digest;
-  return (
-    typeof digest === "string" &&
-    (digest.startsWith("NEXT_REDIRECT") || digest.startsWith("NEXT_NOT_FOUND") || digest === "DYNAMIC_SERVER_USAGE")
-  );
 }
 
 export async function SafeWorkspaceShell({

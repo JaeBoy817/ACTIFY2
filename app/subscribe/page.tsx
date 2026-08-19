@@ -68,12 +68,12 @@ export default async function SubscribePage({
         facilityId: user.facilityId,
         role: user.role
       }).catch((error) => {
-    console.error("[billing] subscribe page access lookup failed", error);
-    return {
-      isCreatorBypass: false,
-      hasActiveSubscription: false,
-      allowed: false
-    };
+        console.error("[billing] subscribe page access lookup failed", error);
+        return {
+          isCreatorBypass: false,
+          hasActiveSubscription: false,
+          allowed: false
+        };
       })
     : {
         isCreatorBypass: false,
