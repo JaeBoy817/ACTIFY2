@@ -339,6 +339,62 @@ export async function requireCurrentAppUserWithAccess() {
   return state.user;
 }
 
+export async function requireCurrentAssistantUserWithAccess() {
+  const { userId: clerkUserId } = await auth();
+  const creatorBypassEmail = getCreatorBypassEmail();
+
+  if (!clerkUserId) {
+    throw toAccessErrorFromState(
+      buildDeniedState({
+        clerkUserId: null,
+        user: null,
+        email: null,
+        normalizedEmail: null,
+        isPrimaryEmailVerified: false,
+        creatorBypassEmail,
+        denialReason: "UNAUTHENTICATED"
+      })
+    );
+  }
+
+  const sessionEmail = await getPrimarySessionEmail();
+  const hasVerifiedBypassSession =
+    Boolean(sessionEmail.normalizedEmail) &&
+    sessionEmail.isPrimaryEmailVerified &&
+    isCreatorBypassEmail(sessionEmail.normalizedEmail);
+  const fallbackBypassUser = {
+    id: clerkUserId,
+    clerkUserId,
+    email: sessionEmail.email ?? sessionEmail.normalizedEmail ?? "unknown@example.com",
+    facilityId: "assistant-fallback-facility",
+    role: Role.ADMIN
+  } satisfies AppAccessUserRecord;
+
+  try {
+    const state = await getCurrentAccessState();
+    if (state.allowed && state.user) return state.user;
+
+    // Admins should not be locked out of the core assistant by a missing
+    // subscription row or billing lookup problem.
+    if (state.user?.role === Role.ADMIN) return state.user;
+
+    if (!state.user && hasVerifiedBypassSession) return fallbackBypassUser;
+
+    throw toAccessErrorFromState(state);
+  } catch (error) {
+    if (error instanceof AppAccessError) {
+      throw error;
+    }
+
+    if (hasVerifiedBypassSession) {
+      console.error("[access-control] assistant DB access skipped for verified bypass user", error);
+      return fallbackBypassUser;
+    }
+
+    throw error;
+  }
+}
+
 export async function requireAppAccessForUser(user: AppAccessUserRecord) {
   const state = await getAccessStateForUser(user);
   if (!state.allowed) {

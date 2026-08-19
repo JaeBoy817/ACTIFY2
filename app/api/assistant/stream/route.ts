@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { asAppAccessErrorResponse, requireCurrentAppUserWithAccess } from "@/lib/access-control";
+import { asAppAccessErrorResponse, requireCurrentAssistantUserWithAccess } from "@/lib/access-control";
 import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
 import {
   runMistralAssistantStream,
@@ -132,7 +132,7 @@ function toStreamingErrorResponse(error: string, code: string): AssistantApiErro
 
 export async function POST(request: Request) {
   try {
-    await requireCurrentAppUserWithAccess();
+    await requireCurrentAssistantUserWithAccess();
   } catch (error) {
     const accessResponse = asAppAccessErrorResponse(error);
     if (accessResponse) return accessResponse;

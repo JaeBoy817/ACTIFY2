@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { asAppAccessErrorResponse, requireCurrentAppUserWithAccess } from "@/lib/access-control";
+import { asAppAccessErrorResponse, requireCurrentAssistantUserWithAccess } from "@/lib/access-control";
 import { getAssistantResponseFromPrompt } from "@/lib/assistant/getAssistantResponse";
 import { runMistralAssistant, MistralAssistantError } from "@/lib/assistant/mistral";
 import type {
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   let parsedMessageForFallback: string | null = null;
 
   try {
-    await requireCurrentAppUserWithAccess();
+    await requireCurrentAssistantUserWithAccess();
 
     const payload = await request.json().catch(() => null);
     const parsed = assistantRequestSchema.safeParse(payload);
