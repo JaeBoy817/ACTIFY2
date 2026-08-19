@@ -6,7 +6,7 @@ import { CheckCircle2, Lock, ShieldCheck, Sparkles } from "lucide-react";
 import { getAccessStateForUser } from "@/lib/access-control";
 import { CheckoutButton } from "@/components/billing/CheckoutButton";
 import { ManageBillingButton } from "@/components/billing/ManageBillingButton";
-import { requireUser } from "@/lib/auth";
+import { getOptionalUser } from "@/lib/auth";
 import { getFacilityBillingState } from "@/lib/billing";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,28 +55,43 @@ export default async function SubscribePage({
     );
   }
 
-  const user = await requireUser();
-  const accessState = await getAccessStateForUser({
-    id: user.id,
-    clerkUserId: user.clerkUserId,
-    email: user.email,
-    facilityId: user.facilityId,
-    role: user.role
-  }).catch((error) => {
+  const user = await getOptionalUser().catch((error) => {
+    console.error("[billing] subscribe page user lookup failed", error);
+    return null;
+  });
+
+  const accessState = user
+    ? await getAccessStateForUser({
+        id: user.id,
+        clerkUserId: user.clerkUserId,
+        email: user.email,
+        facilityId: user.facilityId,
+        role: user.role
+      }).catch((error) => {
     console.error("[billing] subscribe page access lookup failed", error);
     return {
       isCreatorBypass: false,
       hasActiveSubscription: false,
       allowed: false
     };
-  });
-  const billing = await getFacilityBillingState(user.facilityId).catch((error) => {
-    console.error("[billing] subscribe page billing snapshot failed", error);
-    return {
-      stripeCustomerId: null,
-      subscriptionStatus: SubscriptionStatus.NONE
-    };
-  });
+      })
+    : {
+        isCreatorBypass: false,
+        hasActiveSubscription: false,
+        allowed: false
+      };
+  const billing = user
+    ? await getFacilityBillingState(user.facilityId).catch((error) => {
+        console.error("[billing] subscribe page billing snapshot failed", error);
+        return {
+          stripeCustomerId: null,
+          subscriptionStatus: SubscriptionStatus.NONE
+        };
+      })
+    : {
+        stripeCustomerId: null,
+        subscriptionStatus: SubscriptionStatus.NONE
+      };
 
   if (accessState.allowed) {
     return (

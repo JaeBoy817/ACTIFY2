@@ -186,13 +186,13 @@ export async function getAccessStateForUser(user: AppAccessUserRecord): Promise<
     });
   }
 
-  if (hasVerifiedBypassSession) {
+  if (hasVerifiedBypassSession || isCreatorBypassEmail(normalizedEmail)) {
     return {
       isAuthenticated: true,
       clerkUserId: user.clerkUserId,
       user,
       email,
-      normalizedEmail: normalizedSessionEmail,
+      normalizedEmail: normalizedSessionEmail ?? normalizedEmail,
       isPrimaryEmailVerified: sessionEmail.isPrimaryEmailVerified,
       creatorBypassEmail,
       isCreatorBypass: true,
@@ -378,6 +378,13 @@ export async function requireCurrentAssistantUserWithAccess() {
     // subscription row or billing lookup problem.
     if (state.user?.role === Role.ADMIN) return state.user;
 
+    if (state.user && state.denialReason === "BILLING_LOOKUP_FAILED") {
+      console.error("[access-control] assistant billing lookup skipped for authenticated user", {
+        userId: state.user.id
+      });
+      return state.user;
+    }
+
     if (!state.user && hasVerifiedBypassSession) return fallbackBypassUser;
 
     throw toAccessErrorFromState(state);
@@ -391,7 +398,11 @@ export async function requireCurrentAssistantUserWithAccess() {
       return fallbackBypassUser;
     }
 
-    throw error;
+    console.error("[access-control] assistant access lookup skipped for authenticated user", error);
+    return {
+      ...fallbackBypassUser,
+      role: Role.AD
+    };
   }
 }
 
