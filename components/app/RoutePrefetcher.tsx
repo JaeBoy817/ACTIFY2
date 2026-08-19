@@ -13,7 +13,7 @@ const prefetchTargets = [
   "/app/analytics",
   "/app/volunteers",
   "/app/reports",
-  "/app/settings",
+  "/settings",
   "/app/dashboard/budget-stock",
   "/app/dashboard/activity-feed",
   "/app/dashboard/settings"

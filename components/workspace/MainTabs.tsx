@@ -40,7 +40,7 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
     icon: ClipboardCheck
   },
   {
-    href: "/app/settings",
+    href: "/settings",
     label: "Settings",
     helpText: "Manage facility, AI, reports, team, and account settings.",
     icon: Settings

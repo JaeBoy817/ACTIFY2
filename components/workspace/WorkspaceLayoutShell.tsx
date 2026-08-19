@@ -35,7 +35,7 @@ export function WorkspaceLayoutShell({
 
             <div className="ml-auto flex items-center gap-2.5">
               <Link
-                href="/app/settings"
+                href="/settings"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
               >
                 <Settings className="h-3.5 w-3.5" aria-hidden />

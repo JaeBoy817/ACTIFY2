@@ -15,6 +15,7 @@ const isProtectedRoute = createRouteMatcher([
   "/care-plan(.*)",
   "/care-plans(.*)",
   "/attendance(.*)",
+  "/settings(.*)",
   "/notes(.*)",
   "/templates(.*)",
   "/volunteers(.*)"
@@ -48,7 +49,19 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
     console.info(`[middleware][auth] allowing authenticated request: ${pathname}`);
   }
 
-  const allowedAppWorkspaceRoutes = ["/app/attendance", "/app/settings"];
+  if (pathname.startsWith("/app/settings")) {
+    const settingsUrl = new URL("/settings", req.url);
+    settingsUrl.search = req.nextUrl.search;
+    if (pathname.startsWith("/app/settings/profile") && !settingsUrl.searchParams.has("section")) {
+      settingsUrl.searchParams.set("section", "profile");
+    }
+    if (pathname.startsWith("/app/settings/roles") && !settingsUrl.searchParams.has("section")) {
+      settingsUrl.searchParams.set("section", "team");
+    }
+    return NextResponse.redirect(settingsUrl);
+  }
+
+  const allowedAppWorkspaceRoutes = ["/app/attendance"];
 
   // Keep legacy /app/* modules collapsed to the assistant, but allow active
   // workspace pages that have dedicated implementations to render normally.
@@ -67,7 +80,7 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
 
   // Avoid edge crashes in environments where Clerk keys are not configured yet.
   if (!isClerkBackendConfigured) {
-    if (pathname.startsWith("/app") || pathname.startsWith("/dashboard")) {
+    if (pathname.startsWith("/app") || pathname.startsWith("/dashboard") || pathname.startsWith("/settings")) {
       const signInUrl = new URL("/sign-in", req.url);
       signInUrl.searchParams.set("auth", "unconfigured");
       return NextResponse.redirect(signInUrl);

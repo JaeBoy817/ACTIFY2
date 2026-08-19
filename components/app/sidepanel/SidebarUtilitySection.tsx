@@ -9,7 +9,7 @@ import type { SidebarLink } from "@/components/app/sidepanel/types";
 import { isClerkConfigured } from "@/lib/clerk-config";
 
 const settingsLink: SidebarLink = {
-  href: "/app/settings",
+  href: "/settings",
   label: "Settings",
   icon: Settings,
   accentGradientClasses: "from-zinc-200 to-zinc-400 text-zinc-900"
@@ -45,7 +45,7 @@ export function SidebarUtilitySection({
       </p>
       <SidebarNavItem
         link={settingsLink}
-        active={pathname === "/app/settings" || pathname.startsWith("/app/settings/")}
+        active={pathname === "/settings" || pathname.startsWith("/settings/")}
         onPrefetch={onPrefetch}
         onNavigate={onNavigate}
       />

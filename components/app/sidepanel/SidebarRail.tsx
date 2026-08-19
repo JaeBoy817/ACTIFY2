@@ -55,11 +55,11 @@ export function SidebarRail({
       <div className="mt-3 space-y-1.5 border-t border-emerald-800/70 pt-2.5">
         <SidebarTooltip label="Settings">
           <Link
-            href="/app/settings"
-            onMouseEnter={() => onPrefetch?.("/app/settings")}
-            onFocus={() => onPrefetch?.("/app/settings")}
-            onTouchStart={() => onPrefetch?.("/app/settings")}
-            onClick={() => onNavigate?.("/app/settings")}
+            href="/settings"
+            onMouseEnter={() => onPrefetch?.("/settings")}
+            onFocus={() => onPrefetch?.("/settings")}
+            onTouchStart={() => onPrefetch?.("/settings")}
+            onClick={() => onNavigate?.("/settings")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-[#10281f] text-emerald-100/80 transition hover:border-emerald-500/50 hover:bg-[#133326] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/45"
           >
             <Settings className="h-4 w-4" />

@@ -34,7 +34,7 @@ export function DashboardTopBar({ summary }: { summary: DashboardCommandCenterSu
           <PremiumPillButton label="Range" icon={CalendarRange} tone="neutral" href="/app/analytics" />
           <PremiumPillButton label="Filters" icon={SlidersHorizontal} tone="neutral" href="/app/analytics" />
           <PremiumPillButton label="Alerts" icon={Bell} tone="emerald" href="/app/notifications" />
-          <PremiumPillButton label="Profile" icon={UserCircle2} tone="neutral" href="/app/settings/profile" />
+          <PremiumPillButton label="Profile" icon={UserCircle2} tone="neutral" href="/settings?section=profile" />
         </div>
       </div>
     </TopContentHeader>
