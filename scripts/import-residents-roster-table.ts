@@ -10,6 +10,9 @@ const prisma = new PrismaClient({
   }
 });
 
+const ARCHIVED_STATUSES = [ResidentStatus.DISCHARGED, ResidentStatus.TRANSFERRED, ResidentStatus.DECEASED];
+const WRITE_BATCH_SIZE = 25;
+
 const importRowSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -19,16 +22,28 @@ const importRowSchema = z.object({
 
 type ImportRow = z.infer<typeof importRowSchema>;
 
+type ExistingResident = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  room: string;
+  birthDate: Date | null;
+  status: ResidentStatus;
+  isActive: boolean;
+};
+
 type ImportOptions = {
   filePath: string;
   dryRun: boolean;
   parseOnly: boolean;
+  replaceActiveRoster: boolean;
 };
 
 function readArgs(): ImportOptions {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const parseOnly = args.includes("--parse-only");
+  const replaceActiveRoster = args.includes("--replace-active-roster");
   const filePath = args.find((arg) => !arg.startsWith("--")) ?? process.env.RESIDENT_ROSTER_PATH;
 
   if (!filePath) {
@@ -37,7 +52,7 @@ function readArgs(): ImportOptions {
     );
   }
 
-  return { filePath, dryRun, parseOnly };
+  return { filePath, dryRun, parseOnly, replaceActiveRoster };
 }
 
 function isAllCapsName(value: string) {
@@ -46,9 +61,7 @@ function isAllCapsName(value: string) {
 }
 
 function titleCaseToken(token: string) {
-  return token
-    .toLowerCase()
-    .replace(/[a-zA-Z]+/g, (part) => part.charAt(0).toUpperCase() + part.slice(1));
+  return token.toLowerCase().replace(/[a-zA-Z]+/g, (part) => part.charAt(0).toUpperCase() + part.slice(1));
 }
 
 function normalizeNamePart(value: string) {
@@ -134,6 +147,18 @@ function normalizeForLookup(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function residentLookupKey(firstName: string, lastName: string) {
+  return `${normalizeForLookup(lastName)}|${normalizeForLookup(firstName)}`;
+}
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
 async function resolveFacility() {
   const facilityId = process.env.ACTIFY_IMPORT_FACILITY_ID?.trim();
   if (facilityId) {
@@ -177,13 +202,9 @@ async function resolveFacility() {
   );
 }
 
-async function findExistingResident(facilityId: string, row: ImportRow) {
-  const sameNameResidents = await prisma.resident.findMany({
-    where: {
-      facilityId,
-      firstName: { equals: row.firstName, mode: "insensitive" },
-      lastName: { equals: row.lastName, mode: "insensitive" }
-    },
+async function loadExistingResidents(facilityId: string) {
+  return prisma.resident.findMany({
+    where: { facilityId },
     select: {
       id: true,
       firstName: true,
@@ -195,18 +216,75 @@ async function findExistingResident(facilityId: string, row: ImportRow) {
     },
     orderBy: { createdAt: "asc" }
   });
+}
 
+function findExistingResident(existingResidents: ExistingResident[], row: ImportRow, claimedIds: Set<string>) {
+  const sameNameResidents = existingResidents.filter(
+    (resident) => residentLookupKey(resident.firstName, resident.lastName) === residentLookupKey(row.firstName, row.lastName)
+  );
   const birthDateKey = dateKey(row.birthDate);
+
   return (
-    sameNameResidents.find((resident) => dateKey(resident.birthDate) === birthDateKey) ??
-    sameNameResidents.find((resident) => !resident.birthDate) ??
+    sameNameResidents.find((resident) => !claimedIds.has(resident.id) && dateKey(resident.birthDate) === birthDateKey) ??
+    sameNameResidents.find((resident) => !claimedIds.has(resident.id) && !resident.birthDate) ??
     null
   );
 }
 
-async function upsertResident(facilityId: string, row: ImportRow, dryRun: boolean) {
-  const existing = await findExistingResident(facilityId, row);
-  const data = {
+function residentMatchesRosterRow(resident: ExistingResident, row: ImportRow) {
+  const sameName = residentLookupKey(resident.firstName, resident.lastName) === residentLookupKey(row.firstName, row.lastName);
+  if (!sameName) return false;
+
+  // Keep existing records with the same resident name even if a previous
+  // import did not have DOB yet; the upsert below will fill birthday/room.
+  return !resident.birthDate || dateKey(resident.birthDate) === dateKey(row.birthDate);
+}
+
+function isCurrentlyActiveResident(resident: ExistingResident) {
+  return resident.isActive && !ARCHIVED_STATUSES.includes(resident.status);
+}
+
+function getResidentsToArchive(existingResidents: ExistingResident[], rows: ImportRow[]) {
+  return existingResidents.filter(
+    (resident) => isCurrentlyActiveResident(resident) && !rows.some((row) => residentMatchesRosterRow(resident, row))
+  );
+}
+
+function getResidentWritePlan(existingResidents: ExistingResident[], rows: ImportRow[]) {
+  const claimedIds = new Set<string>();
+  const creates: Array<ImportRow> = [];
+  const updates: Array<{ id: string; row: ImportRow }> = [];
+  let unchanged = 0;
+
+  for (const row of rows) {
+    const existing = findExistingResident(existingResidents, row, claimedIds);
+    if (!existing) {
+      creates.push(row);
+      continue;
+    }
+
+    claimedIds.add(existing.id);
+    const unchangedResident =
+      normalizeForLookup(existing.firstName) === normalizeForLookup(row.firstName) &&
+      normalizeForLookup(existing.lastName) === normalizeForLookup(row.lastName) &&
+      existing.room === row.room &&
+      dateKey(existing.birthDate) === dateKey(row.birthDate) &&
+      existing.status === ResidentStatus.ACTIVE &&
+      existing.isActive;
+
+    if (unchangedResident) {
+      unchanged += 1;
+    } else {
+      updates.push({ id: existing.id, row });
+    }
+  }
+
+  return { creates, updates, unchanged };
+}
+
+function createData(facilityId: string, row: ImportRow) {
+  return {
+    facilityId,
     firstName: row.firstName,
     lastName: row.lastName,
     room: row.room,
@@ -214,36 +292,67 @@ async function upsertResident(facilityId: string, row: ImportRow, dryRun: boolea
     status: ResidentStatus.ACTIVE,
     isActive: true
   };
+}
 
-  if (!existing) {
-    if (!dryRun) {
-      await prisma.resident.create({
-        data: {
-          facilityId,
-          ...data
-        }
-      });
-    }
-    return "created" as const;
-  }
+function updateData(row: ImportRow) {
+  return {
+    firstName: row.firstName,
+    lastName: row.lastName,
+    room: row.room,
+    birthDate: row.birthDate,
+    status: ResidentStatus.ACTIVE,
+    isActive: true
+  };
+}
 
-  const unchanged =
-    normalizeForLookup(existing.firstName) === normalizeForLookup(data.firstName) &&
-    normalizeForLookup(existing.lastName) === normalizeForLookup(data.lastName) &&
-    existing.room === data.room &&
-    dateKey(existing.birthDate) === dateKey(data.birthDate) &&
-    existing.status === data.status &&
-    existing.isActive === data.isActive;
+async function writePlan(params: {
+  facilityId: string;
+  creates: ImportRow[];
+  updates: Array<{ id: string; row: ImportRow }>;
+  residentsToArchive: ExistingResident[];
+}) {
+  const { facilityId, creates, updates, residentsToArchive } = params;
 
-  if (unchanged) return "unchanged" as const;
-
-  if (!dryRun) {
-    await prisma.resident.update({
-      where: { id: existing.id },
-      data
+  if (residentsToArchive.length > 0) {
+    await prisma.resident.updateMany({
+      where: {
+        facilityId,
+        id: { in: residentsToArchive.map((resident) => resident.id) }
+      },
+      data: {
+        status: ResidentStatus.DISCHARGED,
+        isActive: false
+      }
     });
+    console.log(`Archived ${residentsToArchive.length} residents not present in roster.`);
   }
-  return "updated" as const;
+
+  let writtenUpdates = 0;
+  for (const updateBatch of chunk(updates, WRITE_BATCH_SIZE)) {
+    await prisma.$transaction(
+      updateBatch.map((entry) =>
+        prisma.resident.update({
+          where: { id: entry.id },
+          data: updateData(entry.row)
+        })
+      )
+    );
+    writtenUpdates += updateBatch.length;
+    console.log(`Updated ${writtenUpdates}/${updates.length} residents.`);
+  }
+
+  let writtenCreates = 0;
+  for (const createBatch of chunk(creates, WRITE_BATCH_SIZE)) {
+    await prisma.$transaction(
+      createBatch.map((row) =>
+        prisma.resident.create({
+          data: createData(facilityId, row)
+        })
+      )
+    );
+    writtenCreates += createBatch.length;
+    console.log(`Created ${writtenCreates}/${creates.length} residents.`);
+  }
 }
 
 async function main() {
@@ -257,20 +366,25 @@ async function main() {
   if (options.parseOnly) return;
 
   const facility = await resolveFacility();
-  let created = 0;
-  let updated = 0;
-  let unchanged = 0;
-
-  for (const row of rows) {
-    const result = await upsertResident(facility.id, row, options.dryRun);
-    if (result === "created") created += 1;
-    if (result === "updated") updated += 1;
-    if (result === "unchanged") unchanged += 1;
-  }
+  const existingResidents = await loadExistingResidents(facility.id);
+  const residentsToArchive = options.replaceActiveRoster ? getResidentsToArchive(existingResidents, rows) : [];
+  const plan = getResidentWritePlan(existingResidents, rows);
 
   console.log(
-    `${options.dryRun ? "Dry run for" : "Imported into"} "${facility.name}": ${created} created, ${updated} updated, ${unchanged} unchanged.`
+    `${options.dryRun ? "Dry run for" : "Import plan for"} "${facility.name}": ${plan.creates.length} created, ${plan.updates.length} updated, ${plan.unchanged} unchanged, ${residentsToArchive.length} archived.`
   );
+
+  if (!options.dryRun) {
+    await writePlan({
+      facilityId: facility.id,
+      creates: plan.creates,
+      updates: plan.updates,
+      residentsToArchive
+    });
+    console.log(
+      `Imported into "${facility.name}": ${plan.creates.length} created, ${plan.updates.length} updated, ${plan.unchanged} unchanged, ${residentsToArchive.length} archived.`
+    );
+  }
 }
 
 main()
@@ -281,4 +395,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-
