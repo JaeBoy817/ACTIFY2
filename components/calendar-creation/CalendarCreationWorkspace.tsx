@@ -20,6 +20,7 @@ import {
   subWeeks
 } from "date-fns";
 import {
+  CalendarDays,
   CalendarPlus2,
   CalendarRange,
   ChevronLeft,
@@ -35,6 +36,7 @@ import {
   Trash2,
   WandSparkles
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -1718,6 +1720,14 @@ function CalendarToolbar({
           <Printer className="h-3.5 w-3.5" aria-hidden />
           Print
         </button>
+
+        <Link
+          href="/app/calendar?section=builder"
+          className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200"
+        >
+          <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+          Calendar Builder
+        </Link>
       </div>
     </section>
   );

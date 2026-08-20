@@ -14,6 +14,7 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
   Check,
   Download,
   Eye,
@@ -531,6 +532,9 @@ export function CalendarBuilderWorkspace({
             </a>
             <button type="button" onClick={printCalendar} className="builder-toolbar-primary">
               <Printer className="h-4 w-4" /> Print
+            </button>
+            <button type="button" onClick={() => onModeChange("builder")} className="builder-toolbar-pill">
+              <CalendarDays className="h-4 w-4" /> Calendar Builder
             </button>
           </div>
         </div>
