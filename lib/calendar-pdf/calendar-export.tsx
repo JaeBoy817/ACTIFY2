@@ -34,6 +34,8 @@ import { PDF_BODY_FONT, PDF_DISPLAY_FONT } from "@/lib/report-pdf/fonts";
 
 export type CalendarPdfView = "daily" | "weekly" | "monthly";
 export type CalendarPdfAudience = "internal" | "resident";
+export type CalendarPdfPaperSize = "LETTER" | "A4" | "LEGAL" | "TABLOID";
+export type CalendarPdfOrientation = "portrait" | "landscape";
 
 export type CalendarPdfActivity = {
   id: string;
@@ -67,7 +69,8 @@ type CalendarPdfDocumentArgs = {
   generatedAt: string;
   theme: ReportThemeTokens;
   residentMonthData?: CalendarPdfResidentMonthData;
-  paperSize?: "LETTER" | "A4";
+  paperSize?: CalendarPdfPaperSize;
+  orientation?: CalendarPdfOrientation;
   margins?: "NORMAL" | "NARROW" | "WIDE";
   includeFooterMeta?: boolean;
 };
@@ -289,6 +292,17 @@ function getPagePadding(margins?: "NORMAL" | "NARROW" | "WIDE") {
   if (margins === "NARROW") return 18;
   if (margins === "WIDE") return 34;
   return 24;
+}
+
+function getPdfPageSize(paperSize: CalendarPdfPaperSize = "LETTER", orientation: CalendarPdfOrientation = "portrait") {
+  const dimensions: Record<CalendarPdfPaperSize, [number, number]> = {
+    LETTER: [612, 792],
+    A4: [595.28, 841.89],
+    LEGAL: [612, 1008],
+    TABLOID: [792, 1224]
+  };
+  const [width, height] = dimensions[paperSize] ?? dimensions.LETTER;
+  return orientation === "landscape" ? ([height, width] as [number, number]) : ([width, height] as [number, number]);
 }
 
 function renderDailyBody(args: CalendarPdfDocumentArgs) {
@@ -837,9 +851,10 @@ function renderResidentMonthlyBody(args: CalendarPdfDocumentArgs) {
 }
 
 function calendarPdfDocument(args: CalendarPdfDocumentArgs) {
-  const { view, audience, anchorDate, facilityName, generatedAt, theme, paperSize, margins, includeFooterMeta } = args;
+  const { view, audience, anchorDate, facilityName, generatedAt, theme, paperSize, orientation, margins, includeFooterMeta } = args;
   const isResidentMonthly = audience === "resident" && view === "monthly";
   const pagePadding = isResidentMonthly ? 16 : getPagePadding(margins);
+  const resolvedOrientation = orientation ?? (isResidentMonthly ? "landscape" : "portrait");
 
   const title = view === "daily" ? "Daily Calendar PDF" : view === "weekly" ? "Weekly Calendar PDF" : "Monthly Calendar PDF";
   const subtitle = view === "daily"
@@ -851,8 +866,7 @@ function calendarPdfDocument(args: CalendarPdfDocumentArgs) {
   return (
     <Document>
       <Page
-        size={paperSize ?? "LETTER"}
-        orientation={isResidentMonthly ? "landscape" : "portrait"}
+        size={getPdfPageSize(paperSize, resolvedOrientation)}
         style={{
           backgroundColor: isResidentMonthly ? "#F5F5F5" : theme.colors.background,
           paddingTop: Math.max(pagePadding - 2, 14),
@@ -898,7 +912,8 @@ export async function generateCalendarPdf(
   },
   theme: ReportThemeTokens = defaultReportTheme,
   options?: {
-    paperSize?: "LETTER" | "A4";
+    paperSize?: CalendarPdfPaperSize;
+    orientation?: CalendarPdfOrientation;
     margins?: "NORMAL" | "NARROW" | "WIDE";
     includeFooterMeta?: boolean;
   }
@@ -908,6 +923,7 @@ export async function generateCalendarPdf(
     audience: args.audience ?? "internal",
     theme,
     paperSize: options?.paperSize,
+    orientation: options?.orientation,
     margins: options?.margins,
     includeFooterMeta: options?.includeFooterMeta
   });

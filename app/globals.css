@@ -2321,3 +2321,46 @@ body[data-perf-mode="low-power"] .actify-global-background::after {
     animation: none !important;
   }
 }
+
+@layer components {
+  .builder-toolbar-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#3d5e8c] bg-[#112344] text-[#d6e5ff] transition hover:border-[#5a82be] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300;
+  }
+
+  .builder-toolbar-pill {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#3d5e8c] bg-[#112344] px-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#d6e5ff] transition hover:border-[#5a82be] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300;
+  }
+
+  .builder-toolbar-primary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-cyan-300/45 bg-cyan-500/20 px-3 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:border-cyan-200/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300;
+  }
+
+  .builder-input {
+    @apply h-10 w-full rounded-lg border border-[#3d5e8d] bg-[#102241] px-3 text-sm normal-case tracking-normal text-white placeholder:text-[#8da6cf] focus:border-cyan-300/70 focus:outline-none;
+  }
+
+  .builder-textarea {
+    @apply min-h-20 w-full rounded-lg border border-[#3d5e8d] bg-[#102241] px-3 py-2 text-sm normal-case tracking-normal text-white placeholder:text-[#8da6cf] focus:border-cyan-300/70 focus:outline-none;
+  }
+}
+
+@media print {
+  body:has(.actify-calendar-builder-print-source) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.actify-calendar-builder-print-source) .actify-calendar-builder-print-source,
+  body:has(.actify-calendar-builder-print-source) .actify-calendar-builder-print-source * {
+    visibility: visible !important;
+  }
+
+  body:has(.actify-calendar-builder-print-source) .actify-calendar-builder-print-source {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100vw !important;
+    max-width: none !important;
+    height: auto !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}

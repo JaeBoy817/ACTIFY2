@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveTimeZone, zonedDateKey } from "@/lib/timezone";
 
 type CalendarView = "week" | "day" | "month" | "agenda";
-type CalendarSection = "schedule" | "create" | "library" | "settings";
+type CalendarSection = "schedule" | "create" | "library" | "settings" | "builder" | "preview";
 
 function firstParam(value?: string | string[]) {
   if (Array.isArray(value)) return value[0];
@@ -27,6 +27,8 @@ function parseInitialSection(raw?: string | string[]): CalendarSection {
   const value = firstParam(raw);
   if (value === "create") return "create";
   if (value === "library" || value === "templates") return "library";
+  if (value === "builder" || value === "calendar-builder") return "builder";
+  if (value === "preview" || value === "print-preview") return "preview";
   if (value === "settings") return "settings";
   return "schedule";
 }
@@ -129,6 +131,7 @@ export default async function CalendarPage({
         initialView={initialView}
         initialSection={initialSection}
         timeZone={timeZone}
+        facilityName={context.facility.name}
       />
     );
   } catch (error) {
@@ -148,6 +151,7 @@ export default async function CalendarPage({
           initialView={initialView}
           initialSection={initialSection}
           timeZone={timeZone}
+          facilityName="My Facility"
         />
       </>
     );

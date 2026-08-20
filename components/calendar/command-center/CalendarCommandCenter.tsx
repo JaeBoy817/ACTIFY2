@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CalendarBuilderWorkspace } from "@/components/calendar/builder/CalendarBuilderWorkspace";
 import { useCalendarQueries, type CalendarEventLite } from "@/hooks/useCalendarQueries";
 import { useCalendarRange } from "@/hooks/useCalendarRange";
 import {
@@ -41,7 +42,8 @@ import { formatInTimeZone, zonedDateKey, zonedDateStringToUtcStart } from "@/lib
 import { useToast } from "@/lib/use-toast";
 import { cn } from "@/lib/utils";
 
-type CalendarSection = "schedule" | "create" | "library" | "settings";
+type CalendarSection = "schedule" | "create" | "library" | "settings" | "builder" | "preview";
+type CalendarWorkspaceMode = "schedule" | "builder" | "preview";
 
 type CalendarCommandCenterProps = {
   templates: CalendarTemplateLite[];
@@ -49,6 +51,7 @@ type CalendarCommandCenterProps = {
   initialView: CalendarViewMode;
   initialSection: CalendarSection;
   timeZone: string;
+  facilityName: string;
 };
 
 type EventRecord = CalendarEventLite & {
@@ -155,12 +158,18 @@ export function CalendarCommandCenter({
   initialDateKey,
   initialView,
   initialSection,
-  timeZone
+  timeZone,
+  facilityName
 }: CalendarCommandCenterProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [view, setView] = useState<CalendarViewMode>(initialView);
+  const [view, setView] = useState<CalendarViewMode>(
+    initialSection === "builder" || initialSection === "preview" ? "month" : initialView
+  );
+  const [calendarMode, setCalendarMode] = useState<CalendarWorkspaceMode>(
+    initialSection === "builder" || initialSection === "preview" ? initialSection : "schedule"
+  );
   const [anchorDateKey, setAnchorDateKey] = useState(initialDateKey);
   const [selectedDateKey, setSelectedDateKey] = useState(initialDateKey);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -190,8 +199,11 @@ export function CalendarCommandCenter({
     const query = new URLSearchParams();
     query.set("view", view);
     query.set("date", anchorDateKey);
+    if (calendarMode !== "schedule") {
+      query.set("section", calendarMode);
+    }
     router.replace(`/app/calendar?${query.toString()}`, { scroll: false });
-  }, [anchorDateKey, router, view]);
+  }, [anchorDateKey, calendarMode, router, view]);
 
   const { range, rangeLabel, monthAnchor, monthDays, weekDays } = useCalendarRange({
     view,
@@ -515,6 +527,82 @@ export function CalendarCommandCenter({
     }
   }, [activityForm, refresh, timeZone, toast]);
 
+  const handleCalendarModeChange = useCallback((mode: CalendarWorkspaceMode) => {
+    setCalendarMode(mode);
+    if (mode !== "schedule") {
+      setView("month");
+    }
+  }, []);
+
+  const handleUseTemplateOnDate = useCallback((template: CalendarTemplateLite, dateKey: string) => {
+    setSelectedDateKey(dateKey);
+    setActivityForm(buildFormFromTemplate(template, dateKey));
+    setActivityModalOpen(true);
+  }, []);
+
+  const handleMoveEventToDate = useCallback(
+    async (event: CalendarEventLite, dateKey: string) => {
+      const startTime = formatInTimeZone(new Date(event.startAt), timeZone, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+      const endTime = formatInTimeZone(new Date(event.endAt), timeZone, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+      const startAt = toUtcIso(dateKey, startTime, timeZone);
+      const endAt = toUtcIso(dateKey, endTime, timeZone);
+      if (!startAt || !endAt) {
+        toast({
+          title: "Move failed",
+          description: "Unable to keep the activity time on the selected date.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      async function postMove(allowOverride = false) {
+        return fetch(`/api/calendar/activities/${encodeURIComponent(event.id)}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startAt,
+            endAt,
+            location: event.location,
+            allowConflictOverride: allowOverride,
+            allowOutsideBusinessHoursOverride: allowOverride
+          })
+        });
+      }
+
+      let response = await postMove(false);
+      if (response.status === 409) {
+        const confirmed = window.confirm("This move may create a scheduling conflict. Move it anyway?");
+        if (!confirmed) return;
+        response = await postMove(true);
+      }
+
+      if (!response.ok) {
+        toast({
+          title: "Move failed",
+          description: "Unable to move this activity right now.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setSelectedDateKey(dateKey);
+      await refresh();
+      toast({
+        title: "Activity moved",
+        description: `${event.title} was moved to ${dateKey}.`
+      });
+    },
+    [refresh, timeZone, toast]
+  );
+
   const changePeriod = (direction: -1 | 1) => {
     const anchor = zonedDateStringToUtcStart(anchorDateKey, timeZone) ?? new Date();
     const nextDate =
@@ -581,6 +669,34 @@ export function CalendarCommandCenter({
             </div>
           </div>
         </section>
+
+        <section className="no-print rounded-2xl border border-[#2a3d62] bg-[#0b1428]/95 p-2">
+          <div className="grid gap-2 md:grid-cols-3">
+            {[
+              { id: "schedule", label: "Schedule", description: "Manage activities" },
+              { id: "builder", label: "Calendar Builder", description: "Design monthly printouts" },
+              { id: "preview", label: "Print Preview", description: "Review before export" }
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleCalendarModeChange(item.id as CalendarWorkspaceMode)}
+                className={cn(
+                  "rounded-xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                  calendarMode === item.id
+                    ? "border-cyan-300/55 bg-cyan-500/18 text-cyan-50"
+                    : "border-[#2f466f] bg-[#0f1d37] text-[#d7e6ff] hover:border-[#5a82be]"
+                )}
+              >
+                <span className="block text-sm font-black uppercase tracking-[0.13em]">{item.label}</span>
+                <span className="mt-1 block text-xs text-[#9db5dd]">{item.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {calendarMode === "schedule" ? (
+          <>
 
         <section className="rounded-2xl border border-[#2a3d62] bg-[#0b1428]/95 p-4">
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
@@ -1043,6 +1159,31 @@ export function CalendarCommandCenter({
             </article>
           </aside>
         </section>
+          </>
+        ) : (
+          <CalendarBuilderWorkspace
+            mode={calendarMode}
+            facilityName={facilityName}
+            timeZone={timeZone}
+            anchorDateKey={anchorDateKey}
+            selectedDateKey={selectedDateKey}
+            events={eventRecords}
+            templates={templates}
+            isLoading={isLoading}
+            calendarLoadError={calendarLoadError}
+            onModeChange={(mode) => handleCalendarModeChange(mode)}
+            onAnchorDateChange={setAnchorDateKey}
+            onSelectedDateChange={setSelectedDateKey}
+            onNewActivity={openNewActivity}
+            onUseTemplate={handleUseTemplateOnDate}
+            onOpenEvent={(eventId) => {
+              setSelectedEventId(eventId);
+              setDetailsOpenMobile(true);
+            }}
+            onMoveEvent={handleMoveEventToDate}
+            onRefresh={refresh}
+          />
+        )}
       </div>
 
       <Dialog open={activityModalOpen} onOpenChange={setActivityModalOpen}>

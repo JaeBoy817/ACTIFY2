@@ -6,7 +6,13 @@ import { getHolidaysForYear } from "@/lib/calendar/holidays";
 import { asModuleFlags } from "@/lib/module-flags";
 import { prisma } from "@/lib/prisma";
 import { getRequestTimeZone } from "@/lib/request-timezone";
-import { generateCalendarPdf, type CalendarPdfAudience, type CalendarPdfView } from "@/lib/calendar-pdf/calendar-export";
+import {
+  generateCalendarPdf,
+  type CalendarPdfAudience,
+  type CalendarPdfOrientation,
+  type CalendarPdfPaperSize,
+  type CalendarPdfView
+} from "@/lib/calendar-pdf/calendar-export";
 import { getEffectiveReportSettings } from "@/lib/settings/service";
 import { resolveReportTheme } from "@/lib/report-pdf/ReportTheme";
 import {
@@ -50,6 +56,22 @@ function parseAudience(raw: string | null): CalendarPdfAudience {
   return "internal";
 }
 
+function parsePaperSize(raw: string | null): CalendarPdfPaperSize | undefined {
+  if (raw === "LETTER" || raw === "A4" || raw === "LEGAL" || raw === "TABLOID") return raw;
+  return undefined;
+}
+
+function parseOrientation(raw: string | null): CalendarPdfOrientation | undefined {
+  if (raw === "portrait" || raw === "landscape") return raw;
+  return undefined;
+}
+
+function publicResidentName(resident: { firstName: string; lastName: string; preferredName?: string | null }) {
+  const first = (resident.preferredName || resident.firstName || "Resident").trim();
+  const lastInitial = resident.lastName?.trim().charAt(0);
+  return lastInitial ? `${first} ${lastInitial}.` : first;
+}
+
 export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return new Response("Unauthorized", { status: 401 });
@@ -81,6 +103,8 @@ export async function GET(req: Request) {
   const audience = parseAudience(url.searchParams.get("audience"));
   const requestedView = parseView(url.searchParams.get("view"));
   const view: CalendarPdfView = audience === "resident" ? "monthly" : requestedView;
+  const requestedPaperSize = parsePaperSize(url.searchParams.get("paperSize"));
+  const requestedOrientation = parseOrientation(url.searchParams.get("orientation"));
   const timeZone = resolveTimeZone(getRequestTimeZone(user.facility?.timezone));
   const now = new Date();
 
@@ -157,7 +181,8 @@ export async function GET(req: Request) {
             id: true,
             firstName: true,
             lastName: true,
-            birthDate: true
+            birthDate: true,
+            preferredName: true
           },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }]
         })
@@ -212,7 +237,7 @@ export async function GET(req: Request) {
               })),
             birthdays: residentMonthData.map((resident) => ({
               residentId: resident.id,
-              residentName: `${resident.firstName ?? ""} ${resident.lastName ?? ""}`.trim() || "Resident",
+              residentName: publicResidentName(resident),
               birthDate: resident.birthDate?.toISOString() ?? ""
             }))
           }
@@ -220,7 +245,8 @@ export async function GET(req: Request) {
     },
     theme,
     {
-      paperSize: effectiveSettings.printDefaults.paperSize,
+      paperSize: requestedPaperSize ?? effectiveSettings.printDefaults.paperSize,
+      orientation: requestedOrientation,
       margins: effectiveSettings.printDefaults.margins,
       includeFooterMeta: effectiveSettings.printDefaults.includeFooterMeta
     }
