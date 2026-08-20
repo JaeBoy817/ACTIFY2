@@ -10,7 +10,11 @@ const prisma = new PrismaClient({
   }
 });
 
-const ARCHIVED_STATUSES = [ResidentStatus.DISCHARGED, ResidentStatus.TRANSFERRED, ResidentStatus.DECEASED];
+const ARCHIVED_STATUSES = new Set<ResidentStatus>([
+  ResidentStatus.DISCHARGED,
+  ResidentStatus.TRANSFERRED,
+  ResidentStatus.DECEASED
+]);
 const WRITE_BATCH_SIZE = 25;
 
 const importRowSchema = z.object({
@@ -241,7 +245,7 @@ function residentMatchesRosterRow(resident: ExistingResident, row: ImportRow) {
 }
 
 function isCurrentlyActiveResident(resident: ExistingResident) {
-  return resident.isActive && !ARCHIVED_STATUSES.includes(resident.status);
+  return resident.isActive && !ARCHIVED_STATUSES.has(resident.status);
 }
 
 function getResidentsToArchive(existingResidents: ExistingResident[], rows: ImportRow[]) {
