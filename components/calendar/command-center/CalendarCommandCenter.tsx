@@ -652,6 +652,19 @@ export function CalendarCommandCenter({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                onClick={() => handleCalendarModeChange("builder")}
+                className={cn(
+                  "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition",
+                  calendarMode === "builder"
+                    ? "border-cyan-200/70 bg-cyan-500/25 text-cyan-50"
+                    : "border-cyan-300/45 bg-cyan-500/18 text-cyan-100 hover:border-cyan-200/65"
+                )}
+              >
+                <CalendarDays className="h-4 w-4" />
+                Calendar Builder
+              </button>
+              <button
+                type="button"
                 onClick={() => openNewActivity()}
                 className="inline-flex h-10 items-center gap-2 rounded-full border border-cyan-300/45 bg-gradient-to-r from-cyan-500/75 to-blue-600/80 px-4 text-sm font-semibold text-white transition hover:brightness-110"
               >
